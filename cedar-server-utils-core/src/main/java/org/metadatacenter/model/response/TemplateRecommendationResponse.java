@@ -6,26 +6,26 @@ import java.util.List;
 
 public class TemplateRecommendationResponse {
 
-  private long totalCount;
-  private TemplateRecommendationRequestSummary request;
+  private int totalCount;
+  private TemplateRecommendationRequestSummary requestSummary;
   List<ResourceRecommendation> recommendations;
 
   public TemplateRecommendationResponse() { }
 
-  public long getTotalCount() {
+  public int getTotalCount() {
     return totalCount;
   }
 
-  public void setTotalCount(long totalCount) {
+  public void setTotalCount(int totalCount) {
     this.totalCount = totalCount;
   }
 
-  public TemplateRecommendationRequestSummary getRequest() {
-    return request;
+  public TemplateRecommendationRequestSummary getRequestSummary() {
+    return requestSummary;
   }
 
-  public void setRequest(TemplateRecommendationRequestSummary request) {
-    this.request = request;
+  public void setRequestSummary(TemplateRecommendationRequestSummary requestSummary) {
+    this.requestSummary = requestSummary;
   }
 
   public List<ResourceRecommendation> getRecommendations() {
