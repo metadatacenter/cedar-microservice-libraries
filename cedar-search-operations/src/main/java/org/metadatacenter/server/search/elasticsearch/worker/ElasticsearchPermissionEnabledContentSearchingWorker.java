@@ -395,6 +395,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     query = encodeWildcards(query);
     query = encodeUrls(query);
     query = encodeDoubleQuotesInFieldName(query);
+    query = removeForwardSlashes(query);
     return query;
   }
 
@@ -483,6 +484,10 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
       processedQuery = processedQuery.replace(matchString, replacement);
     }
     return processedQuery;
+  }
+
+  private String removeForwardSlashes(String query) {
+    return query.replaceAll("\\/", "");
   }
 
 
