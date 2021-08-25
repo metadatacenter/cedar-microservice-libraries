@@ -75,6 +75,9 @@ public class CedarConfigEnvironmentDescriptor {
     // all the microservices
     cedarNetGateway.addAll(allMicroservices);
 
+    Set<SystemComponent> nciCADSRValueSetsOntologyFilePath = variableToComponent.get(CedarEnvironmentVariable.CEDAR_NCI_CADSR_VALUE_SETS_ONTOLOGY_FILE_PATH);
+    nciCADSRValueSetsOntologyFilePath.add(SystemComponent.SERVER_RESOURCE);
+
     Set<SystemComponent> cedarBioportalApiKey = variableToComponent.get(CedarEnvironmentVariable.CEDAR_BIOPORTAL_API_KEY);
     cedarBioportalApiKey.add(SystemComponent.SERVER_TERMINOLOGY);
 

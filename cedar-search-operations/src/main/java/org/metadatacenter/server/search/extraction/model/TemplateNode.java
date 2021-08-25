@@ -36,6 +36,11 @@ public class TemplateNode {
   private List<String> path;
 
   /**
+   * List of URIs of value sets from the _valueConstraints.valueSets object in template fields
+   */
+  private List<String> valueSetURIs;
+
+  /**
    * Artifact type, that is, 'FIELD' or 'ELEMENT'.
    */
   private CedarResourceType type; // Node type (e.g. field)
@@ -46,7 +51,7 @@ public class TemplateNode {
   private boolean isArray;
 
   public TemplateNode(String id, String name, String prefLabel, List<String> path,
-                      CedarResourceType type, boolean isArray) throws CedarProcessingException {
+                      CedarResourceType type, boolean isArray, List<String> valueSetURIs) throws CedarProcessingException {
 
     if (type.equals(CedarResourceType.ELEMENT) || type.equals(CedarResourceType.FIELD)) {
       this.id = id;
@@ -55,6 +60,7 @@ public class TemplateNode {
       this.path = path;
       this.type = type;
       this.isArray = isArray;
+      this.valueSetURIs = valueSetURIs;
     }
     else {
       throw new CedarProcessingException("Invalid node type: " + type.name());
@@ -75,6 +81,10 @@ public class TemplateNode {
 
   public List<String> getPath() {
     return path;
+  }
+
+  public List<String> getValueSetURIs() {
+    return valueSetURIs;
   }
 
   public CedarResourceType getType() {

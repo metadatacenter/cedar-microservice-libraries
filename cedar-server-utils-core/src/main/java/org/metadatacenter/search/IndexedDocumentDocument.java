@@ -19,6 +19,8 @@ public class IndexedDocumentDocument {
 
   protected List<InfoField> infoFields;
 
+  protected PossibleValues possibleValues;
+
   protected NodeSharePermission computedEverybodyPermission;
 
   protected List<String> users;
@@ -59,6 +61,10 @@ public class IndexedDocumentDocument {
   public List<InfoField> getInfoFields() { return infoFields; }
 
   public void setInfoFields(List<InfoField> infoFields) { this.infoFields = infoFields; }
+
+  public void setPossibleValues(PossibleValues possibleValues) { this.possibleValues = possibleValues; }
+
+  public PossibleValues getPossibleValues() { return this.possibleValues; }
 
   public NodeSharePermission getComputedEverybodyPermission() {
     return computedEverybodyPermission;

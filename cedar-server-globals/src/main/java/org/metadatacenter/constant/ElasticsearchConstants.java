@@ -14,6 +14,10 @@ public final class ElasticsearchConstants {
   public static final String DOCUMENT_CEDAR_ID = "cid";
   public static final String SUMMARY_TEXT = "summaryText";
   public static final String SUMMARY_RAW_TEXT = "summaryText.raw";
+  public static final String POSSIBLE_VALUES = "possibleValues";
+  public static final String VALUE_LABELS = POSSIBLE_VALUES + ".valueLabels";
+  public static final String VALUE_CONCEPTS = POSSIBLE_VALUES + ".valueConcepts";
+  public static final float POSSIBLE_VALUES_BOOST = 0.01f;
   public static final String USERS = "users";
   public static final String GROUPS = "groups";
   public static final String CATEGORIES = "categories";

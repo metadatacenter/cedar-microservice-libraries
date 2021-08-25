@@ -215,4 +215,9 @@ public class IndexUtils {
     return r;
   }
 
+  public void loadValueSetsOntology() throws CedarProcessingException
+  {
+    getNodeIndexingService().readValueSets();
+  }
+
 }

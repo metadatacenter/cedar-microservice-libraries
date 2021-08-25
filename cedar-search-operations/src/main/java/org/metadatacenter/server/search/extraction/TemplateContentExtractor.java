@@ -8,12 +8,27 @@ import org.metadatacenter.server.search.extraction.model.TemplateNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
-import static org.metadatacenter.model.ModelNodeNames.*;
+import static org.metadatacenter.model.ModelNodeNames.JSON_LD_ID;
+import static org.metadatacenter.model.ModelNodeNames.JSON_LD_TYPE;
+import static org.metadatacenter.model.ModelNodeNames.JSON_SCHEMA_ENUM;
+import static org.metadatacenter.model.ModelNodeNames.JSON_SCHEMA_ITEMS;
+import static org.metadatacenter.model.ModelNodeNames.JSON_SCHEMA_ONE_OF;
+import static org.metadatacenter.model.ModelNodeNames.JSON_SCHEMA_PROPERTIES;
+import static org.metadatacenter.model.ModelNodeNames.SCHEMA_ORG_NAME;
+import static org.metadatacenter.model.ModelNodeNames.SKOS_PREFLABEL;
+import static org.metadatacenter.model.ModelNodeNames.VALUE_CONSTRAINTS;
+import static org.metadatacenter.model.ModelNodeNames.VALUE_CONSTRAINTS_URI;
+import static org.metadatacenter.model.ModelNodeNames.VALUE_CONSTRAINTS_VALUE_SETS;
 
 /**
- * Utilities to extract information from CEDAR Templates/Elements
+ * Utilities to extract information from CEDAR Templates/Elements/Fields
  */
 public class TemplateContentExtractor {
 
@@ -109,11 +124,32 @@ public class TemplateContentExtractor {
             // Get instance type (@type) if it exists)
             Optional<String> instanceType = getInstanceType(jsonFieldNode);
 
-            results.add(new TemplateNode(id, name, prefLabel, jsonFieldPath, CedarResourceType.FIELD, isArray));
+            List<String> valueSetURIs = new ArrayList<>();
+            JsonNode valueConstraintsNode = jsonFieldNode.get(VALUE_CONSTRAINTS);
+            if (valueConstraintsNode != null) {
+              JsonNode valueSetsArrayNode = valueConstraintsNode.get(VALUE_CONSTRAINTS_VALUE_SETS);
+              if (valueSetsArrayNode != null) {
+                for (JsonNode valueSetNode : valueSetsArrayNode) {
+                  String valueSetURI = valueSetNode.get(VALUE_CONSTRAINTS_URI).asText();
+
+                  if (valueSetURI == null)
+                    log.warn("Null value set URI value sets array in _valueConstraints node at path "
+                      + currentPath + "; node=" + valueConstraintsNode);
+                  else if (valueSetURI.isEmpty())
+                    log.warn("Empty value set URI value sets array in _valueConstraints node at path "
+                      + currentPath + "; node=" + valueConstraintsNode);
+                  else
+                  valueSetURIs.add(valueSetURI);
+                }
+              }
+            }
+
+            results.add(new TemplateNode(id, name, prefLabel, jsonFieldPath, CedarResourceType.FIELD, isArray, valueSetURIs));
           }
           // Element
           else if (isTemplateElementNode(jsonFieldNode)) {
-            results.add(new TemplateNode(id, name, prefLabel, jsonFieldPath, CedarResourceType.ELEMENT, isArray));
+            results.add(new TemplateNode(id, name, prefLabel, jsonFieldPath, CedarResourceType.ELEMENT, isArray,
+              Collections.emptyList()));
             getTemplateNodes(jsonFieldNode, jsonFieldPath, results);
           }
         }

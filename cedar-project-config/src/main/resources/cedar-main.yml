@@ -141,6 +141,8 @@ servers:
     stopPort: "${CEDAR_RESOURCE_STOP_PORT}"
     apiDoc: true
     base: "http://${CEDAR_NET_GATEWAY}:${CEDAR_RESOURCE_HTTP_PORT}/"
+    loadValueSetsOntology: "http://${CEDAR_NET_GATEWAY}:${CEDAR_RESOURCE_HTTP_PORT}/command/load-valuesets-ontology"
+    loadValueSetsOntologyStatus: "http://${CEDAR_NET_GATEWAY}:${CEDAR_RESOURCE_HTTP_PORT}/command/load-valuesets-ontology-status"
     regenerateSearchIndex: "http://${CEDAR_NET_GATEWAY}:${CEDAR_RESOURCE_HTTP_PORT}/command/regenerate-search-index"
     generateEmptySearchIndex: "http://${CEDAR_NET_GATEWAY}:${CEDAR_RESOURCE_HTTP_PORT}/command/generate-empty-search-index"
     regenerateRulesIndex: "http://${CEDAR_NET_GATEWAY}:${CEDAR_RESOURCE_HTTP_PORT}/command/regenerate-rules-index"

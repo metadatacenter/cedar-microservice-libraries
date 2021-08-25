@@ -5,43 +5,64 @@ import org.elasticsearch.client.Client;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.bridge.PathInfoBuilder;
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.config.environment.CedarEnvironmentVariable;
+import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.ResourceVersion;
+import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
 import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerSchemaArtifact;
 import org.metadatacenter.model.folderserver.info.FolderServerNodeInfo;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.search.IndexingDocumentDocument;
+import org.metadatacenter.search.PossibleValues;
 import org.metadatacenter.server.CategoryServiceSession;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.search.IndexedDocumentId;
 import org.metadatacenter.server.search.elasticsearch.worker.ElasticsearchIndexingWorker;
 import org.metadatacenter.server.search.extraction.TemplateInstanceContentExtractor;
+import org.metadatacenter.server.search.extraction.ValueSetsExtractor;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedCategories;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 public class NodeIndexingService extends AbstractIndexingService {
 
   private static final Logger log = LoggerFactory.getLogger(NodeIndexingService.class);
 
-  private final CedarConfig cedarConfig;
   private final ElasticsearchIndexingWorker indexWorker;
   public final TemplateInstanceContentExtractor instanceContentExtractor;
+  private final String nciCADSRValueSetsOntologyFilePath;
 
   NodeIndexingService(CedarConfig cedarConfig, String indexName, Client client) {
-    this.cedarConfig = cedarConfig;
+    Map<String, String> environment = CedarEnvironmentVariableProvider.getFor(SystemComponent.SERVER_RESOURCE);
+
+    nciCADSRValueSetsOntologyFilePath = environment.get(CedarEnvironmentVariable.CEDAR_NCI_CADSR_VALUE_SETS_ONTOLOGY_FILE_PATH.getName());
+
     indexWorker = new ElasticsearchIndexingWorker(indexName, client);
     instanceContentExtractor = new TemplateInstanceContentExtractor(cedarConfig);
+  }
+
+  public void readValueSets() throws CedarProcessingException
+  {
+    if (nciCADSRValueSetsOntologyFilePath != null || !nciCADSRValueSetsOntologyFilePath.isEmpty())
+      ValueSetsExtractor.getInstance().loadValueSetsOntology(nciCADSRValueSetsOntologyFilePath);
+    else {
+      throw new CedarProcessingException("No path configured for value set ontology");
+    }
   }
 
   public IndexingDocumentDocument createIndexDocument(FileSystemResource node, CedarNodeMaterializedPermissions permissions,
@@ -60,6 +81,36 @@ public class NodeIndexingService extends AbstractIndexingService {
     if (node.getType().equals(CedarResourceType.INSTANCE) || node.getType().equals(CedarResourceType.TEMPLATE)
         || node.getType().equals(CedarResourceType.ELEMENT) || node.getType().equals(CedarResourceType.FIELD)) {
       ir.setInfoFields(instanceContentExtractor.generateInfoFields(node, requestContext, isIndexRegenerationTask));
+    }
+
+    if (node.getType().equals(CedarResourceType.FIELD)) {
+      List<String> valueSetURIs = instanceContentExtractor.generateValueSetsURIs(node, requestContext);
+      Set<String> valueLabels = new HashSet<>();
+      Set<String> valueConcepts = new HashSet<>();
+
+      for (String valueSetURI : valueSetURIs) {
+        Set<String> valueSetValueURIs = ValueSetsExtractor.getInstance().getSubClassURIs(valueSetURI);
+
+        for (String valueSetValueURI : valueSetValueURIs) {
+          Optional<String> valueLabel = ValueSetsExtractor.getInstance().getAnnotation(valueSetValueURI, ValueSetsExtractor.Annotation.LABEL);
+          if (valueLabel.isPresent())
+            valueLabels.add(valueLabel.get());
+
+          Optional<String> valueConcept = ValueSetsExtractor.getInstance().getAnnotation(valueSetValueURI, ValueSetsExtractor.Annotation.RELATED_MATCH);
+          if (valueConcept.isPresent()) { // We store only the fragment of the value concept URI
+            String valueConceptURI = valueConcept.get();
+            String[] components = valueConceptURI.split("#", 2);
+            if (components.length == 2) {
+              String namespace = components[0];
+              String fragment = components[1];
+              if (!fragment.isEmpty())
+                valueConcepts.add(fragment);
+            }
+          }
+        }
+      }
+      if (!valueLabels.isEmpty() || !valueConcepts.isEmpty() )
+        ir.setPossibleValues(new PossibleValues(valueLabels, valueConcepts));
     }
     return ir;
   }
