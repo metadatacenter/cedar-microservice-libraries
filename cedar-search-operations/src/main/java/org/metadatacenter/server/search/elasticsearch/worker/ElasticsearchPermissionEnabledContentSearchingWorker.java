@@ -129,21 +129,12 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
           query = query.substring(1, query.length() - 1);
           QueryBuilder summaryTextQuery = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, query);
           subQuery.should(summaryTextQuery);
-          mainQuery.must(subQuery);
 
-//          "bool" : {
-//            "should" : [
-//            {
-//              "match_phrase" : {
-//              "summaryText.raw" : {
-//                "query" : "complete remission",
-//                  "slop" : 0,
-//                  "zero_terms_query" : "NONE",
-//                  "boost" : 1.0
-//              }
-//            }
-//            }
-//          ],
+          QueryBuilder possibleValuesFieldQueryString = QueryBuilders.matchPhraseQuery(VALUE_LABELS, query);
+          QueryBuilder nestedPossibleValuesFieldQuery = QueryBuilders.nestedQuery(POSSIBLE_VALUES, possibleValuesFieldQueryString, ScoreMode.None);
+          subQuery.should(nestedPossibleValuesFieldQuery);
+
+          mainQuery.must(subQuery);
         } else {
           QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
           try {
