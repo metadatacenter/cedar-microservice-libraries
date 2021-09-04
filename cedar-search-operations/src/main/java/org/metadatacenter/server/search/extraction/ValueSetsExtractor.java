@@ -146,12 +146,6 @@ public class ValueSetsExtractor
         logger.error(message);
       }
 
-//      if (!subClassIRI.getNamespace().equals(CDE_VALUESETS_ONTOLOGY_IRI)) {
-//        String message = "Invalid subclass IRI namespace " + subClassIRI.getNamespace() + " found in ontology;" +
-//          " expecting " + CDE_VALUESETS_ONTOLOGY_IRI;
-//        logger.error(message);
-//      }
-
       if (!subClassURI.equals(superClassURI)) {
         if (classHierarchy.containsKey(superClassURI)) {
           classHierarchy.get(superClassURI).add(subClassURI);
