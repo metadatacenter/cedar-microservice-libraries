@@ -130,8 +130,10 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
           QueryBuilder summaryTextQuery = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, query);
           subQuery.should(summaryTextQuery);
 
-          QueryBuilder possibleValuesFieldQueryString = QueryBuilders.matchPhraseQuery(VALUE_LABELS, query);
-          QueryBuilder nestedPossibleValuesFieldQuery = QueryBuilders.nestedQuery(POSSIBLE_VALUES, possibleValuesFieldQueryString, ScoreMode.None);
+          QueryBuilder possibleValuesFieldQueryString
+            = QueryBuilders.matchPhraseQuery(VALUE_LABELS, query).boost(POSSIBLE_VALUES_BOOST);
+          QueryBuilder nestedPossibleValuesFieldQuery
+            = QueryBuilders.nestedQuery(POSSIBLE_VALUES, possibleValuesFieldQueryString, ScoreMode.None).boost(POSSIBLE_VALUES_BOOST);
           subQuery.should(nestedPossibleValuesFieldQuery);
 
           mainQuery.must(subQuery);
@@ -146,8 +148,8 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
               = QueryBuilders.queryStringQuery(query).field(VALUE_LABELS, POSSIBLE_VALUES_BOOST).field(VALUE_CONCEPTS, POSSIBLE_VALUES_BOOST);
             QueryBuilder nestedPossibleValuesFieldQuery = QueryBuilders.nestedQuery(POSSIBLE_VALUES, possibleValuesFieldQueryString, ScoreMode.None);
             subQuery.should(nestedPossibleValuesFieldQuery);
-            mainQuery.must(subQuery);
 
+            mainQuery.must(subQuery);
           } catch (ParseException e) {
             CedarProcessingException ex = new CedarProcessingException("Error processing query: " + query, e);
             ex.getErrorPack().errorKey(CedarErrorKey.MALFORMED_SEARCH_SYNTAX);
