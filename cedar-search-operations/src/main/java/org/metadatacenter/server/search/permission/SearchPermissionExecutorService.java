@@ -132,7 +132,7 @@ public class SearchPermissionExecutorService {
       if (upsert == Upsert.UPDATE) {
         nodeIndexingService.removeDocumentFromIndex(resourceId);
       }
-      nodeIndexingService.indexDocument(node, perm, categories, cedarRequestContext);
+      nodeIndexingService.indexDocument(node, perm, categories, cedarRequestContext,false);
     } catch (Exception e) {
       log.error("Error while upserting permissions", e);
     }

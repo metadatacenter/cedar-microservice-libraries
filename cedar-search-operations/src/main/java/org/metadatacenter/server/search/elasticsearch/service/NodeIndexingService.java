@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 
 public class NodeIndexingService extends AbstractIndexingService {
 
@@ -70,7 +71,7 @@ public class NodeIndexingService extends AbstractIndexingService {
   }
 
   public IndexedDocumentId indexDocument(FileSystemResource resource, CedarRequestContext requestContext) throws CedarProcessingException {
-    log.debug("Indexing resource (id = " + resource.getId() + ")");
+    log.info("Indexing resource (id = " + resource.getId() + ")");
     ResourcePermissionServiceSession permissionSession = CedarDataServices.getResourcePermissionServiceSession(requestContext);
     CedarNodeMaterializedPermissions permissions = permissionSession.getResourceMaterializedPermission(resource.getResourceId());
     CategoryServiceSession categorySession = CedarDataServices.getCategoryServiceSession(requestContext);
@@ -84,7 +85,7 @@ public class NodeIndexingService extends AbstractIndexingService {
   public IndexedDocumentId indexDocument(FileSystemResource resource, CedarNodeMaterializedPermissions permissions,
                                          CedarNodeMaterializedCategories categories, CedarRequestContext requestContext,
                                          boolean isIndexRegenerationTask) throws CedarProcessingException {
-    log.debug("Indexing resource (id = " + resource.getId() + ")");
+    log.info("Indexing resource (id = " + resource.getId() + ")");
     IndexingDocumentDocument ir = createIndexDocument(resource, permissions, categories, requestContext, isIndexRegenerationTask);
     JsonNode jsonResource = JsonMapper.MAPPER.convertValue(ir, JsonNode.class);
     return indexWorker.addToIndex(jsonResource);
@@ -131,10 +132,18 @@ public class NodeIndexingService extends AbstractIndexingService {
 
   public long removeDocumentFromIndex(CedarFilesystemResourceId resourceId) throws CedarProcessingException {
     if (resourceId != null) {
-      log.debug("Removing resource from index (id = " + resourceId);
+      log.info("Removing resource from index (id = " + resourceId);
       return indexWorker.removeAllFromIndex(resourceId);
     } else {
       return -1;
+    }
+  }
+
+  public void partialUpdateIndexDocument(CedarFilesystemResourceId resourceId, Map<String, Object> map,
+                                         boolean waitBeforeUpdate, boolean retry) throws CedarProcessingException {
+    if (resourceId != null) {
+      log.info("Updating resource in index (id = " + resourceId);
+      indexWorker.partialUpdate(resourceId, map, waitBeforeUpdate,  retry);
     }
   }
 

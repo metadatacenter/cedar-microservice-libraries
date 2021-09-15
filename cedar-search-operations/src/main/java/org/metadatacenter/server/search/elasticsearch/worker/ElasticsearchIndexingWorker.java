@@ -9,6 +9,8 @@ import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.update.UpdateRequestBuilder;
+import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.NoNodeAvailableException;
 import org.elasticsearch.common.xcontent.XContentType;
@@ -27,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.metadatacenter.constant.ElasticsearchConstants.DOCUMENT_CEDAR_ID;
 
@@ -56,7 +59,7 @@ public class ElasticsearchIndexingWorker {
               .setSource(JsonMapper.MAPPER.writeValueAsString(json), XContentType.JSON);
           IndexResponse response = indexRequestBuilder.get();
           if (response.status() == RestStatus.CREATED) {
-            log.debug("The " + documentType + " has been indexed");
+            log.info("The " + documentType + " has been indexed");
             again = false;
             newId = new IndexedDocumentId(response.getId());
           } else {
@@ -82,7 +85,7 @@ public class ElasticsearchIndexingWorker {
    * @throws CedarProcessingException
    */
   public long removeAllFromIndex(CedarFilesystemResourceId resourceId) throws CedarProcessingException {
-    log.debug("Removing " + documentType + " cid:" + resourceId + " from the " + indexName + " index");
+    log.info("Removing " + documentType + " cid:" + resourceId + " from the " + indexName + " index");
     try {
       // Get resources by artifact id
       // TODO: note that this search query will retrieve only 10 results by default, so the maximum number
@@ -100,7 +103,7 @@ public class ElasticsearchIndexingWorker {
       if (removedCount == 0) {
         log.error("The " + documentType + " cid:" + resourceId.getId() + " was not removed from the " + indexName + " index");
       } else {
-        log.debug("Removed " + removedCount + " documents of type " + documentType + " cid:" + resourceId.getId() + " from the " + indexName + " " +
+        log.info("Removed " + removedCount + " documents of type " + documentType + " cid:" + resourceId.getId() + " from the " + indexName + " " +
             "index");
       }
       return removedCount;
@@ -118,7 +121,7 @@ public class ElasticsearchIndexingWorker {
    * @throws CedarProcessingException
    */
   public long removeAllFromIndex(String fieldName, String fieldValue) throws CedarProcessingException {
-    log.debug("Removing from the " + indexName + " index the documents with " + fieldName + "=" + fieldValue);
+    log.info("Removing from the " + indexName + " index the documents with " + fieldName + "=" + fieldValue);
     try {
       // Use "delete by query" to delete all documents with fieldName = fieldValue
       BulkByScrollResponse response = DeleteByQueryAction.INSTANCE.newRequestBuilder(client)
@@ -128,7 +131,7 @@ public class ElasticsearchIndexingWorker {
       if (removedCount == 0) {
         log.error("No documents have been removed from the " + indexName + " index");
       } else {
-        log.debug("Removed " + removedCount + " documents from the " + indexName + " index");
+        log.info("Removed " + removedCount + " documents from the " + indexName + " index");
       }
       return removedCount;
     } catch (Exception e) {
@@ -143,7 +146,64 @@ public class ElasticsearchIndexingWorker {
       throw new CedarProcessingException("Failed to remove " + documentType
           + " _id:" + documentId + " from the " + indexName + " index");
     } else {
-      log.debug("The " + documentType + " " + documentId + " has been removed from the " + indexName + " index");
+      log.info("The " + documentType + " " + documentId + " has been removed from the " + indexName + " index");
+    }
+  }
+
+  /**
+   *
+   * @param resourceId
+   * @param map
+   * @param waitBeforeUpdate Waits a specified time before running the update to ensure that a document that was indexed
+   *                         right before the update is visible in the index. By default, Elasticsearch periodically
+   *                         refreshes indices every second.
+   * @param retry If the document was not found in the index, try again
+   * @throws CedarProcessingException
+   */
+  public void partialUpdate(CedarFilesystemResourceId resourceId, Map<String, Object> map,
+                            boolean waitBeforeUpdate, boolean retry) throws CedarProcessingException {
+
+    final int WAIT_MS = 1100; // slightly higher than the refresh period used by Elasticsearch
+    final int MAX_RETRIES = retry ? 5 : 1;
+
+    int currentRetries = 0;
+    boolean found = false;
+    SearchResponse responseSearch = null;
+
+    while (!found && currentRetries <= MAX_RETRIES) {
+      if (currentRetries > 0) log.info("Update retry count: " + currentRetries);
+      if (waitBeforeUpdate) {
+        try {
+          Thread.sleep(WAIT_MS);
+        } catch (InterruptedException e) {
+          log.error("Error while waiting before update execution", e);
+        }
+      }
+      responseSearch = client.prepareSearch(indexName).setTypes(documentType)
+          .setQuery(QueryBuilders.matchQuery(DOCUMENT_CEDAR_ID, resourceId.getId()))
+          .execute().actionGet();
+      if (responseSearch.getHits().getTotalHits() > 0) {
+        found = true;
+      }
+      else {
+        currentRetries++;
+      }
+    }
+
+    if (responseSearch != null && responseSearch.getHits().getTotalHits() > 0) {
+      SearchHit hit = responseSearch.getHits().getAt(0);
+      String documentId = hit.getId();
+      UpdateRequestBuilder updateRequestBuilder = client.prepareUpdate(indexName, documentType, documentId).setDoc(map);
+      UpdateResponse updateResponse = updateRequestBuilder.execute().actionGet();
+      if (updateResponse.status() != RestStatus.OK) {
+        throw new CedarProcessingException("Failed to update " + documentType
+            + " _id:" + documentId + " in the " + indexName + " index");
+      } else {
+        log.info("The " + documentType + " " + documentId + " has been updated in the " + indexName + " index");
+      }
+    } else {
+      throw new CedarProcessingException("Failed to update " + documentType
+          + " id:" + resourceId + ". Was not able to find the document in the " + indexName + " index");
     }
   }
 
