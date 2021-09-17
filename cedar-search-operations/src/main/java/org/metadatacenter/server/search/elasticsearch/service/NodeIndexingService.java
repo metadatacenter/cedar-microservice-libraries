@@ -44,8 +44,10 @@ public class NodeIndexingService extends AbstractIndexingService {
     instanceContentExtractor = new TemplateInstanceContentExtractor(cedarConfig);
   }
 
-  public IndexingDocumentDocument createIndexDocument(FileSystemResource node, CedarNodeMaterializedPermissions permissions,
-                                                      CedarNodeMaterializedCategories categories, CedarRequestContext requestContext,
+  public IndexingDocumentDocument createIndexDocument(FileSystemResource node,
+                                                      CedarNodeMaterializedPermissions permissions,
+                                                      CedarNodeMaterializedCategories categories,
+                                                      CedarRequestContext requestContext,
                                                       boolean isIndexRegenerationTask) throws CedarProcessingException {
     IndexingDocumentDocument ir = new IndexingDocumentDocument(node.getId());
     // Set node's path info
@@ -65,18 +67,22 @@ public class NodeIndexingService extends AbstractIndexingService {
   }
 
   public IndexedDocumentId indexDocument(FileSystemResource node, CedarNodeMaterializedPermissions permissions,
-                                         CedarNodeMaterializedCategories categories, CedarRequestContext requestContext) throws CedarProcessingException {
+                                         CedarNodeMaterializedCategories categories,
+                                         CedarRequestContext requestContext) throws CedarProcessingException {
     return indexDocument(node, permissions, categories, requestContext, false);
   }
 
   public IndexedDocumentId indexDocument(FileSystemResource resource, CedarRequestContext requestContext) throws CedarProcessingException {
     log.debug("Indexing resource (id = " + resource.getId() + ")");
-    ResourcePermissionServiceSession permissionSession = CedarDataServices.getResourcePermissionServiceSession(requestContext);
-    CedarNodeMaterializedPermissions permissions = permissionSession.getResourceMaterializedPermission(resource.getResourceId());
+    ResourcePermissionServiceSession permissionSession =
+        CedarDataServices.getResourcePermissionServiceSession(requestContext);
+    CedarNodeMaterializedPermissions permissions =
+        permissionSession.getResourceMaterializedPermission(resource.getResourceId());
     CategoryServiceSession categorySession = CedarDataServices.getCategoryServiceSession(requestContext);
     CedarNodeMaterializedCategories categories = new CedarNodeMaterializedCategories(resource.getId());
     if (resource.getType() != CedarResourceType.FOLDER) {
-      categories = categorySession.getArtifactMaterializedCategories(CedarArtifactId.build(resource.getId(), resource.getType()));
+      categories = categorySession.getArtifactMaterializedCategories(CedarArtifactId.build(resource.getId(),
+          resource.getType()));
     }
     return indexDocument(resource, permissions, categories, requestContext);
   }
@@ -85,7 +91,8 @@ public class NodeIndexingService extends AbstractIndexingService {
                                          CedarNodeMaterializedCategories categories, CedarRequestContext requestContext,
                                          boolean isIndexRegenerationTask) throws CedarProcessingException {
     log.debug("Indexing resource (id = " + resource.getId() + ")");
-    IndexingDocumentDocument ir = createIndexDocument(resource, permissions, categories, requestContext, isIndexRegenerationTask);
+    IndexingDocumentDocument ir = createIndexDocument(resource, permissions, categories, requestContext,
+        isIndexRegenerationTask);
     JsonNode jsonResource = JsonMapper.MAPPER.convertValue(ir, JsonNode.class);
     return indexWorker.addToIndex(jsonResource);
   }
@@ -131,11 +138,36 @@ public class NodeIndexingService extends AbstractIndexingService {
 
   public long removeDocumentFromIndex(CedarFilesystemResourceId resourceId) throws CedarProcessingException {
     if (resourceId != null) {
-      log.debug("Removing resource from index (id = " + resourceId);
+      log.debug("Removing resource from index (id = " + resourceId + ")");
       return indexWorker.removeAllFromIndex(resourceId);
     } else {
       return -1;
     }
+  }
+
+  /**
+   * Used to remove a document from the index right after was created. Given that Elasticsearch does not make indexed
+   * documents immediately available in the index (1-second delay by default), this async method with an initial
+   * delay (wait=true) can be used to ensure that the document in visible in the index before removing it.
+   * @param resourceId
+   * @param wait
+   * @throws CedarProcessingException
+   */
+  public void removeDocumentFromIndexAsync(CedarFilesystemResourceId resourceId, boolean wait) {
+    new Thread(() -> {
+      try {
+        if (wait) {
+          Thread.sleep(5000); // The default Elasticsearch's refresh time is 1s so 5s should be enough to ensure that
+          // a document that was previously indexed can be found and removed
+        }
+        if (resourceId != null) {
+          log.debug("Removing resource from index (id = " + resourceId);
+          indexWorker.removeAllFromIndex(resourceId);
+        }
+      } catch (InterruptedException | CedarProcessingException e) {
+        log.error("Error removing resource from index (id = " + resourceId + ")", e);
+      }
+    }).start();
   }
 
 }
