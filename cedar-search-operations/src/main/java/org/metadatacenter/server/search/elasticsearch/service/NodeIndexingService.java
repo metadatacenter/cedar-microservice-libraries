@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 
 public class NodeIndexingService extends AbstractIndexingService {
 
@@ -145,29 +146,31 @@ public class NodeIndexingService extends AbstractIndexingService {
     }
   }
 
-  /**
-   * Used to remove a document from the index right after was created. Given that Elasticsearch does not make indexed
-   * documents immediately available in the index (1-second delay by default), this async method with an initial
-   * delay (wait=true) can be used to ensure that the document in visible in the index before removing it.
-   * @param resourceId
-   * @param wait
-   * @throws CedarProcessingException
-   */
-  public void removeDocumentFromIndexAsync(CedarFilesystemResourceId resourceId, boolean wait) {
-    new Thread(() -> {
-      try {
-        if (wait) {
-          Thread.sleep(5000); // The default Elasticsearch's refresh time is 1s so 5s should be enough to ensure that
-          // a document that was previously indexed can be found and removed
-        }
-        if (resourceId != null) {
-          log.debug("Removing resource from index (id = " + resourceId);
-          indexWorker.removeAllFromIndex(resourceId);
-        }
-      } catch (InterruptedException | CedarProcessingException e) {
-        log.error("Error removing resource from index (id = " + resourceId + ")", e);
+  public long removeDocumentFromIndex(CedarFilesystemResourceId resourceId, boolean retry) throws CedarProcessingException {
+    if (!retry) {
+      return removeDocumentFromIndex(resourceId);
+    }
+    final int MAX_TRIES = 5;
+    final int WAIT_MS = 1000;
+    int currentTry = 1;
+    long removedCount = 0;
+
+    while (currentTry <= MAX_TRIES) {
+      log.debug("Removing resource from index (id = " + resourceId + ")");
+      removedCount = indexWorker.removeAllFromIndex(resourceId);
+      if (removedCount > 0) {
+        return removedCount;
       }
-    }).start();
+      else {
+        log.debug("Could not remove resource from index (id = " + resourceId + ")");
+        try {
+          Thread.sleep(WAIT_MS);
+        } catch (InterruptedException e) {
+          log.error("Error while waiting before update execution", e);
+        }
+      }
+    }
+    return removedCount;
   }
 
 }
