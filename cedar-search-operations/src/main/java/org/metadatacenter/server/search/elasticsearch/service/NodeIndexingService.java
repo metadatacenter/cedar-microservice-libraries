@@ -36,8 +36,10 @@ import org.slf4j.LoggerFactory;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+
 import java.util.Optional;
 import java.util.Set;
+
 
 public class NodeIndexingService extends AbstractIndexingService {
 
@@ -68,6 +70,7 @@ public class NodeIndexingService extends AbstractIndexingService {
   public IndexingDocumentDocument createIndexDocument(FileSystemResource node, CedarNodeMaterializedPermissions permissions,
                                                       CedarNodeMaterializedCategories categories, CedarRequestContext requestContext,
                                                       boolean isIndexRegenerationTask) throws CedarProcessingException {
+
     IndexingDocumentDocument ir = new IndexingDocumentDocument(node.getId());
     // Set node's path info
     FolderServiceSession folderSession = CedarDataServices.getFolderServiceSession(requestContext);
@@ -116,18 +119,22 @@ public class NodeIndexingService extends AbstractIndexingService {
   }
 
   public IndexedDocumentId indexDocument(FileSystemResource node, CedarNodeMaterializedPermissions permissions,
-                                         CedarNodeMaterializedCategories categories, CedarRequestContext requestContext) throws CedarProcessingException {
+                                         CedarNodeMaterializedCategories categories,
+                                         CedarRequestContext requestContext) throws CedarProcessingException {
     return indexDocument(node, permissions, categories, requestContext, false);
   }
 
   public IndexedDocumentId indexDocument(FileSystemResource resource, CedarRequestContext requestContext) throws CedarProcessingException {
     log.debug("Indexing resource (id = " + resource.getId() + ")");
-    ResourcePermissionServiceSession permissionSession = CedarDataServices.getResourcePermissionServiceSession(requestContext);
-    CedarNodeMaterializedPermissions permissions = permissionSession.getResourceMaterializedPermission(resource.getResourceId());
+    ResourcePermissionServiceSession permissionSession =
+        CedarDataServices.getResourcePermissionServiceSession(requestContext);
+    CedarNodeMaterializedPermissions permissions =
+        permissionSession.getResourceMaterializedPermission(resource.getResourceId());
     CategoryServiceSession categorySession = CedarDataServices.getCategoryServiceSession(requestContext);
     CedarNodeMaterializedCategories categories = new CedarNodeMaterializedCategories(resource.getId());
     if (resource.getType() != CedarResourceType.FOLDER) {
-      categories = categorySession.getArtifactMaterializedCategories(CedarArtifactId.build(resource.getId(), resource.getType()));
+      categories = categorySession.getArtifactMaterializedCategories(CedarArtifactId.build(resource.getId(),
+          resource.getType()));
     }
     return indexDocument(resource, permissions, categories, requestContext);
   }
@@ -136,7 +143,8 @@ public class NodeIndexingService extends AbstractIndexingService {
                                          CedarNodeMaterializedCategories categories, CedarRequestContext requestContext,
                                          boolean isIndexRegenerationTask) throws CedarProcessingException {
     log.debug("Indexing resource (id = " + resource.getId() + ")");
-    IndexingDocumentDocument ir = createIndexDocument(resource, permissions, categories, requestContext, isIndexRegenerationTask);
+    IndexingDocumentDocument ir = createIndexDocument(resource, permissions, categories, requestContext,
+        isIndexRegenerationTask);
     JsonNode jsonResource = JsonMapper.MAPPER.convertValue(ir, JsonNode.class);
     return indexWorker.addToIndex(jsonResource);
   }
@@ -182,11 +190,38 @@ public class NodeIndexingService extends AbstractIndexingService {
 
   public long removeDocumentFromIndex(CedarFilesystemResourceId resourceId) throws CedarProcessingException {
     if (resourceId != null) {
-      log.debug("Removing resource from index (id = " + resourceId);
+      log.debug("Removing resource from index (id = " + resourceId + ")");
       return indexWorker.removeAllFromIndex(resourceId);
     } else {
       return -1;
     }
+  }
+
+  public long removeDocumentFromIndex(CedarFilesystemResourceId resourceId, boolean retry) throws CedarProcessingException {
+    if (!retry) {
+      return removeDocumentFromIndex(resourceId);
+    }
+    final int MAX_TRIES = 5;
+    final int WAIT_MS = 1000;
+    int currentTry = 1;
+    long removedCount = 0;
+
+    while (currentTry <= MAX_TRIES) {
+      log.debug("Removing resource from index (id = " + resourceId + ")");
+      removedCount = indexWorker.removeAllFromIndex(resourceId);
+      if (removedCount > 0) {
+        return removedCount;
+      }
+      else {
+        log.debug("Could not remove resource from index (id = " + resourceId + ")");
+        try {
+          Thread.sleep(WAIT_MS);
+        } catch (InterruptedException e) {
+          log.error("Error while waiting before update execution", e);
+        }
+      }
+    }
+    return removedCount;
   }
 
 }
