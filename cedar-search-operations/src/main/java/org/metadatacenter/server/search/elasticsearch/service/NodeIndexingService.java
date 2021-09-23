@@ -52,7 +52,7 @@ public class NodeIndexingService extends AbstractIndexingService {
   NodeIndexingService(CedarConfig cedarConfig, String indexName, Client client) {
     Map<String, String> environment = CedarEnvironmentVariableProvider.getFor(SystemComponent.SERVER_RESOURCE);
 
-    nciCADSRValueSetsOntologyFilePath = environment.get(CedarEnvironmentVariable.CEDAR_NCI_CADSR_VALUE_SETS_ONTOLOGY_FILE_PATH.getName());
+    nciCADSRValueSetsOntologyFilePath = environment.get(CedarEnvironmentVariable.CEDAR_CADSR_ONTOLOGIES_FOLDER.getName() + "/CADSR-VS.owl");
 
     indexWorker = new ElasticsearchIndexingWorker(indexName, client);
     instanceContentExtractor = new TemplateInstanceContentExtractor(cedarConfig);
