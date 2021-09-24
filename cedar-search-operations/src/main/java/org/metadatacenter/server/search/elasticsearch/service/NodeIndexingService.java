@@ -7,6 +7,7 @@ import org.metadatacenter.bridge.PathInfoBuilder;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariable;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
+import org.metadatacenter.constant.OntologyAndValueSetConstants;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarFilesystemResourceId;
@@ -52,7 +53,8 @@ public class NodeIndexingService extends AbstractIndexingService {
   NodeIndexingService(CedarConfig cedarConfig, String indexName, Client client) {
     Map<String, String> environment = CedarEnvironmentVariableProvider.getFor(SystemComponent.SERVER_RESOURCE);
 
-    nciCADSRValueSetsOntologyFilePath = environment.get(CedarEnvironmentVariable.CEDAR_CADSR_ONTOLOGIES_FOLDER.getName() + "/CADSR-VS.owl");
+    nciCADSRValueSetsOntologyFilePath = environment.get(CedarEnvironmentVariable.CEDAR_CADSR_ONTOLOGIES_FOLDER.getName())
+        + "/" + OntologyAndValueSetConstants.CADSR_VALUE_SETS_ONTOLOGY_FILE;
 
     indexWorker = new ElasticsearchIndexingWorker(indexName, client);
     instanceContentExtractor = new TemplateInstanceContentExtractor(cedarConfig);
@@ -60,7 +62,7 @@ public class NodeIndexingService extends AbstractIndexingService {
 
   public void readValueSets() throws CedarProcessingException
   {
-    if (nciCADSRValueSetsOntologyFilePath != null || !nciCADSRValueSetsOntologyFilePath.isEmpty())
+    if (nciCADSRValueSetsOntologyFilePath != null && !nciCADSRValueSetsOntologyFilePath.isEmpty())
       ValueSetsExtractor.getInstance().loadValueSetsOntology(nciCADSRValueSetsOntologyFilePath);
     else {
       throw new CedarProcessingException("No path configured for value set ontology");

@@ -1,5 +1,6 @@
 package org.metadatacenter.server.search.extraction;
 
+import org.metadatacenter.constant.OntologyAndValueSetConstants;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.AxiomType;
@@ -32,9 +33,6 @@ public class ValueSetsExtractor
   public enum Annotation {
     IDENTIFIER, VERSION, NOTATION, RELATED_MATCH, COMMENT, LABEL, START_TIME, END_TIME
   }
-
-  private final String CDE_VALUESETS_ONTOLOGY_ID = "CADSR-VS";
-  private final String CDE_VALUESETS_ONTOLOGY_IRI = "https://cadsr.nci.nih.gov/metadata/" + CDE_VALUESETS_ONTOLOGY_ID + "/";
 
   // Schema.org URIs
   private final String SCHEMAORG_URI = "https://schema.org/";
@@ -140,9 +138,9 @@ public class ValueSetsExtractor
       String superClassURI = superClassIRI.toString();
       String subClassURI = subClassIRI.toString();
 
-      if (!superClassIRI.getNamespace().equals(CDE_VALUESETS_ONTOLOGY_IRI)) {
+      if (!superClassIRI.getNamespace().equals(OntologyAndValueSetConstants.CADSR_VALUE_SETS_ONTOLOGY_IRI)) {
         String message = "Invalid superclass IRI namespace " + superClassIRI.getNamespace() + " found in ontology;" +
-          " expecting " + CDE_VALUESETS_ONTOLOGY_IRI;
+          " expecting " + OntologyAndValueSetConstants.CADSR_VALUE_SETS_ONTOLOGY_IRI;
         logger.error(message);
       }
 
