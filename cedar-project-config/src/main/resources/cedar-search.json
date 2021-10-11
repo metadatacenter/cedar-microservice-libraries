@@ -144,6 +144,17 @@
               }
             }
           }
+        },
+        "possibleValues": {
+          "type": "nested",
+          "properties": {
+            "valueLabels": {
+              "type": "text"
+            },
+            "valueConcepts": {
+              "type": "keyword"
+            }
+          }
         }
       }
     }

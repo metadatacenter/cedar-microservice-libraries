@@ -15,9 +15,16 @@ import org.slf4j.LoggerFactory;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
-import static org.metadatacenter.model.ModelNodeNames.*;
+import static org.metadatacenter.model.ModelNodeNames.JSON_LD_ID;
+import static org.metadatacenter.model.ModelNodeNames.JSON_LD_VALUE;
+import static org.metadatacenter.model.ModelNodeNames.RDFS_LABEL;
+import static org.metadatacenter.model.ModelNodeNames.SCHEMA_IS_BASED_ON;
 
 /**
  * Utilities to extract information from CEDAR Template Instances
@@ -62,6 +69,36 @@ public class TemplateInstanceContentExtractor {
     else {
       throw new CedarProcessingException("The artifact must be an Instance, a Template, an Element, or a Field, but it is a "
           + folderServerNode.getType().name());
+    }
+  }
+
+  /**
+   * Generates a list of PossibleValues objects from a template field.
+   *
+   * @param folderServerNode
+   * @param requestContext
+   * @return
+   */
+  public List<String> generateValueSetsURIs(FileSystemResource folderServerNode, CedarRequestContext requestContext)
+    throws CedarProcessingException {
+
+    if (folderServerNode.getType().equals(CedarResourceType.FIELD)) {
+
+      List<String> valueSetsURIs = new ArrayList<>();
+      // Retrieve the template field and parse and return URIs of value sets if present
+      JsonNode schema = extractionUtils.getArtifactById(folderServerNode.getId(), folderServerNode.getType(), requestContext);
+      List<TemplateNode> schemaNodes = templateContentExtractor.getTemplateNodes(schema, folderServerNode.getType());
+
+      for (TemplateNode node : schemaNodes) {
+        if (node.getType().equals(CedarResourceType.FIELD)) {
+          List<String> valueSetURIs = node.getValueSetURIs();
+          valueSetsURIs.addAll(valueSetURIs);
+        }
+      }
+      return valueSetsURIs;
+    } else {
+      throw new CedarProcessingException(
+        "The artifact must be a Template Field, but it is a " + folderServerNode.getType().name());
     }
   }
 
@@ -161,6 +198,7 @@ public class TemplateInstanceContentExtractor {
 
       for (TemplateNode node : schemaNodes) {
         if (node.getType().equals(CedarResourceType.FIELD)) {
+          List<String> fieldValues = node.getValueSetURIs();
           infoFields.add(new InfoField(node.getName(), node.getPrefLabel(), node.generatePathBracketNotation(), null, null));
         }
       }

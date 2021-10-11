@@ -116,6 +116,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     SearchRequestBuilder searchRequestBuilder = client.prepareSearch(indexName).setTypes(IndexedDocumentType.DOC.getValue());
 
     BoolQueryBuilder mainQuery = QueryBuilders.boolQuery();
+    BoolQueryBuilder subQuery = QueryBuilders.boolQuery();
 
     if (query != null && query.length() > 0) {
 
@@ -127,13 +128,28 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
         if (enclosedByQuotes(query)) {
           query = query.substring(1, query.length() - 1);
           QueryBuilder summaryTextQuery = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, query);
-          mainQuery.must(summaryTextQuery);
+          subQuery.should(summaryTextQuery);
+
+          QueryBuilder possibleValuesFieldQueryString
+            = QueryBuilders.matchPhraseQuery(VALUE_LABELS, query).boost(POSSIBLE_VALUES_BOOST);
+          QueryBuilder nestedPossibleValuesFieldQuery
+            = QueryBuilders.nestedQuery(POSSIBLE_VALUES, possibleValuesFieldQueryString, ScoreMode.None).boost(POSSIBLE_VALUES_BOOST);
+          subQuery.should(nestedPossibleValuesFieldQuery);
+
+          mainQuery.must(subQuery);
         } else {
           QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
           try {
             Query queryParsed = parser.parse(query);
             QueryBuilder summaryTextQuery = QueryBuilders.queryStringQuery(query).field(SUMMARY_TEXT);
-            mainQuery.must(summaryTextQuery);
+            subQuery.should(summaryTextQuery);
+
+            QueryBuilder possibleValuesFieldQueryString
+              = QueryBuilders.queryStringQuery(query).field(VALUE_LABELS, POSSIBLE_VALUES_BOOST).field(VALUE_CONCEPTS, POSSIBLE_VALUES_BOOST);
+            QueryBuilder nestedPossibleValuesFieldQuery = QueryBuilders.nestedQuery(POSSIBLE_VALUES, possibleValuesFieldQueryString, ScoreMode.None);
+            subQuery.should(nestedPossibleValuesFieldQuery);
+
+            mainQuery.must(subQuery);
           } catch (ParseException e) {
             CedarProcessingException ex = new CedarProcessingException("Error processing query: " + query, e);
             ex.getErrorPack().errorKey(CedarErrorKey.MALFORMED_SEARCH_SYNTAX);
@@ -150,7 +166,8 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
         QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
         try {
           Query queryParsed = parser.parse(query);
-          mainQuery.must(rewriteQuery(queryParsed));
+          subQuery.should(rewriteQuery(queryParsed));
+          mainQuery.must(subQuery);
         } catch (ParseException e) {
           throw new CedarProcessingException("Error processing query: " + query, e);
         }
@@ -371,6 +388,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     query = encodeWildcards(query);
     query = encodeUrls(query);
     query = encodeDoubleQuotesInFieldName(query);
+    query = removeForwardSlashes(query);
     return query;
   }
 
@@ -459,6 +477,10 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
       processedQuery = processedQuery.replace(matchString, replacement);
     }
     return processedQuery;
+  }
+
+  private String removeForwardSlashes(String query) {
+    return query.replaceAll("\\/", "");
   }
 
 

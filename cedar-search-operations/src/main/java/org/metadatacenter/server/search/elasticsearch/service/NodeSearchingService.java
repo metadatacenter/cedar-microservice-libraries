@@ -124,6 +124,16 @@ public class NodeSearchingService extends AbstractSearchingService {
     }
   }
 
+  public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes,
+                                             ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
+                                             List<String> sortList, int limit, int offset) throws CedarProcessingException {
+    try {
+      return permissionEnabledSearchWorker.search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset);
+    } catch (Exception e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
   public FolderServerNodeListResponse searchDeep(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
                                                  ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
                                                  String categoryId, List<String> sortList, int limit, int offset, String absoluteUrl) throws CedarProcessingException {
