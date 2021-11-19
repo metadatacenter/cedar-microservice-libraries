@@ -124,7 +124,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
       query = preprocessQuery(query);
 
       // Query artifact id and description (summaryText). Sample query: 'cancer'
-      if (!query.contains(":")) {
+      if (!query.contains(FIELD_NAME_VALUE_SEPARATOR) && !query.contains(POSSIBLE_VALUES_PREFIX_ENCODED)) {
         if (enclosedByQuotes(query)) {
           query = query.substring(1, query.length() - 1);
           QueryBuilder summaryTextQuery = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, query);
@@ -140,7 +140,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
         } else {
           QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
           try {
-            Query queryParsed = parser.parse(query);
+            parser.parse(query); // will throw a ParseException if it cannot parse it
             QueryBuilder summaryTextQuery = QueryBuilders.queryStringQuery(query).field(SUMMARY_TEXT);
             subQuery.should(summaryTextQuery);
 
@@ -242,7 +242,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
     // Set main query
     searchRequestBuilder.setQuery(mainQuery);
-    //log.info("Search query in Query DSL:\n" + mainQuery);
+    log.info("Search query in Query DSL:\n" + mainQuery);
 
     // Sort by field
     // The name is stored on the resource, so we can sort by that
@@ -387,8 +387,10 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   private String preprocessQuery(String query) throws CedarProcessingException {
     query = encodeWildcards(query);
     query = encodeUrls(query);
-    query = encodeDoubleQuotesInFieldName(query);
+    query = escapeDoubleQuotesInFieldName(query);
     query = removeForwardSlashes(query);
+    query = encodePossibleValuesPrefix(query);
+    query = escapeSpecialSymbols(query);
     return query;
   }
 
@@ -459,7 +461,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
    * Example 1: "title":"A nice study" -> \"title\":"A nice study"
    * Example 2: "study title":"A nice study" -> \"study\ title\":"A nice study"
    */
-  private String encodeDoubleQuotesInFieldName(String query) {
+  private String escapeDoubleQuotesInFieldName(String query) {
     // The following regex will find all field names between double quotes, assuming that the field name itself does
     // not contain any quotes. Example:
     //    Input query: "studyidA":"aaa aaa" "studyid B":"bbb bbb" "study id C":"ccc ccc"
@@ -470,9 +472,9 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     String processedQuery = query;
     while (matcherQuotesFieldName.find()) {
       String matchString = query.substring(matcherQuotesFieldName.start(), matcherQuotesFieldName.end());
-      // Encode quotes
+      // Escape quotes
       String replacement = matchString.replace("\"", "\\\"");
-      // Encode white spaces (if there are any). Example: \"study id\": -> \"study\ id\"
+      // Escape white spaces (if there are any). Example: \"study id\": -> \"study\ id\"
       replacement = replacement.replaceAll("\\s+", "\\\\ ");
       processedQuery = processedQuery.replace(matchString, replacement);
     }
@@ -483,6 +485,15 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     return query.replaceAll("\\/", "");
   }
 
+  private String encodePossibleValuesPrefix(String query) {
+    return query.replace(POSSIBLE_VALUES_PREFIX, POSSIBLE_VALUES_PREFIX_ENCODED);
+  }
+
+  private String escapeSpecialSymbols(String query) {
+    query = query.replace("[", "\\[");
+    query = query.replace("]", "\\]");
+    return query;
+  }
 
   public long searchAccessibleResourceCountByUser(List<String> resourceTypes, FilesystemResourcePermission permission, CedarUser user) {
 

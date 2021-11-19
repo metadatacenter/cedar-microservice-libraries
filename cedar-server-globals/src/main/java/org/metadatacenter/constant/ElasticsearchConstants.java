@@ -46,5 +46,9 @@ public final class ElasticsearchConstants {
   public static final String ES_SORT_DESC_PREFIX = "-";
   public static final String TEMPLATE_ID = "templateId";
   public static final String ANY_STRING = "_any_";
+  public static final String FIELD_NAME_VALUE_SEPARATOR = ":";
+  public static final String POSSIBLE_VALUES_PREFIX = "[pv]";
+  public static final String POSSIBLE_VALUES_PREFIX_ENCODED = "_pv_";
+
 
 }
