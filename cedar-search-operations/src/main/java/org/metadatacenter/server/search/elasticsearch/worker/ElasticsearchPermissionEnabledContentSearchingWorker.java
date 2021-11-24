@@ -9,10 +9,9 @@ import org.apache.lucene.search.join.ScoreMode;
 import org.elasticsearch.action.search.SearchRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.index.query.BoolQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.index.query.*;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.sort.SortOrder;
 import org.metadatacenter.config.ElasticsearchConfig;
@@ -116,40 +115,26 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     SearchRequestBuilder searchRequestBuilder = client.prepareSearch(indexName).setTypes(IndexedDocumentType.DOC.getValue());
 
     BoolQueryBuilder mainQuery = QueryBuilders.boolQuery();
-    BoolQueryBuilder subQuery = QueryBuilders.boolQuery();
 
     if (query != null && query.length() > 0) {
 
-      // Preprocess query to avoid syntax errors when using the query String syntax
       query = preprocessQuery(query);
 
-      // Query artifact id and description (summaryText). Sample query: 'cancer'
+      // QUERY TYPE: General query (Query artifact title and/or description - stored as 'summaryText' in the index)
       if (!query.contains(FIELD_NAME_VALUE_SEPARATOR) && !query.contains(POSSIBLE_VALUES_PREFIX_ENCODED)) {
+        // Query enclosed by quotes: Example: "My Study Template"
         if (enclosedByQuotes(query)) {
-          query = query.substring(1, query.length() - 1);
+          query = removeEnclosingQuotes(query);
           QueryBuilder summaryTextQuery = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, query);
-          subQuery.should(summaryTextQuery);
-
-          QueryBuilder possibleValuesFieldQueryString
-            = QueryBuilders.matchPhraseQuery(VALUE_LABELS, query).boost(POSSIBLE_VALUES_BOOST);
-          QueryBuilder nestedPossibleValuesFieldQuery
-            = QueryBuilders.nestedQuery(POSSIBLE_VALUES, possibleValuesFieldQueryString, ScoreMode.None).boost(POSSIBLE_VALUES_BOOST);
-          subQuery.should(nestedPossibleValuesFieldQuery);
-
-          mainQuery.must(subQuery);
-        } else {
+          mainQuery.must(summaryTextQuery);
+        }
+        // Not enclosed by quotes: Example: T1
+        else {
           QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
           try {
             parser.parse(query); // will throw a ParseException if it cannot parse it
             QueryBuilder summaryTextQuery = QueryBuilders.queryStringQuery(query).field(SUMMARY_TEXT);
-            subQuery.should(summaryTextQuery);
-
-            QueryBuilder possibleValuesFieldQueryString
-              = QueryBuilders.queryStringQuery(query).field(VALUE_LABELS, POSSIBLE_VALUES_BOOST).field(VALUE_CONCEPTS, POSSIBLE_VALUES_BOOST);
-            QueryBuilder nestedPossibleValuesFieldQuery = QueryBuilders.nestedQuery(POSSIBLE_VALUES, possibleValuesFieldQueryString, ScoreMode.None);
-            subQuery.should(nestedPossibleValuesFieldQuery);
-
-            mainQuery.must(subQuery);
+            mainQuery.must(summaryTextQuery);
           } catch (ParseException e) {
             CedarProcessingException ex = new CedarProcessingException("Error processing query: " + query, e);
             ex.getErrorPack().errorKey(CedarErrorKey.MALFORMED_SEARCH_SYNTAX);
@@ -157,17 +142,17 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
           }
         }
       }
-      // Query field name/value (infoFields), optionally combined with artifact id and description (summaryText).
-      // Sample query: 'disease:cancer AND Template3'
+      // QUERY TYPE: Field query or Possible values query
+      // Query field name/value (infoFields) or possible field values, optionally combined with artifact id and description (summaryText).
+      // Sample query 1: 'disease:cancer AND Template3'
+      // Sample query 2: '[pv]female OR [pv]male'
       else {
-        // Parse the query using the query parser and rewrite it to query the right index fields. The whitespace
-        // analyzer divides text into terms whenever it encounters any whitespace character. It does not lowercase
-        // terms.
+        // Parse the query and rewrite it to query the right index fields. The whitespace analyzer divides text into
+        // terms whenever it encounters any whitespace character. It does not lowercase terms.
         QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
         try {
           Query queryParsed = parser.parse(query);
-          subQuery.should(rewriteQuery(queryParsed));
-          mainQuery.must(subQuery);
+          mainQuery.must(rewriteQuery(queryParsed));
         } catch (ParseException e) {
           throw new CedarProcessingException("Error processing query: " + query, e);
         }
@@ -269,6 +254,10 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     return keyword.startsWith("\"") && keyword.endsWith("\"");
   }
 
+  private boolean enclosedByParentheses(String keyword) {
+    return keyword.startsWith("(") && keyword.endsWith(")");
+  }
+
   /**
    * Rewrites the query generated by the QueryParser to work with our index. This is a recursive method that iterates
    * over all the query clauses and rewrites them.
@@ -293,18 +282,17 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
       }
       return boolQueryBuilder;
     }
-    // Examples: 'kidney', 'tissue:kidney'
+    // Examples: 'kidney', 'tissue:kidney', '[pv]female'
     else if (inputQuery instanceof TermQuery) {
       Term term = ((TermQuery) inputQuery).getTerm();
       return rewriteTermQuery(term.field(), term.bytes().utf8ToString());
     }
-    // Examples: 'colorectal cancer', 'disease:"colorectal cancer"'
+    // Examples: 'colorectal cancer', 'disease:"colorectal cancer"', '[pv]"Abnormal - Not clinically significant" '
     else if (inputQuery instanceof PhraseQuery) {
       return rewritePhraseQuery((PhraseQuery) inputQuery);
     }
     // Example: 'disease:influ*'
     else if (inputQuery instanceof MultiTermQuery) {
-
       if (inputQuery instanceof PrefixQuery) {
         Term prefix = ((PrefixQuery) inputQuery).getPrefix();
         return rewriteTermQuery(prefix.field(), prefix.bytes().utf8ToString(), true);
@@ -339,21 +327,57 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     return rewriteTermQuery(fieldName, fieldValue, false);
   }
 
+  /**
+   *
+   * @param fieldName
+   * @param fieldValue
+   * @param withPrefix Indicates if it is a prefix query. A PrefixQuery is built by QueryParser for inputs like app*.
+   * @return
+   * @throws CedarProcessingException
+   */
   private QueryBuilder rewriteTermQuery(String fieldName, String fieldValue, boolean withPrefix) throws CedarProcessingException {
+    QueryBuilder query;
     if (fieldName == null || fieldName.isEmpty()) {
-
-      // SummaryText query
-      QueryBuilder summaryTextQuery = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, fieldValue);
-      return summaryTextQuery;
-
-    } else { // Field name/value query
-
-      QueryBuilder infoFieldsQueryString = QueryBuilders.queryStringQuery(generateInfoFieldsQueryString(fieldName, fieldValue, withPrefix));
-
-      QueryBuilder nestedInfoFieldsQuery = QueryBuilders.nestedQuery(INFO_FIELDS, infoFieldsQueryString, ScoreMode.None);
-
-      return nestedInfoFieldsQuery;
+      // QUERY TYPE: Possible-values
+      if (fieldValue.contains(POSSIBLE_VALUES_PREFIX_ENCODED)) {
+        // Exact-match
+        // - [pv]=term (which was previously translated to _pv_exact_term)
+        // - [pv]="term1 term2" (which was previously translated to _pv_exact_"term1 term2")
+        if (fieldValue.contains(POSSIBLE_VALUES_EXACT_MATCH_PREFIX_ENCODED)) {
+          // Remove possible-values-exact prefix
+          fieldValue = fieldValue.replace(POSSIBLE_VALUES_EXACT_MATCH_PREFIX_ENCODED, "");
+          if (enclosedByQuotes(fieldValue)) {
+            fieldValue = removeEnclosingQuotes(fieldValue);
+          }
+          // Build term queries
+          query = QueryBuilders.boolQuery();
+          ((BoolQueryBuilder) query).should(QueryBuilders.termQuery(VALUE_LABELS_KEYWORD, fieldValue)); // query value labels
+          ((BoolQueryBuilder) query).should(QueryBuilders.termQuery(VALUE_CONCEPTS, fieldValue)); // query value concepts
+        }
+        // Non-exact match
+        // - [pv]term
+        // - [pv]"term1 term2"
+        else {
+          // Remove possible-values prefix
+          fieldValue = fieldValue.replace(POSSIBLE_VALUES_PREFIX_ENCODED, "");
+          query = QueryBuilders.queryStringQuery(fieldValue);
+          // There is no need to query value concepts, only value labels.
+          // The concepts query will be addressed by the exact-match query above
+          ((QueryStringQueryBuilder) query).field(VALUE_LABELS);
+          ((QueryStringQueryBuilder) query).field(VALUE_CONCEPTS);
+        }
+      }
+      // QUERY TYPE: SummaryText
+      else {
+        query = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, fieldValue);
+      }
     }
+    // QUERY TYPE: Field name/value
+    else {
+      QueryBuilder infoFieldsQueryString = QueryBuilders.queryStringQuery(generateInfoFieldsQueryString(fieldName, fieldValue, withPrefix));
+      query = QueryBuilders.nestedQuery(INFO_FIELDS, infoFieldsQueryString, ScoreMode.None);
+    }
+    return query;
   }
 
   private String generateInfoFieldsQueryString(String fieldName, String fieldValue, boolean withPrefix) throws CedarProcessingException {
@@ -389,7 +413,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     query = encodeUrls(query);
     query = escapeDoubleQuotesInFieldName(query);
     query = removeForwardSlashes(query);
-    query = encodePossibleValuesPrefix(query);
+    query = preprocessPossibleValuesQuery(query);
     query = escapeSpecialSymbols(query);
     return query;
   }
@@ -485,14 +509,51 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     return query.replaceAll("\\/", "");
   }
 
-  private String encodePossibleValuesPrefix(String query) {
-    return query.replace(POSSIBLE_VALUES_PREFIX, POSSIBLE_VALUES_PREFIX_ENCODED);
+  /**
+   * Exact match syntax (perfect match between the query and the value in the index, ignoring case):
+   *    [pv]"term"
+   *    [pv]"term1 term2"
+   * Partial match syntax
+   *    [pv](term)
+   *    [pv](term1 term2)
+   * By default [pv]term will translate to [pv]"term"
+   *
+   * @param query
+   * @return
+   */
+  private String preprocessPossibleValuesQuery(String query) {
+    // Convert to lower case [PV] -> [pv]
+    query = query.replace(POSSIBLE_VALUES_PREFIX.toUpperCase(), POSSIBLE_VALUES_PREFIX);
+    if (query.contains(POSSIBLE_VALUES_PREFIX)) {
+      // Translates [pv]"Not available" -> "[pv]Not available", so that the query is not identified as a boolean query
+      // Also [pv]="Not available" -> "[pv]=Not available"
+      query = query.replace(POSSIBLE_VALUES_EXACT_MATCH_PREFIX + "\"", "\"" + POSSIBLE_VALUES_EXACT_MATCH_PREFIX);
+      query = query.replace(POSSIBLE_VALUES_PREFIX + "\"", "\"" + POSSIBLE_VALUES_PREFIX);
+
+      if (enclosedByQuotes(query) && query.trim().split("\\s+").length == 1) {
+        query = removeEnclosingQuotes(query);
+      }
+
+      if (query.contains(POSSIBLE_VALUES_EXACT_MATCH_PREFIX)) {
+        // [pv]=term -> _pv_exact_term
+        query = query.replace(POSSIBLE_VALUES_EXACT_MATCH_PREFIX, POSSIBLE_VALUES_EXACT_MATCH_PREFIX_ENCODED);
+      }
+      else {
+        // [pv]term -> _pv_term
+        query = query.replace(POSSIBLE_VALUES_PREFIX, POSSIBLE_VALUES_PREFIX_ENCODED);
+      }
+    }
+    return query;
   }
 
   private String escapeSpecialSymbols(String query) {
     query = query.replace("[", "\\[");
     query = query.replace("]", "\\]");
     return query;
+  }
+
+  private String removeEnclosingQuotes(String query) {
+    return query.substring(1, query.length() - 1);
   }
 
   public long searchAccessibleResourceCountByUser(List<String> resourceTypes, FilesystemResourcePermission permission, CedarUser user) {

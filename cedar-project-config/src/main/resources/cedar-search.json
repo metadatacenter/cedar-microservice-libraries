@@ -22,6 +22,12 @@
               "lowercase"
             ]
           }
+        },
+        "normalizer": {
+          "cedar_search_normalizer": {
+            "type": "custom",
+            "filter": ["lowercase"]
+          }
         }
       },
       "mapping": {
@@ -146,10 +152,15 @@
           }
         },
         "possibleValues": {
-          "type": "nested",
           "properties": {
             "valueLabels": {
-              "type": "text"
+              "type": "text",
+              "fields": {
+                "keyword": {
+                  "type": "keyword",
+                  "normalizer": "cedar_search_normalizer"
+                }
+              }
             },
             "valueConcepts": {
               "type": "keyword"
