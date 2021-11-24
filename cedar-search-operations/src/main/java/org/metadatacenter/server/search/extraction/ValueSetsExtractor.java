@@ -77,9 +77,8 @@ public class ValueSetsExtractor
   {
     try {
       OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
-      OWLOntology ontology = manager.loadOntologyFromOntologyDocument(new File(ontologyFilePath));
-
       logger.info("Reading OWL value sets ontology " + ontologyFilePath + " ...");
+      OWLOntology ontology = manager.loadOntologyFromOntologyDocument(new File(ontologyFilePath));
 
       classHierarchy = getClassHierarchy(ontology);
       annotations = getAnnotations(ontology);

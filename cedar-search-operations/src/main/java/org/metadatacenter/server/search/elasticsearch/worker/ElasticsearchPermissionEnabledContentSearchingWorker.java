@@ -121,32 +121,32 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
       query = preprocessQuery(query);
 
       // QUERY TYPE: General query (Query artifact title and/or description - stored as 'summaryText' in the index)
-      if (!query.contains(FIELD_NAME_VALUE_SEPARATOR) && !query.contains(POSSIBLE_VALUES_PREFIX_ENCODED)) {
-        // Query enclosed by quotes: Example: "My Study Template"
-        if (enclosedByQuotes(query)) {
-          query = removeEnclosingQuotes(query);
-          QueryBuilder summaryTextQuery = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, query);
-          mainQuery.must(summaryTextQuery);
-        }
-        // Not enclosed by quotes: Example: T1
-        else {
-          QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
-          try {
-            parser.parse(query); // will throw a ParseException if it cannot parse it
-            QueryBuilder summaryTextQuery = QueryBuilders.queryStringQuery(query).field(SUMMARY_TEXT);
-            mainQuery.must(summaryTextQuery);
-          } catch (ParseException e) {
-            CedarProcessingException ex = new CedarProcessingException("Error processing query: " + query, e);
-            ex.getErrorPack().errorKey(CedarErrorKey.MALFORMED_SEARCH_SYNTAX);
-            throw ex;
-          }
-        }
-      }
+//      if (!query.contains(FIELD_NAME_VALUE_SEPARATOR) && !query.contains(POSSIBLE_VALUES_PREFIX_ENCODED)) {
+//        // Query enclosed by quotes: Example: "My Study Template"
+//        if (enclosedByQuotes(query)) {
+//          query = removeEnclosingQuotes(query);
+//          QueryBuilder summaryTextQuery = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, query);
+//          mainQuery.must(summaryTextQuery);
+//        }
+//        // Not enclosed by quotes: Example: T1
+//        else {
+//          QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
+//          try {
+//            parser.parse(query); // will throw a ParseException if it cannot parse it
+//            QueryBuilder summaryTextQuery = QueryBuilders.queryStringQuery(query).field(SUMMARY_TEXT);
+//            mainQuery.must(summaryTextQuery);
+//          } catch (ParseException e) {
+//            CedarProcessingException ex = new CedarProcessingException("Error processing query: " + query, e);
+//            ex.getErrorPack().errorKey(CedarErrorKey.MALFORMED_SEARCH_SYNTAX);
+//            throw ex;
+//          }
+//        }
+//      }
       // QUERY TYPE: Field query or Possible values query
       // Query field name/value (infoFields) or possible field values, optionally combined with artifact id and description (summaryText).
       // Sample query 1: 'disease:cancer AND Template3'
       // Sample query 2: '[pv]female OR [pv]male'
-      else {
+      //else {
         // Parse the query and rewrite it to query the right index fields. The whitespace analyzer divides text into
         // terms whenever it encounters any whitespace character. It does not lowercase terms.
         QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
@@ -156,7 +156,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
         } catch (ParseException e) {
           throw new CedarProcessingException("Error processing query: " + query, e);
         }
-      }
+      //}
     }
 
     String userId = rctx.getCedarUser().getId();
@@ -367,9 +367,15 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
           ((QueryStringQueryBuilder) query).field(VALUE_CONCEPTS);
         }
       }
-      // QUERY TYPE: SummaryText
+      // QUERY TYPE: General (schema:name, summaryText)
       else {
-        query = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, fieldValue);
+//        if (enclosedByQuotes(fieldValue)) {
+//          fieldValue = removeEnclosingQuotes(fieldValue);
+//        }
+        //query = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, fieldValue);
+        query = QueryBuilders.boolQuery();
+        ((BoolQueryBuilder) query).should(QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, fieldValue)); // summary text
+        ((BoolQueryBuilder) query).should((QueryBuilders.queryStringQuery(fieldValue)).field(INFO_SCHEMA_NAME + ".raw")); // schema:name
       }
     }
     // QUERY TYPE: Field name/value
@@ -510,13 +516,15 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   }
 
   /**
-   * Exact match syntax (perfect match between the query and the value in the index, ignoring case):
-   *    [pv]"term"
-   *    [pv]"term1 term2"
-   * Partial match syntax
-   *    [pv](term)
-   *    [pv](term1 term2)
-   * By default [pv]term will translate to [pv]"term"
+   * Preprocess possible values queries
+   *
+   * Syntax used for possible values queries:
+   *    Partial match syntax
+   *      [pv]term
+   *      [pv]"term1 term2"
+   *    Exact match syntax (full match between the query and the value in the index, ignoring case):
+   *      [pv]=term, [pv]="term"
+   *      [pv]="term1 term2"
    *
    * @param query
    * @return

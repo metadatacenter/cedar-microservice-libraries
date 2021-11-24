@@ -111,7 +111,13 @@
               "type": "boolean"
             },
             "schema:name": {
-              "type": "keyword"
+              "type": "keyword",
+              "fields": {
+                "raw": {
+                  "type": "text",
+                  "analyzer": "standard"
+                }
+              }
             },
             "schema:description": {
               "type": "keyword"

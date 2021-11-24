@@ -23,7 +23,7 @@ public class LoadValueSetsOntologyTask {
     try {
       indexUtils.loadValueSetsOntology();
     } catch (Exception e) {
-      log.error("Error loading value sets ontology.", e);
+      log.warn("Failed to load value sets ontology: " + e.getMessage());
       throw new CedarProcessingException(e);
     }
   }
