@@ -62,23 +62,23 @@ public class PagedSortedQuery extends PagedQuery {
   }
 
   protected void validateSorting() throws CedarException {
-    //String sortString = sortInput.orElseGet(() -> QuerySortOptions.getDefaultSortField().getName());
-    if (sortInput.isEmpty()) {
-      sortList = new ArrayList<>();
+    String sortString = sortInput.orElseGet(() -> QuerySortOptions.getDefaultSortField().getName());
+
+    if (sortString != null) {
+      sortString = sortString.trim();
     }
-    else {
-      sortList = Arrays.asList(StringUtils.split(sortInput.get().trim(), ","));
-      for (String s : sortList) {
-        String test = s;
-        if (s != null && s.startsWith("-")) {
-          test = s.substring(1);
-        }
-        if (!QuerySortOptions.isKnownField(test)) {
-          throw new CedarAssertionException("You passed an illegal sort type:'" + s + "'. The allowed values are:" +
-              QuerySortOptions.getKnownFieldNames())
-              .parameter("sort", s)
-              .parameter("allowedSort", QuerySortOptions.getKnownFieldNames());
-        }
+
+    sortList = Arrays.asList(StringUtils.split(sortString, ","));
+    for (String s : sortList) {
+      String test = s;
+      if (s != null && s.startsWith("-")) {
+        test = s.substring(1);
+      }
+      if (!QuerySortOptions.isKnownField(test)) {
+        throw new CedarAssertionException("You passed an illegal sort type:'" + s + "'. The allowed values are:" +
+            QuerySortOptions.getKnownFieldNames())
+            .parameter("sort", s)
+            .parameter("allowedSort", QuerySortOptions.getKnownFieldNames());
       }
     }
   }
