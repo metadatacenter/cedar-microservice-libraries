@@ -227,7 +227,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
     // Set main query
     searchRequestBuilder.setQuery(mainQuery);
-    log.info("Search query in Query DSL:\n" + mainQuery);
+    //log.info("Search query in Query DSL:\n" + mainQuery);
 
     // Sort by field
     // The name is stored on the resource, so we can sort by that
@@ -369,10 +369,6 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
       }
       // QUERY TYPE: General (schema:name, summaryText)
       else {
-//        if (enclosedByQuotes(fieldValue)) {
-//          fieldValue = removeEnclosingQuotes(fieldValue);
-//        }
-        //query = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, fieldValue);
         query = QueryBuilders.boolQuery();
         ((BoolQueryBuilder) query).should(QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, fieldValue)); // summary text
         ((BoolQueryBuilder) query).should((QueryBuilders.queryStringQuery(fieldValue)).field(INFO_SCHEMA_NAME + ".raw")); // schema:name
