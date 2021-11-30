@@ -370,8 +370,10 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
       // QUERY TYPE: General (schema:name, summaryText)
       else {
         query = QueryBuilders.boolQuery();
-        ((BoolQueryBuilder) query).should(QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, fieldValue)); // summary text
-        ((BoolQueryBuilder) query).should((QueryBuilders.queryStringQuery(fieldValue)).field(INFO_SCHEMA_NAME + ".raw")); // schema:name
+        // schema:name. We use boost to give schema:name more importance
+        ((BoolQueryBuilder) query).should((QueryBuilders.queryStringQuery(fieldValue)).field(INFO_SCHEMA_NAME + ".raw").boost(10));
+        // summary text
+        ((BoolQueryBuilder) query).should(QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, fieldValue));
       }
     }
     // QUERY TYPE: Field name/value
