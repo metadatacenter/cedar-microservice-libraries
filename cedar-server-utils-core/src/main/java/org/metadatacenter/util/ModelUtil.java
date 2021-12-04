@@ -36,7 +36,7 @@ public class ModelUtil {
     r.setPointer(pointer);
     JsonNode titleNode = jsonNode.at(r.getPointer());
     if (titleNode != null && !titleNode.isMissingNode()) {
-      r.setValue(titleNode.textValue());
+      r.setValue(titleNode.textValue().trim());
     }
     return r;
   }
