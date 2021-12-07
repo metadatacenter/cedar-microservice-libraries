@@ -109,11 +109,14 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     return result;
   }
 
-  private SearchRequestBuilder getSearchRequestBuilder(CedarRequestContext rctx, String query, List<String> resourceTypes,
-                                                       ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+  private SearchRequestBuilder getSearchRequestBuilder(CedarRequestContext rctx, String query,
+                                                       List<String> resourceTypes,
+                                                       ResourceVersionFilter version,
+                                                       ResourcePublicationStatusFilter publicationStatus,
                                                        String categoryId, List<String> sortList) throws CedarProcessingException {
 
-    SearchRequestBuilder searchRequestBuilder = client.prepareSearch(indexName).setTypes(IndexedDocumentType.DOC.getValue());
+    SearchRequestBuilder searchRequestBuilder =
+        client.prepareSearch(indexName).setTypes(IndexedDocumentType.DOC.getValue());
 
     BoolQueryBuilder mainQuery = QueryBuilders.boolQuery();
 
@@ -121,53 +124,28 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
       query = preprocessQuery(query);
 
-      // QUERY TYPE: General query (Query artifact title and/or description - stored as 'summaryText' in the index)
-//      if (!query.contains(FIELD_NAME_VALUE_SEPARATOR) && !query.contains(POSSIBLE_VALUES_PREFIX_ENCODED)) {
-//        // Query enclosed by quotes: Example: "My Study Template"
-//        if (enclosedByQuotes(query)) {
-//          query = removeEnclosingQuotes(query);
-//          QueryBuilder summaryTextQuery = QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, query);
-//          mainQuery.must(summaryTextQuery);
-//        }
-//        // Not enclosed by quotes: Example: T1
-//        else {
-//          QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
-//          try {
-//            parser.parse(query); // will throw a ParseException if it cannot parse it
-//            QueryBuilder summaryTextQuery = QueryBuilders.queryStringQuery(query).field(SUMMARY_TEXT);
-//            mainQuery.must(summaryTextQuery);
-//          } catch (ParseException e) {
-//            CedarProcessingException ex = new CedarProcessingException("Error processing query: " + query, e);
-//            ex.getErrorPack().errorKey(CedarErrorKey.MALFORMED_SEARCH_SYNTAX);
-//            throw ex;
-//          }
-//        }
-//      }
-      // QUERY TYPE: Field query or Possible values query
-      // Query field name/value (infoFields) or possible field values, optionally combined with artifact id and description (summaryText).
-      // Sample query 1: 'disease:cancer AND Template3'
-      // Sample query 2: '[pv]female OR [pv]male'
-      //else {
-        // Parse the query and rewrite it to query the right index fields. The whitespace analyzer divides text into
-        // terms whenever it encounters any whitespace character. It does not lowercase terms.
-        QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
-        try {
-          Query queryParsed = parser.parse(query);
-          mainQuery.must(rewriteQuery(queryParsed));
-        } catch (ParseException e) {
-          throw new CedarProcessingException("Error processing query: " + query, e);
-        }
-      //}
+      // Parse the query and rewrite it to query the right index fields. The whitespace analyzer divides text into
+      // terms whenever it encounters any whitespace character. It does not lowercase terms.
+      QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
+      try {
+        Query queryParsed = parser.parse(query);
+        mainQuery.must(rewriteQuery(queryParsed));
+      } catch (ParseException e) {
+        throw new CedarProcessingException("Error processing query: " + query, e);
+      }
     }
 
     String userId = rctx.getCedarUser().getId();
     if (!rctx.getCedarUser().has(CedarPermission.READ_NOT_READABLE_NODE)) {
       // Filter by user
-      QueryBuilder userIdQuery = QueryBuilders.termQuery(USERS, CedarNodeMaterializedPermissions.getKey(userId, FilesystemResourcePermission.READ));
+      QueryBuilder userIdQuery = QueryBuilders.termQuery(USERS, CedarNodeMaterializedPermissions.getKey(userId,
+          FilesystemResourcePermission.READ));
       BoolQueryBuilder permissionQuery = QueryBuilders.boolQuery();
 
-      QueryBuilder everybodyReadQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION, NodeSharePermission.READ.getValue());
-      QueryBuilder everybodyWriteQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION, NodeSharePermission.WRITE.getValue());
+      QueryBuilder everybodyReadQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION,
+          NodeSharePermission.READ.getValue());
+      QueryBuilder everybodyWriteQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION,
+          NodeSharePermission.WRITE.getValue());
 
       permissionQuery.should(userIdQuery);
       permissionQuery.should(everybodyReadQuery);
@@ -210,7 +188,8 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     if (publicationStatus != null && publicationStatus != ResourcePublicationStatusFilter.ALL) {
       BoolQueryBuilder publicationStatusQuery = QueryBuilders.boolQuery();
       BoolQueryBuilder inner1Query = QueryBuilders.boolQuery();
-      QueryBuilder publicationStatusEqualsQuery = QueryBuilders.termsQuery(INFO_BIBO_STATUS, publicationStatus.getValue());
+      QueryBuilder publicationStatusEqualsQuery = QueryBuilders.termsQuery(INFO_BIBO_STATUS,
+          publicationStatus.getValue());
       inner1Query.must(publicationStatusEqualsQuery);
       BoolQueryBuilder inner2Query = QueryBuilders.boolQuery();
       QueryBuilder publicationStatusExistsQuery = QueryBuilders.existsQuery(INFO_BIBO_STATUS);
