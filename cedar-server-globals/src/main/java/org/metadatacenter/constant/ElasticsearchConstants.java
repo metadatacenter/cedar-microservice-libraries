@@ -16,8 +16,8 @@ public final class ElasticsearchConstants {
   public static final String SUMMARY_RAW_TEXT = "summaryText.raw";
   public static final String POSSIBLE_VALUES = "possibleValues";
   public static final String VALUE_LABELS = POSSIBLE_VALUES + "." + "valueLabels";
+  public static final String VALUE_LABELS_KEYWORD = VALUE_LABELS + "." + "keyword";
   public static final String VALUE_CONCEPTS = POSSIBLE_VALUES + "." + "valueConcepts";
-  public static final float POSSIBLE_VALUES_BOOST = 0.01f;
   public static final String USERS = "users";
   public static final String GROUPS = "groups";
   public static final String CATEGORIES = "categories";
@@ -46,5 +46,11 @@ public final class ElasticsearchConstants {
   public static final String ES_SORT_DESC_PREFIX = "-";
   public static final String TEMPLATE_ID = "templateId";
   public static final String ANY_STRING = "_any_";
+  public static final String FIELD_NAME_VALUE_SEPARATOR = ":";
+  public static final String POSSIBLE_VALUES_PREFIX = "[pv]";
+  public static final String POSSIBLE_VALUES_EXACT_MATCH_PREFIX = "[pv]=";
+  public static final String POSSIBLE_VALUES_PREFIX_ENCODED = "_pv_";
+  public static final String POSSIBLE_VALUES_EXACT_MATCH_PREFIX_ENCODED = "_pv_exact_";
+
 
 }

@@ -34,12 +34,7 @@ import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 
 public class NodeIndexingService extends AbstractIndexingService {
@@ -97,9 +92,17 @@ public class NodeIndexingService extends AbstractIndexingService {
         Set<String> valueSetValueURIs = ValueSetsExtractor.getInstance().getSubClassURIs(valueSetURI);
 
         for (String valueSetValueURI : valueSetValueURIs) {
+          // Extract value labels (both prefLabel and notation) and add them to the set
           Optional<String> valueLabel = ValueSetsExtractor.getInstance().getAnnotation(valueSetValueURI, ValueSetsExtractor.Annotation.LABEL);
-          if (valueLabel.isPresent())
+          if (valueLabel.isPresent()) {
             valueLabels.add(valueLabel.get());
+          }
+          Optional<String> valueNotation = ValueSetsExtractor.getInstance().getAnnotation(valueSetValueURI, ValueSetsExtractor.Annotation.NOTATION);
+          if (valueNotation.isPresent()) {
+            if (!valueLabel.isPresent() || (valueLabel.isPresent() && !valueLabel.get().equalsIgnoreCase(valueNotation.get()))) {
+              valueLabels.add(valueNotation.get());
+            }
+          }
 
           Optional<String> valueConcept = ValueSetsExtractor.getInstance().getAnnotation(valueSetValueURI, ValueSetsExtractor.Annotation.RELATED_MATCH);
           if (valueConcept.isPresent()) { // We store only the fragment of the value concept URI
