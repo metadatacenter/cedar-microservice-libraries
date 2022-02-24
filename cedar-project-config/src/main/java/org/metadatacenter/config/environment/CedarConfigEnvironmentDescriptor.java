@@ -136,6 +136,7 @@ public class CedarConfigEnvironmentDescriptor {
     cedarAdminUserPasswd.add(SystemComponent.ADMIN_TOOL); // all keycloak related tasks
     cedarAdminUserPasswd.add(SystemComponent.CADSR_TOOL);
     cedarAdminUserPasswd.add(SystemComponent.SERVER_INTERNALS);
+    cedarAdminUserPasswd.add(SystemComponent.SERVER_USER); // Needed to get external identifiers for login providers, e.g., ORCID
 
     Set<SystemComponent> cedarCaDSRAdminUserApiKey = variableToComponent.get(CedarEnvironmentVariable.CEDAR_CADSR_ADMIN_USER_API_KEY);
     cedarCaDSRAdminUserApiKey.add(SystemComponent.ADMIN_TOOL);
