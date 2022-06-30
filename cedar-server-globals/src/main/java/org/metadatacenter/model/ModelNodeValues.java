@@ -1,5 +1,9 @@
 package org.metadatacenter.model;
 
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 public class ModelNodeValues {
 
   private ModelNodeValues() {
@@ -53,11 +57,19 @@ public class ModelNodeValues {
   public static final String TEMPORAL_GRANULARITY_SECOND = "second";
   public static final String TEMPORAL_GRANULARITY_DECIMALSECOND = "decimalSecond";
 
+  public static final Set<String> TEMPORAL_GRANULARITIES = Stream
+    .of(TEMPORAL_GRANULARITY_YEAR, TEMPORAL_GRANULARITY_MONTH, TEMPORAL_GRANULARITY_DAY,
+      TEMPORAL_GRANULARITY_HOUR, TEMPORAL_GRANULARITY_MINUTE, TEMPORAL_GRANULARITY_SECOND,
+      TEMPORAL_GRANULARITY_DECIMALSECOND).collect(Collectors.toUnmodifiableSet());
+
   /*
    * Value set for CEDAR "displayTimeFormat" property
    */
   public static final String TIME_FORMAT_24H = "24h";
   public static final String TIME_FORMAT_12H = "12h";
+
+  public static final Set<String> TIME_FORMATS
+    = Stream.of(TIME_FORMAT_12H, TIME_FORMAT_24H).collect(Collectors.toUnmodifiableSet());
 
   /*
  * Value set for CEDAR "dateType" property
