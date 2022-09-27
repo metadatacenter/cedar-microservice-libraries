@@ -1,6 +1,7 @@
 {
   "settings": {
     "index": {
+      "max_ngram_diff": 18,
       "analysis": {
         "tokenizer": {
           "cedar_ngram_tokenizer": {

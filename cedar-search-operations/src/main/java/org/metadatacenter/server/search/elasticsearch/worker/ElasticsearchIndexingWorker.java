@@ -9,11 +9,10 @@ import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.action.update.UpdateRequestBuilder;
-import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.NoNodeAvailableException;
-import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.index.reindex.DeleteByQueryRequestBuilder;
+import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.reindex.BulkByScrollResponse;
 import org.elasticsearch.index.reindex.DeleteByQueryAction;
@@ -29,7 +28,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.metadatacenter.constant.ElasticsearchConstants.DOCUMENT_CEDAR_ID;
 
@@ -126,7 +124,7 @@ public class ElasticsearchIndexingWorker {
     log.debug("Removing from the " + indexName + " index the documents with " + fieldName + "=" + fieldValue);
     try {
       // Use "delete by query" to delete all documents with fieldName = fieldValue
-      BulkByScrollResponse response = DeleteByQueryAction.INSTANCE.newRequestBuilder(client)
+      BulkByScrollResponse response = new DeleteByQueryRequestBuilder(client, DeleteByQueryAction.INSTANCE)
           .filter(QueryBuilders.matchQuery(fieldName, fieldValue)).source(indexName)
           .get();
       long removedCount = response.getDeleted();

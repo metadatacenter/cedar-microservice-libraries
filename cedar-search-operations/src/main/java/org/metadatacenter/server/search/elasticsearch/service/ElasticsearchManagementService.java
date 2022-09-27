@@ -1,12 +1,11 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
-import com.carrotsearch.hppc.cursors.ObjectCursor;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.support.master.AcknowledgedResponse;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
@@ -135,13 +134,16 @@ public class ElasticsearchManagementService {
 
   public List<String> getAllIndices() {
     List<String> indexNames = new ArrayList<>();
-    ImmutableOpenMap<String, IndexMetaData> indices = getClient().admin().cluster()
-        .prepareState().execute()
-        .actionGet().getState()
-        .getMetaData().getIndices();
-    for (ObjectCursor<IndexMetaData> indexMetaDataObjectCursor : indices.values()) {
-      IndexMetaData value = indexMetaDataObjectCursor.value;
-      indexNames.add(value.getIndex().getName());
+    try {
+      ImmutableOpenMap<String, IndexMetadata> indices = getClient().admin().cluster()
+              .prepareState().execute()
+              .actionGet().getState()
+              .getMetadata().getIndices();
+      for (IndexMetadata value : indices.values()) {
+        indexNames.add(value.getIndex().getName());
+      }
+    } catch (Exception e) {
+      log.error("There was an error retrieving existing indices");
     }
     return indexNames;
   }

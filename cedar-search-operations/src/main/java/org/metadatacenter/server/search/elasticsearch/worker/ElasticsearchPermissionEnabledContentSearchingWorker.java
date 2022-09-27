@@ -9,7 +9,7 @@ import org.apache.lucene.search.join.ScoreMode;
 import org.elasticsearch.action.search.SearchRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
@@ -64,7 +64,8 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     SearchResponse response = searchRequest.execute().actionGet();
 
     SearchResponseResult result = new SearchResponseResult();
-    result.setTotalCount(response.getHits().getTotalHits());
+    TotalHits totalHits = response.getHits().getTotalHits();
+    result.setTotalCount(totalHits == null ? 0 : totalHits.value);
 
     for (SearchHit hit : response.getHits()) {
       result.add(hit);
@@ -93,7 +94,8 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     SearchResponse response = searchRequest.execute().actionGet();
 
     SearchResponseResult result = new SearchResponseResult();
-    result.setTotalCount(response.getHits().getTotalHits());
+    TotalHits totalHits = response.getHits().getTotalHits();
+    result.setTotalCount(totalHits == null ? 0 : totalHits.value);
 
     int counter = 0;
     while (response.getHits().getHits().length != 0) {
@@ -569,6 +571,8 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
     // Execute request
     SearchResponse response = searchRequest.execute().actionGet();
-    return response.getHits().getTotalHits();
+
+    TotalHits totalHits = response.getHits().getTotalHits();
+    return totalHits == null ? 0 : totalHits.value;
   }
 }
