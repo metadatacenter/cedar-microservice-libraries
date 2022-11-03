@@ -118,7 +118,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                                        String categoryId, List<String> sortList) throws CedarProcessingException {
 
     SearchRequestBuilder searchRequestBuilder =
-        client.prepareSearch(indexName).setTypes(IndexedDocumentType.DOC.getValue());
+        client.prepareSearch(indexName);
 
     BoolQueryBuilder mainQuery = QueryBuilders.boolQuery();
 
@@ -544,7 +544,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
   public long searchAccessibleResourceCountByUser(List<String> resourceTypes, FilesystemResourcePermission permission, CedarUser user) {
 
-    SearchRequestBuilder searchRequest = client.prepareSearch(indexName).setTypes(IndexedDocumentType.DOC.getValue());
+    SearchRequestBuilder searchRequest = client.prepareSearch(indexName);
 
     BoolQueryBuilder mainQuery = QueryBuilders.boolQuery();
 

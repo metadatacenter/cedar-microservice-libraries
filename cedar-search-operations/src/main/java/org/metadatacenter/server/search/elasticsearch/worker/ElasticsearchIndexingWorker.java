@@ -88,7 +88,7 @@ public class ElasticsearchIndexingWorker {
       // Get resources by artifact id
       // TODO: note that this search query will retrieve only 10 results by default, so the maximum number
       // of documents that will be removed will be 10. Consider using the "delete by query" API
-      SearchResponse responseSearch = client.prepareSearch(indexName).setTypes(documentType)
+      SearchResponse responseSearch = client.prepareSearch(indexName)
           .setQuery(QueryBuilders.matchQuery(DOCUMENT_CEDAR_ID, resourceId.getId()))
           .execute().actionGet();
 
