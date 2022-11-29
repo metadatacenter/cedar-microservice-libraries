@@ -76,7 +76,6 @@ public class NodeSearchingService extends AbstractSearchingService {
       // Get resources by artifact id
       SearchResponse responseSearch =
           client.prepareSearch(config.getIndexes().getSearchIndex().getName())
-              .setTypes(IndexedDocumentType.DOC.getValue())
               .setQuery(QueryBuilders.matchQuery(DOCUMENT_CEDAR_ID, resourceId.getId()))
               .execute().actionGet();
       for (SearchHit hit : responseSearch.getHits()) {

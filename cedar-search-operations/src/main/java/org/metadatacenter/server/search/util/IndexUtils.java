@@ -109,7 +109,7 @@ public class IndexUtils {
 
   public String getNewIndexName(String prefix) {
     Instant now = Instant.now();
-    String dateTimeFormatterString = "uuuu-MM-dd't'HH:mm:ss";
+    String dateTimeFormatterString = "uuuu-MM-dd't'HHmmss";
     DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern(dateTimeFormatterString).withZone(ZoneId
         .systemDefault());
     String nowString = dateTimeFormatter.format(now);
