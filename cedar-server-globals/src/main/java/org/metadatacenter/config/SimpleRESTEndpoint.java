@@ -2,7 +2,7 @@ package org.metadatacenter.config;
 
 public class SimpleRESTEndpoint {
 
-  String url;
+  private String url;
 
   public String getUrl() {
     return url;
