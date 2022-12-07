@@ -16,10 +16,9 @@ import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.query.QueryStringQueryBuilder;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.sort.SortOrder;
-import org.metadatacenter.config.ElasticsearchConfig;
+import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
-import org.metadatacenter.search.IndexedDocumentType;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
@@ -46,7 +45,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   private final Client client;
   private final String indexName;
 
-  public ElasticsearchPermissionEnabledContentSearchingWorker(ElasticsearchConfig config, Client client) {
+  public ElasticsearchPermissionEnabledContentSearchingWorker(OpensearchConfig config, Client client) {
     this.client = client;
     this.indexName = config.getIndexes().getSearchIndex().getName();
   }

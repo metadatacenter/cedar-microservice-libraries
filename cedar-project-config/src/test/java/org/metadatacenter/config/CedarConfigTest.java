@@ -205,7 +205,7 @@ public class CedarConfigTest {
   @Test
   public void testElasticSearchSearchConfig() throws Exception {
     CedarConfig instance = getCedarConfig();
-    ElasticsearchSettingsMappingsConfig searchSettingsMappingsConfig = instance
+    OpensearchSettingsMappingsConfig searchSettingsMappingsConfig = instance
         .getSearchSettingsMappingsConfig();
     Assert.assertNotNull(searchSettingsMappingsConfig);
     Assert.assertNotNull(searchSettingsMappingsConfig.getSettings());
@@ -224,7 +224,7 @@ public class CedarConfigTest {
   @Test
   public void testElasticSearchRulesConfig() throws Exception {
     CedarConfig instance = getCedarConfig();
-    ElasticsearchSettingsMappingsConfig rulesSettingsMappingsConfig = instance
+    OpensearchSettingsMappingsConfig rulesSettingsMappingsConfig = instance
         .getSearchSettingsMappingsConfig();
     Assert.assertNotNull(rulesSettingsMappingsConfig);
     Assert.assertNotNull(rulesSettingsMappingsConfig.getSettings());

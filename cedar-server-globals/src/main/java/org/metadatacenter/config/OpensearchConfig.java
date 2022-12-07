@@ -1,10 +1,10 @@
 package org.metadatacenter.config;
 
-public class ElasticsearchConfig {
+public class OpensearchConfig {
 
   private String clusterName;
 
-  private ElasticsearchIndexes indexes;
+  private OpensearchIndexes indexes;
 
   private String host;
 
@@ -18,7 +18,7 @@ public class ElasticsearchConfig {
     return clusterName;
   }
 
-  public ElasticsearchIndexes getIndexes() {
+  public OpensearchIndexes getIndexes() {
     return indexes;
   }
 

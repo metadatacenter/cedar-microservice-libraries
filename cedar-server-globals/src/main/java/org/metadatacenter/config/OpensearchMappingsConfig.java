@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.HashMap;
 
-public class ElasticsearchMappingsConfig {
+public class OpensearchMappingsConfig {
 
   private HashMap<String, Object> doc;
 

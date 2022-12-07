@@ -81,7 +81,7 @@ searchSettings:
     delayAttempts: 10000
 
 elasticsearch:
-  clusterName: "elasticsearch_cedar"
+  clusterName: "opensearch_cedar"
   indexes:
     searchIndex:
       name: "cedar-search"

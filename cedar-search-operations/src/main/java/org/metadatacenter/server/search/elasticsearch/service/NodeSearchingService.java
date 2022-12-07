@@ -8,10 +8,9 @@ import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHit;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.config.ElasticsearchConfig;
+import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.config.TrustedFoldersConfig;
 import org.metadatacenter.exception.CedarProcessingException;
-import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarCategoryId;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarResourceId;
@@ -54,7 +53,7 @@ public class NodeSearchingService extends AbstractSearchingService {
   private static final Logger log = LoggerFactory.getLogger(NodeSearchingService.class);
 
   private final Client client;
-  private final ElasticsearchConfig config;
+  private final OpensearchConfig config;
   private final TrustedFoldersConfig trustedFoldersConfig;
   private final ElasticsearchPermissionEnabledContentSearchingWorker permissionEnabledSearchWorker;
   private final ElasticsearchSearchingWorker searchWorker;

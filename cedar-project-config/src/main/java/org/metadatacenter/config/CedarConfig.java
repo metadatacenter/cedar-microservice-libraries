@@ -60,11 +60,11 @@ public class CedarConfig extends Configuration {
   private BlueprintUserProfile blueprintUserProfile;
 
   @JsonProperty("elasticsearch")
-  private ElasticsearchConfig elasticsearchConfig;
+  private OpensearchConfig opensearchConfig;
 
   // This is read from a different config file
-  private ElasticsearchSettingsMappingsConfig searchSettingsMappingsConfig;
-  private ElasticsearchSettingsMappingsConfig rulesSettingsMappingsConfig;
+  private OpensearchSettingsMappingsConfig searchSettingsMappingsConfig;
+  private OpensearchSettingsMappingsConfig rulesSettingsMappingsConfig;
 
   @JsonProperty("servers")
   private ServersConfig servers;
@@ -151,14 +151,14 @@ public class CedarConfig extends Configuration {
     return config;
   }
 
-  private static ElasticsearchSettingsMappingsConfig getSettingsMappingsConfigFromFile(String configFileName,
-                                                                                       Validator validator,
-                                                                                       SubstitutingSourceProvider substitutingSourceProvider) {
-    ElasticsearchSettingsMappingsConfig settingsMappingsConfig = null;
+  private static OpensearchSettingsMappingsConfig getSettingsMappingsConfigFromFile(String configFileName,
+                                                                                    Validator validator,
+                                                                                    SubstitutingSourceProvider substitutingSourceProvider) {
+    OpensearchSettingsMappingsConfig settingsMappingsConfig = null;
 
-    final ConfigurationFactory<ElasticsearchSettingsMappingsConfig> configurationFactory = new
+    final ConfigurationFactory<OpensearchSettingsMappingsConfig> configurationFactory = new
         YamlConfigurationFactory<>(
-        ElasticsearchSettingsMappingsConfig.class, validator, Jackson.newObjectMapper(), "cedar");
+        OpensearchSettingsMappingsConfig.class, validator, Jackson.newObjectMapper(), "cedar");
 
     try {
       settingsMappingsConfig = configurationFactory.build(substitutingSourceProvider, configFileName);
@@ -231,15 +231,15 @@ public class CedarConfig extends Configuration {
     return blueprintUserProfile;
   }
 
-  public ElasticsearchConfig getElasticsearchConfig() {
-    return elasticsearchConfig;
+  public OpensearchConfig getElasticsearchConfig() {
+    return opensearchConfig;
   }
 
-  public ElasticsearchSettingsMappingsConfig getSearchSettingsMappingsConfig() {
+  public OpensearchSettingsMappingsConfig getSearchSettingsMappingsConfig() {
     return searchSettingsMappingsConfig;
   }
 
-  public ElasticsearchSettingsMappingsConfig getRulesSettingsMappingsConfig() {
+  public OpensearchSettingsMappingsConfig getRulesSettingsMappingsConfig() {
     return rulesSettingsMappingsConfig;
   }
 

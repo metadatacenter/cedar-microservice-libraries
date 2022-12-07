@@ -7,7 +7,7 @@ import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHit;
-import org.metadatacenter.config.ElasticsearchConfig;
+import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,10 +22,10 @@ public class ElasticsearchSearchingWorker {
 
   private final Client client;
   private final String indexName;
-  private final ElasticsearchConfig config;
+  private final OpensearchConfig config;
   private final TimeValue keepAlive;
 
-  public ElasticsearchSearchingWorker(ElasticsearchConfig config, Client client) {
+  public ElasticsearchSearchingWorker(OpensearchConfig config, Client client) {
     this.config = config;
     this.client = client;
     this.indexName = config.getIndexes().getSearchIndex().getName();

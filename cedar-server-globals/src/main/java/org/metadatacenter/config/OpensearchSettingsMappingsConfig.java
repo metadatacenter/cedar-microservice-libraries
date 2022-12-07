@@ -2,17 +2,17 @@ package org.metadatacenter.config;
 
 import java.util.Map;
 
-public class ElasticsearchSettingsMappingsConfig {
+public class OpensearchSettingsMappingsConfig {
 
   private Map<String, Object> settings;
 
-  private ElasticsearchMappingsConfig mappings;
+  private OpensearchMappingsConfig mappings;
 
   public Map<String, Object> getSettings() {
     return settings;
   }
 
-  public ElasticsearchMappingsConfig getMappings() {
+  public OpensearchMappingsConfig getMappings() {
     return mappings;
   }
 }
