@@ -13,7 +13,7 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
 
   public static String updateResourceById(Map<NodeProperty, String> updateFields) {
     StringBuilder sb = new StringBuilder();
-    sb.append(" MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PROP.ID>}})");
+    sb.append(" MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})");
     sb.append(buildSetter("artifact", NodeProperty.LAST_UPDATED_BY));
     sb.append(buildSetter("artifact", NodeProperty.LAST_UPDATED_ON));
     sb.append(buildSetter("artifact", NodeProperty.LAST_UPDATED_ON_TS));
@@ -26,14 +26,14 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
 
   public static String deleteArtifactById() {
     return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
         " DETACH DELETE artifact";
   }
 
   public static String unlinkArtifactFromParentFolder() {
     return "" +
         " MATCH (parent:<LABEL.FOLDER>)" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
         " MATCH (parent)-[relation:<REL.CONTAINS>]->(artifact)" +
         " DELETE relation" +
         " RETURN artifact";
@@ -43,7 +43,7 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PH.PARENT_FOLDER_ID>}})" +
         " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ARTIFACT_ID>}})" +
-        " CREATE UNIQUE (parent)-[:<REL.CONTAINS>]->(artifact)" +
+        " MERGE (parent)-[:<REL.CONTAINS>]->(artifact)" +
         " RETURN artifact";
   }
 
@@ -51,7 +51,7 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +
         " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ARTIFACT_ID>}})" +
-        " CREATE UNIQUE (user)-[:<REL.OWNS>]->(artifact)" +
+        " MERGE (user)-[:<REL.OWNS>]->(artifact)" +
         " SET artifact.<PROP.OWNED_BY> = {<PH.USER_ID>}" +
         " RETURN artifact";
   }
@@ -59,7 +59,7 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
   public static String removeResourceOwner() {
     return "" +
         " MATCH (user:<LABEL.USER>)" +
-        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
         " MATCH (user)-[relation:<REL.OWNS>]->(artifact)" +
         " DELETE relation" +
         " SET artifact.<PROP.OWNED_BY> = null" +
@@ -68,8 +68,8 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
 
   public static String getResourceLookupQueryById() {
     return "" +
-        " MATCH (root:<LABEL.FOLDER> {<PROP.NAME>:{<PROP.NAME>}})," +
-        " (current:<LABEL.RESOURCE> {<PROP.ID>:{<PROP.ID>}})," +
+        " MATCH (root:<LABEL.FOLDER> {<PROP.NAME>:{<PH.NAME>}})," +
+        " (current:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})," +
         " path=shortestPath((root)-[:<REL.CONTAINS>*]->(current))" +
         " RETURN path";
   }
@@ -84,55 +84,55 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (nr:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.SOURCE_ID>}})" +
         " MATCH (or:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.TARGET_ID>}})" +
-        " CREATE UNIQUE (nr)-[:<REL.DERIVEDFROM>]->(or)" +
+        " MERGE (nr)-[:<REL.DERIVEDFROM>]->(or)" +
         " SET nr.<PROP.DERIVED_FROM> = {<PH.TARGET_ID>}" +
         " RETURN nr";
   }
 
   public static String unsetLatestVersion() {
     return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
         " SET artifact.<PROP.IS_LATEST_VERSION> = false" +
         " RETURN artifact";
   }
 
   public static String setLatestVersion() {
     return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
         " SET artifact.<PROP.IS_LATEST_VERSION> = true" +
         " RETURN artifact";
   }
 
   public static String unsetLatestDraftVersion() {
     return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
         " SET artifact.<PROP.IS_LATEST_DRAFT_VERSION> = false" +
         " RETURN artifact";
   }
 
   public static String setLatestPublishedVersion() {
     return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
         " SET artifact.<PROP.IS_LATEST_PUBLISHED_VERSION> = true" +
         " RETURN artifact";
   }
 
   public static String unsetLatestPublishedVersion() {
     return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
         " SET artifact.<PROP.IS_LATEST_PUBLISHED_VERSION> = false" +
         " RETURN artifact";
   }
 
   public static String getIsBasedOnCount() {
     return "" +
-        " MATCH (instance:<LABEL.INSTANCE> {<PROP.IS_BASED_ON>:{<PROP.ID>}}) " +
+        " MATCH (instance:<LABEL.INSTANCE> {<PROP.IS_BASED_ON>:{<PH.ID>}}) " +
         " RETURN COUNT(instance)";
   }
 
   public static String getVersionHistory() {
     StringBuilder sb = new StringBuilder();
-    sb.append(" MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PROP.ID>}})");
+    sb.append(" MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})");
     sb.append(" MATCH p=(resnew:<LABEL.ARTIFACT>)-[:<REL.PREVIOUSVERSION>*0..]->");
     sb.append("(artifact)-[:<REL.PREVIOUSVERSION>*0..]->(resold:<LABEL.ARTIFACT>)");
     sb.append(" RETURN p ORDER BY length(p) DESC LIMIT 1");
@@ -147,22 +147,23 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
     sb.append("(artifact)-[:<REL.PREVIOUSVERSION>*0..]->(resold:<LABEL.ARTIFACT>)");
     sb.append(" WITH nodes(p) as ns, user");
     sb.append(" ORDER BY length(p) DESC LIMIT 1");
-    sb.append(" RETURN FILTER(artifact in ns");
+    sb.append(" UNWIND ns AS artifact");
+    sb.append(" MATCH (artifact:Artifact)");
     sb.append(getResourcePermissionConditions(" WHERE ", "artifact"));
-    sb.append(" )");
+    sb.append(" RETURN artifact");
     return sb.toString();
   }
 
   public static String setOpen() {
     return "" +
-        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
         " SET artifact.<PROP.IS_OPEN> = true" +
         " RETURN artifact";
   }
 
   public static String setNotOpen() {
     return "" +
-        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
         " REMOVE artifact.<PROP.IS_OPEN>" +
         " RETURN artifact";
   }

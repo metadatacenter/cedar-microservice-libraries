@@ -36,6 +36,7 @@ public class ElasticsearchManagementService {
   private Client elasticClient = null;
 
   public ElasticsearchManagementService(OpensearchConfig config, CedarConfig cedarConfig) {
+    System.setProperty("es.set.netty.runtime.available.processors", "false");
     this.config = config;
     this.searchIndexSettings = (cedarConfig.getSearchSettingsMappingsConfig().getSettings());
     this.rulesIndexSettings = cedarConfig.getRulesSettingsMappingsConfig().getSettings();

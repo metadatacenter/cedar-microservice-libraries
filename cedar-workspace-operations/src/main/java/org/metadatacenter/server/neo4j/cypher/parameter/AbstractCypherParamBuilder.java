@@ -68,10 +68,10 @@ public abstract class AbstractCypherParamBuilder {
         params.put(NodeProperty.VERSION, newSchemaArtifact.getVersion());
       }
       if (newSchemaArtifact.getPublicationStatus() != null) {
-        params.put(NodeProperty.PUBLICATION_STATUS, newSchemaArtifact.getPublicationStatus());
+        params.put(ParameterPlaceholder.PUBLICATION_STATUS, newSchemaArtifact.getPublicationStatus());
       }
       if (newSchemaArtifact.getPreviousVersion() != null) {
-        params.put(NodeProperty.PREVIOUS_VERSION, newSchemaArtifact.getPreviousVersion());
+        params.put(ParameterPlaceholder.PREVIOUS_VERSION, newSchemaArtifact.getPreviousVersion());
       }
       if (newSchemaArtifact.isLatestVersion() != null) {
         params.put(NodeProperty.IS_LATEST_VERSION, newSchemaArtifact.isLatestVersion());
@@ -101,7 +101,7 @@ public abstract class AbstractCypherParamBuilder {
     params.put(NodeProperty.LAST_UPDATED_BY, updatedBy);
     params.put(NodeProperty.LAST_UPDATED_ON, nowString);
     params.put(NodeProperty.LAST_UPDATED_ON_TS, nowTS);
-    params.put(NodeProperty.ID, resourceId);
+    params.put(ParameterPlaceholder.ID, resourceId);
     for (CypherQueryParameter parameter : updateFields.keySet()) {
       params.put(parameter, updateFields.get(parameter));
     }
@@ -110,14 +110,14 @@ public abstract class AbstractCypherParamBuilder {
 
   protected static CypherParameters matchResourceByIdentity(CedarResourceId resourceId) {
     CypherParameters params = new CypherParameters();
-    params.put(NodeProperty.ID, resourceId);
+    params.put(ParameterPlaceholder.ID, resourceId);
     return params;
   }
 
   protected static CypherParameters getResourceByIdentityAndName(CedarFilesystemResourceId folderId, String resourceName) {
     CypherParameters params = new CypherParameters();
-    params.put(NodeProperty.ID, folderId);
-    params.put(NodeProperty.NAME, resourceName);
+    params.put(ParameterPlaceholder.ID, folderId);
+    params.put(ParameterPlaceholder.NAME, resourceName);
     return params;
   }
 

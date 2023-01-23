@@ -3,6 +3,7 @@ package org.metadatacenter.server.neo4j.cypher.parameter;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
+import org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder;
 
 import static org.metadatacenter.model.ModelPaths.*;
 

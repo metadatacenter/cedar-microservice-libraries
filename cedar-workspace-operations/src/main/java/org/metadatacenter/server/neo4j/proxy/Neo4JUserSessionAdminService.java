@@ -198,4 +198,9 @@ public class Neo4JUserSessionAdminService extends AbstractNeo4JUserSession imple
   public boolean createIndex(NodeLabel nodeLabel, NodeProperty property) {
     return proxies.admin().createIndex(nodeLabel, property);
   }
+
+  @Override
+  public boolean removeAllConstraintsAndIndices() {
+    return proxies.admin().removeAllConstraintsAndIndices();
+  }
 }

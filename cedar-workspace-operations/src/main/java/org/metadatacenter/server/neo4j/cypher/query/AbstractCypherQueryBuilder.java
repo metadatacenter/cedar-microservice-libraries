@@ -8,6 +8,7 @@ import org.metadatacenter.model.folderserver.basic.*;
 import org.metadatacenter.server.neo4j.NodeLabel;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.cypher.sort.QuerySortOptions;
+import org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder;
 import org.metadatacenter.server.neo4j.util.Neo4JUtil;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
@@ -21,12 +22,17 @@ public abstract class AbstractCypherQueryBuilder {
 
   protected static String buildCreateAssignment(NodeProperty property) {
     String escaped = Neo4JUtil.escapePropertyName(property.getValue());
-    return escaped + ": {" + escaped + "}";
+    return escaped + ": $" + escaped;
+  }
+
+  protected static String buildCreateAssignment(NodeProperty property, ParameterPlaceholder placeholder) {
+    String escaped = Neo4JUtil.escapePropertyName(property.getValue());
+    return escaped + ": $" + placeholder;
   }
 
   protected static String buildUpdateAssignment(NodeProperty property) {
     String escaped = Neo4JUtil.escapePropertyName(property.getValue());
-    return escaped + "= {" + escaped + "}";
+    return escaped + "= $" + escaped;
   }
 
   protected static String buildSetter(String nodeAlias, NodeProperty property) {
@@ -105,13 +111,13 @@ public abstract class AbstractCypherQueryBuilder {
         sb.append(buildCreateAssignment(NodeProperty.VERSION)).append(",");
       }
       if (newResource.getPublicationStatus() != null) {
-        sb.append(buildCreateAssignment(NodeProperty.PUBLICATION_STATUS)).append(",");
+        sb.append(buildCreateAssignment(NodeProperty.PUBLICATION_STATUS, ParameterPlaceholder.PUBLICATION_STATUS)).append(",");
       }
       if (newResource.getDerivedFrom() != null) {
         sb.append(buildCreateAssignment(NodeProperty.DERIVED_FROM)).append(",");
       }
       if (newResource.getPreviousVersion() != null) {
-        sb.append(buildCreateAssignment(NodeProperty.PREVIOUS_VERSION)).append(",");
+        sb.append(buildCreateAssignment(NodeProperty.PREVIOUS_VERSION, ParameterPlaceholder.PREVIOUS_VERSION)).append(",");
       }
       if (newResource.isLatestVersion() != null) {
         sb.append(buildCreateAssignment(NodeProperty.IS_LATEST_VERSION)).append(",");
@@ -166,7 +172,7 @@ public abstract class AbstractCypherQueryBuilder {
   private static String getCaseInsensitiveSortExpression(String nodeAlias, String fieldName) {
     StringBuilder sb = new StringBuilder();
     if (QuerySortOptions.isTextual(fieldName)) {
-      sb.append(" LOWER(").append(nodeAlias).append(".").append(QuerySortOptions.getFieldName(fieldName)).append(")");
+      sb.append(" toLower(").append(nodeAlias).append(".").append(QuerySortOptions.getFieldName(fieldName)).append(")");
     } else {
       sb.append(nodeAlias).append(".").append(QuerySortOptions.getFieldName(fieldName));
     }
@@ -175,16 +181,16 @@ public abstract class AbstractCypherQueryBuilder {
 
   public static String addRelation(NodeLabel fromLabel, NodeLabel toLabel, RelationLabel relation) {
     return "" +
-        " MATCH (fromResource:" + fromLabel + " {<PROP.ID>:{fromId} })" +
-        " MATCH (toNode:" + toLabel + " {<PROP.ID>:{toId} })" +
-        " CREATE UNIQUE (fromResource)-[:" + relation + "]->(toNode)" +
+        " MATCH (fromResource:" + fromLabel + " {<PROP.ID>:$fromId })" +
+        " MATCH (toNode:" + toLabel + " {<PROP.ID>:$toId })" +
+        " MERGE (fromResource)-[:" + relation + "]->(toNode)" +
         " RETURN fromResource";
   }
 
   public static String removeRelation(NodeLabel fromLabel, NodeLabel toLabel, RelationLabel relation) {
     return "" +
-        " MATCH (fromResource:" + fromLabel + " {<PROP.ID>:{fromId} })" +
-        " MATCH (toNode:" + toLabel + " {<PROP.ID>:{toId} })" +
+        " MATCH (fromResource:" + fromLabel + " {<PROP.ID>:$fromId })" +
+        " MATCH (toNode:" + toLabel + " {<PROP.ID>:$toId })" +
         " MATCH (fromResource)-[relation:" + relation + "]->(toNode)" +
         " DELETE relation" +
         " RETURN fromResource";
@@ -192,21 +198,21 @@ public abstract class AbstractCypherQueryBuilder {
 
   protected static String createFSResourceAsChildOfId(FolderServerArtifact newResource) {
     StringBuilder sb = new StringBuilder();
-    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{userId}})");
-    sb.append(" MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{parentId}})");
+    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
+    sb.append(" MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:$parentId})");
     if (newResource instanceof FolderServerSchemaArtifact) {
       FolderServerSchemaArtifact schemaArtifact = (FolderServerSchemaArtifact) newResource;
       if (schemaArtifact.getPreviousVersion() != null) {
-        sb.append(" MATCH (pvNode:<LABEL.RESOURCE> {<PROP.ID>:{<PROP.PREVIOUS_VERSION>}})");
+        sb.append(" MATCH (pvNode:<LABEL.RESOURCE> {<PROP.ID>:{<PH.PREVIOUS_VERSION>}})");
       }
     }
     sb.append(createFSResource("child", newResource));
-    sb.append(" CREATE UNIQUE (user)-[:<REL.OWNS>]->(child)");
-    sb.append(" CREATE UNIQUE (parent)-[:<REL.CONTAINS>]->(child)");
+    sb.append(" MERGE (user)-[:<REL.OWNS>]->(child)");
+    sb.append(" MERGE (parent)-[:<REL.CONTAINS>]->(child)");
     if (newResource instanceof FolderServerSchemaArtifact) {
       FolderServerSchemaArtifact schemaArtifact = (FolderServerSchemaArtifact) newResource;
       if (schemaArtifact.getPreviousVersion() != null) {
-        sb.append("CREATE UNIQUE (child)-[:<REL.PREVIOUSVERSION>]->(pvNode)");
+        sb.append("MERGE (child)-[:<REL.PREVIOUSVERSION>]->(pvNode)");
       }
     }
     sb.append(" RETURN child");
@@ -218,8 +224,8 @@ public abstract class AbstractCypherQueryBuilder {
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +
         " MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PH.PARENT_ID>}})" +
         createFSFolder("child", newFolder) +
-        " CREATE UNIQUE (user)-[:<REL.OWNS>]->(child)" +
-        " CREATE UNIQUE (parent)-[:<REL.CONTAINS>]->(child)" +
+        " MERGE (user)-[:<REL.OWNS>]->(child)" +
+        " MERGE (parent)-[:<REL.CONTAINS>]->(child)" +
         " RETURN child";
   }
 
@@ -281,7 +287,7 @@ public abstract class AbstractCypherQueryBuilder {
     return "" +
         " " + relationPrefix + " " +
         "(" +
-        nodeAlias + ".<PROP.PUBLICATION_STATUS> = {<PROP.PUBLICATION_STATUS>}" +
+        nodeAlias + ".<PROP.PUBLICATION_STATUS> = {<PH.PUBLICATION_STATUS>}" +
         " OR " +
         nodeAlias + ".<PROP.PUBLICATION_STATUS> IS NULL" +
         ")";

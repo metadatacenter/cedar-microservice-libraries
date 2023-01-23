@@ -37,7 +37,7 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
 
     if (parentCategoryId != null) {
       sb.append(" WITH category");
-      sb.append(" MATCH (parent:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.PARENT_CATEGORY_ID>}})");
+      sb.append(" MATCH (parent:<LABEL.CATEGORY> {<PROP.ID>:{<PH.PARENT_CATEGORY_ID>}})");
       sb.append(" MERGE (parent)-[:<REL.CONTAINSCATEGORY>]->(category)");
     }
 
@@ -53,19 +53,19 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
 
   public static String getCategoryById() {
     return "" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
         " RETURN category";
   }
 
   public static String getCategoryByIdentifier() {
     return "" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.IDENTIFIER>:{<PROP.IDENTIFIER>}})" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.IDENTIFIER>:{<PH.IDENTIFIER>}})" +
         " RETURN category";
   }
 
   public static String getCategoryByParentAndName() {
     return "" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.NAME>:{<PROP.NAME>}, <PROP.PARENT_CATEGORY_ID>:{<PROP.PARENT_CATEGORY_ID>}})" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.NAME>:{<PH.NAME>}, <PROP.PARENT_CATEGORY_ID>:{<PH.PARENT_CATEGORY_ID>}})" +
         " RETURN category";
   }
 
@@ -73,9 +73,9 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (category:<LABEL.CATEGORY>)" +
         " RETURN category" +
-        " ORDER BY LOWER(category.<PROP.NAME>)" +
-        " SKIP {offset}" +
-        " LIMIT {limit}";
+        " ORDER BY toLower(category.<PROP.NAME>)" +
+        " SKIP $offset" +
+        " LIMIT $limit";
   }
 
   public static String getTotalCount() {
@@ -86,30 +86,30 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
 
   public static String deleteCategoryById() {
     return "" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
         " DETACH DELETE category";
   }
 
   public static String getCategoryOwner() {
     return "" +
         " MATCH (user:<LABEL.USER>)" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.ID>} })" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>} })" +
         " MATCH (user)-[:<REL.OWNSCATEGORY>]->(category)" +
         " RETURN user";
   }
 
   public static String attachCategoryToArtifact() {
     return "" +
-        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PROP.ARTIFACT_ID>} })" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.CATEGORY_ID>} })" +
+        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ARTIFACT_ID>} })" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.CATEGORY_ID>} })" +
         " MERGE (category)-[:<REL.CONTAINSARTIFACT>]->(artifact)" +
         " RETURN category";
   }
 
   public static String detachCategoryFromArtifact() {
     return "" +
-        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PROP.ARTIFACT_ID>} })" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.CATEGORY_ID>} })" +
+        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ARTIFACT_ID>} })" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.CATEGORY_ID>} })" +
         " MATCH (category)-[relation:<REL.CONTAINSARTIFACT>]->(artifact)" +
         " DELETE (relation)" +
         " RETURN category";
@@ -117,21 +117,21 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
 
   public static String getCategoryPathsByArtifactId() {
     return "" +
-        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PROP.ID>} })" +
+        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>} })" +
         " MATCH (category:<LABEL.CATEGORY>)-[:<REL.CONTAINSCATEGORY>*0..]->(directcategory:<LABEL.CATEGORY>)-[:<REL.CONTAINSARTIFACT>]->(artifact)" +
         " RETURN category";
   }
 
   public static String getCategoryPathIdsByArtifactId() {
     return "" +
-        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PROP.ID>} })" +
+        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>} })" +
         " MATCH (category:<LABEL.CATEGORY>)-[:<REL.CONTAINSCATEGORY>*0..]->(directcategory:<LABEL.CATEGORY>)-[:<REL.CONTAINSARTIFACT>]->(artifact)" +
         " RETURN category.<PROP.ID>";
   }
 
   public static String getCategoryIdsByArtifactId() {
     return "" +
-        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PROP.ID>} })" +
+        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>} })" +
         " MATCH (category:<LABEL.CATEGORY>)-[:<REL.CONTAINSARTIFACT>]->(artifact)" +
         " RETURN category.<PROP.ID>";
   }
@@ -140,15 +140,15 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +
         " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.CATEGORY_ID>}})" +
-        " CREATE UNIQUE (user)-[:<REL.OWNSCATEGORY>]->(category)" +
-        " SET category.<PROP.OWNED_BY> = {userId}" +
+        " MERGE (user)-[:<REL.OWNSCATEGORY>]->(category)" +
+        " SET category.<PROP.OWNED_BY> = {<PH.USER_ID>}" +
         " RETURN category";
   }
 
   public static String removeCategoryOwner() {
     return "" +
         " MATCH (user:<LABEL.USER>)" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
         " MATCH (user)-[relation:<REL.OWNSCATEGORY>]->(category)" +
         " DELETE (relation)" +
         " SET category.<PROP.OWNED_BY> = null" +
@@ -157,13 +157,13 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
 
   public static String categoryExists() {
     return "" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
         " RETURN COUNT(category) = 1";
   }
 
   public static String getCategoryPath() {
     return "" +
-        " MATCH (directcategory:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.ID>} })" +
+        " MATCH (directcategory:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>} })" +
         " MATCH (category:<LABEL.CATEGORY>)-[:<REL.CONTAINSCATEGORY>*0..]->(directcategory:<LABEL.CATEGORY>)" +
         " RETURN category";
   }

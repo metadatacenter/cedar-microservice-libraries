@@ -39,7 +39,7 @@ public class CypherParamBuilderGroup extends AbstractCypherParamBuilder {
 
   public static CypherParameters getGroupByName(String groupName) {
     CypherParameters params = new CypherParameters();
-    params.put(NodeProperty.NAME, groupName);
+    params.put(ParameterPlaceholder.NAME, groupName);
     return params;
   }
 
@@ -49,7 +49,7 @@ public class CypherParamBuilderGroup extends AbstractCypherParamBuilder {
 
   public static CypherParameters getGroupBySpecialValue(String specialGroupName) {
     CypherParameters params = new CypherParameters();
-    params.put(NodeProperty.SPECIAL_GROUP, specialGroupName);
+    params.put(ParameterPlaceholder.SPECIAL_GROUP, specialGroupName);
     return params;
   }
 

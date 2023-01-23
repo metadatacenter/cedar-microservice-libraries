@@ -15,7 +15,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
 
   public static CypherParameters matchId(CedarResourceId resourceId) {
     CypherParameters params = new CypherParameters();
-    params.put(NodeProperty.ID, resourceId);
+    params.put(ParameterPlaceholder.ID, resourceId);
     return params;
   }
 
@@ -32,8 +32,8 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
 
   public static CypherParameters getResourceByParentIdAndName(CedarFolderId parentId, String name) {
     CypherParameters params = new CypherParameters();
-    params.put(NodeProperty.ID, parentId);
-    params.put(NodeProperty.NAME, name);
+    params.put(ParameterPlaceholder.ID, parentId);
+    params.put(ParameterPlaceholder.NAME, name);
     return params;
   }
 
@@ -43,7 +43,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
-      params.put(NodeProperty.PUBLICATION_STATUS, publicationStatus.getValue());
+      params.put(ParameterPlaceholder.PUBLICATION_STATUS, publicationStatus.getValue());
     }
     params.put(ParameterPlaceholder.LIMIT, limit);
     params.put(ParameterPlaceholder.OFFSET, offset);
@@ -57,7 +57,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
-      params.put(NodeProperty.PUBLICATION_STATUS, publicationStatus.getValue());
+      params.put(ParameterPlaceholder.PUBLICATION_STATUS, publicationStatus.getValue());
     }
     params.put(ParameterPlaceholder.LIMIT, limit);
     params.put(ParameterPlaceholder.OFFSET, offset);
@@ -70,7 +70,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
-      params.put(NodeProperty.PUBLICATION_STATUS, publicationStatus.getValue());
+      params.put(ParameterPlaceholder.PUBLICATION_STATUS, publicationStatus.getValue());
     }
     params.put(ParameterPlaceholder.USER_ID, ownerId);
     return params;
@@ -81,7 +81,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
-      params.put(NodeProperty.PUBLICATION_STATUS, publicationStatus.getValue());
+      params.put(ParameterPlaceholder.PUBLICATION_STATUS, publicationStatus.getValue());
     }
     params.put(ParameterPlaceholder.USER_ID, ownerId);
     return params;
@@ -93,7 +93,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
-      params.put(NodeProperty.PUBLICATION_STATUS, publicationStatus.getValue());
+      params.put(ParameterPlaceholder.PUBLICATION_STATUS, publicationStatus.getValue());
     }
     params.put(ParameterPlaceholder.LIMIT, limit);
     params.put(ParameterPlaceholder.OFFSET, offset);
@@ -109,7 +109,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
-      params.put(NodeProperty.PUBLICATION_STATUS, publicationStatus.getValue());
+      params.put(ParameterPlaceholder.PUBLICATION_STATUS, publicationStatus.getValue());
     }
     if (addPermissionConditions) {
       params.put(ParameterPlaceholder.USER_ID, ownerId);
@@ -148,7 +148,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
   public static CypherParameters matchResourceIdAndEverybodyPermission(CedarFilesystemResourceId resourceId,
                                                                        NodeSharePermission everybodyPermission) {
     CypherParameters params = new CypherParameters();
-    params.put(NodeProperty.ID, resourceId);
+    params.put(ParameterPlaceholder.ID, resourceId);
     params.put(ParameterPlaceholder.EVERYBODY_PERMISSION, everybodyPermission.getValue());
     return params;
   }

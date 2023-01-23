@@ -47,7 +47,7 @@ public class AbstractCypherQuery implements CypherQuery {
     }
 
     for (ParameterPlaceholder placeholder : placeholders) {
-      replacementTable.put("<PH." + placeholder.name() + ">", Neo4JUtil.escapePropertyName(placeholder.getValue()));
+      replacementTable.put("{<PH." + placeholder.name() + ">}", "$" + Neo4JUtil.escapePropertyName(placeholder.getValue()));
     }
 
   }

@@ -44,8 +44,8 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
 
   public static CypherParameters getCategoryByParentAndName(CedarCategoryId parentId, String name) {
     CypherParameters params = new CypherParameters();
-    params.put(NodeProperty.NAME, name);
-    params.put(NodeProperty.PARENT_CATEGORY_ID, parentId);
+    params.put(ParameterPlaceholder.NAME, name);
+    params.put(ParameterPlaceholder.PARENT_CATEGORY_ID, parentId);
     return params;
   }
 
@@ -62,7 +62,7 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
 
   public static CypherParameters matchIdentifier(String identifier) {
     CypherParameters params = new CypherParameters();
-    params.put(NodeProperty.IDENTIFIER, identifier);
+    params.put(ParameterPlaceholder.IDENTIFIER, identifier);
     return params;
   }
 
@@ -75,8 +75,8 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
 
   public static CypherParameters categoryIdAndArtifactId(CedarCategoryId categoryId, CedarArtifactId artifactId) {
     CypherParameters params = new CypherParameters();
-    params.put(NodeProperty.CATEGORY_ID, categoryId);
-    params.put(NodeProperty.ARTIFACT_ID, artifactId);
+    params.put(ParameterPlaceholder.CATEGORY_ID, categoryId);
+    params.put(ParameterPlaceholder.ARTIFACT_ID, artifactId);
     return params;
   }
 
