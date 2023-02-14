@@ -27,7 +27,7 @@ public class CedarInPlaceParameter extends CedarParameterNoun {
   @Override
   public String stringValue() {
     if (value != null) {
-      return value.toString();
+      return getStringValue();
     } else {
       return null;
     }
@@ -36,9 +36,17 @@ public class CedarInPlaceParameter extends CedarParameterNoun {
   @Override
   public boolean booleanValue() {
     if (value != null) {
-      return "true".equals(value.toString());
+      return "true".equals(getStringValue());
     } else {
       return false;
+    }
+  }
+
+  protected String getStringValue() {
+    if (trimmed) {
+      return value.toString().trim();
+    } else {
+      return value.toString();
     }
   }
 
