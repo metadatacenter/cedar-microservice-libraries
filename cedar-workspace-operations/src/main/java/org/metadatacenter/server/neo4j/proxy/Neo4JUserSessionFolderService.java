@@ -379,6 +379,16 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public boolean setOpen(CedarFolderId folderId) {
+    return proxies.artifact().setOpen(folderId);
+  }
+
+  @Override
+  public boolean setNotOpen(CedarFolderId folderId) {
+    return proxies.artifact().setNotOpen(folderId);
+  }
+
+  @Override
   public long getNumberOfInstances(CedarTemplateId templateId) {
     return proxies.artifact().getIsBasedOnCount(templateId);
   }

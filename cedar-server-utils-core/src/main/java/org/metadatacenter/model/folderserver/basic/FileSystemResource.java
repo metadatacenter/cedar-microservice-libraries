@@ -28,14 +28,15 @@ import java.util.List;
     @JsonSubTypes.Type(value = FolderServerInstance.class, name = CedarResourceType.Types.INSTANCE)
 })
 @JsonIgnoreProperties(ignoreUnknown = true)
-public abstract class FileSystemResource extends AbstractCedarResourceWithDates implements FilesystemResourceWithIdAndType,
-    ResourceWithUsersAndUserNamesData, ResourceWithEverybodyPermission, ResourceWithParentPathInfoData {
+public abstract class FileSystemResource extends AbstractCedarResourceWithDates implements ResourceWithOpenFlag,
+    FilesystemResourceWithIdAndType, ResourceWithUsersAndUserNamesData, ResourceWithEverybodyPermission, ResourceWithParentPathInfoData {
 
   protected NameDescriptionIdentifierGroup nameDescriptionIdentifierGroup;
   protected ParentPathInfoGroup parentPathInfoGroup;
   protected UsersDataGroup usersData;
   protected UserNamesDataGroup userNamesData;
   protected NodeSharePermission everybodyPermission;
+  protected boolean open;
 
   protected FileSystemResource(CedarResourceType resourceType) {
     super();
@@ -194,5 +195,13 @@ public abstract class FileSystemResource extends AbstractCedarResourceWithDates 
   public CedarFilesystemResourceId getResourceId() {
     return CedarFilesystemResourceId.build(this.getId(), this.getType());
   }
-  
+  @Override
+  public boolean isOpen() {
+    return open;
+  }
+
+  @Override
+  public void setOpen(boolean open) {
+    this.open = open;
+  }
 }

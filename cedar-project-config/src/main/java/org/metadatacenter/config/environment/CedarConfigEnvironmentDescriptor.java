@@ -128,6 +128,7 @@ public class CedarConfigEnvironmentDescriptor {
     cedarAdminUserApiKey.add(SystemComponent.SERVER_MESSAGING); // messages from processes
     cedarAdminUserApiKey.add(SystemComponent.SERVER_SUBMISSION);
     cedarAdminUserApiKey.add(SystemComponent.SERVER_INTERNALS);
+    cedarAdminUserApiKey.add(SystemComponent.SERVER_OPENVIEW);
 
     Set<SystemComponent> cedarAdminUserPasswd = variableToComponent.get(CedarEnvironmentVariable.CEDAR_ADMIN_USER_PASSWORD);
     cedarAdminUserPasswd.add(SystemComponent.ADMIN_TOOL); // all keycloak related tasks
@@ -243,7 +244,6 @@ public class CedarConfigEnvironmentDescriptor {
 
     Set<SystemComponent> cedarHttpPortUser = variableToComponent.get(CedarEnvironmentVariable.CEDAR_USER_HTTP_PORT);
     cedarHttpPortUser.addAll(allMicroservices);
-    cedarHttpPortUser.remove(SystemComponent.SERVER_OPENVIEW);
     Set<SystemComponent> cedarAdminPortUser = variableToComponent.get(CedarEnvironmentVariable.CEDAR_USER_ADMIN_PORT);
     cedarAdminPortUser.add(SystemComponent.SERVER_USER);
     Set<SystemComponent> cedarStopPortUser = variableToComponent.get(CedarEnvironmentVariable.CEDAR_USER_STOP_PORT);

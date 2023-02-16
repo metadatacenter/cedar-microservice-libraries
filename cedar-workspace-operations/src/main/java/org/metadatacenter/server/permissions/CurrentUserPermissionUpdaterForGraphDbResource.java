@@ -1,7 +1,6 @@
 package org.metadatacenter.server.permissions;
 
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.id.CedarTemplateId;
 import org.metadatacenter.model.CedarResourceType;
@@ -82,8 +81,8 @@ public class CurrentUserPermissionUpdaterForGraphDbResource extends CurrentUserP
     currentUserResourcePermissions.setCanCopy(true);
     if (resource instanceof ResourceWithOpenFlag) {
       ResourceWithOpenFlag res = (ResourceWithOpenFlag) resource;
-      currentUserResourcePermissions.setCanMakeOpen(res.isOpen() == null || !res.isOpen());
-      currentUserResourcePermissions.setCanMakeNotOpen(res.isOpen() != null && res.isOpen());
+      currentUserResourcePermissions.setCanMakeOpen(!res.isOpen());
+      currentUserResourcePermissions.setCanMakeNotOpen(res.isOpen());
     } else {
       currentUserResourcePermissions.setCanMakeOpen(false);
       currentUserResourcePermissions.setCanMakeNotOpen(false);

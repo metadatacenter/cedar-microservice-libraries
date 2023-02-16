@@ -80,6 +80,9 @@ public abstract class AbstractCypherQueryBuilder {
     sb.append(buildCreateAssignment(NodeProperty.LAST_UPDATED_ON)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.LAST_UPDATED_ON_TS)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.OWNED_BY)).append(",");
+
+    sb.append(buildCreateAssignment(NodeProperty.IS_OPEN)).append(",");
+
     if (newNode instanceof FolderServerFolder) {
       FolderServerFolder newFolder = (FolderServerFolder) newNode;
       if (newFolder.isRoot()) {
@@ -97,9 +100,6 @@ public abstract class AbstractCypherQueryBuilder {
       FolderServerArtifact newResource = (FolderServerArtifact) newNode;
       if (newResource.getIdentifier() != null) {
         sb.append(buildCreateAssignment(NodeProperty.IDENTIFIER)).append(",");
-      }
-      if (newResource.isOpen() != null) {
-        sb.append(buildCreateAssignment(NodeProperty.IS_OPEN)).append(",");
       }
       if (newResource.getSourceHash() != null) {
         sb.append(buildCreateAssignment(NodeProperty.SOURCE_HASH)).append(",");
