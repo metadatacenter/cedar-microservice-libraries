@@ -47,4 +47,13 @@ public class FolderServerFolderCurrentUserReport extends FolderServerResourceCur
     this.folderDataGroup.setRoot(root);
   }
 
+  public boolean isOpen() {
+    return folderDataGroup.isOpen();
+  }
+
+  @Override
+  public void setOpen(boolean open) {
+    this.folderDataGroup.setOpen(open);
+  }
+
 }

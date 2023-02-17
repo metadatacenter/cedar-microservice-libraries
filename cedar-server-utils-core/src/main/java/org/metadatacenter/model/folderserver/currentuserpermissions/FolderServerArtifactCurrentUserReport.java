@@ -5,13 +5,12 @@ import org.metadatacenter.id.CedarUntypedArtifactId;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.datagroup.DerivedFromGroup;
 import org.metadatacenter.model.folderserver.datagroup.ResourceWithDerivedFromData;
-import org.metadatacenter.model.folderserver.datagroup.ResourceWithOpenFlag;
 import org.metadatacenter.server.security.model.auth.FilesystemResourceWithCurrentUserPermissions;
 
-public abstract class FolderServerArtifactCurrentUserReport extends FolderServerResourceCurrentUserReport implements FilesystemResourceWithCurrentUserPermissions, ResourceWithOpenFlag, ResourceWithDerivedFromData {
+public abstract class FolderServerArtifactCurrentUserReport extends FolderServerResourceCurrentUserReport implements FilesystemResourceWithCurrentUserPermissions, ResourceWithDerivedFromData {
 
   protected DerivedFromGroup derivedFromGroup;
-  protected Boolean isOpen;
+  protected boolean open;
 
   public FolderServerArtifactCurrentUserReport(CedarResourceType resourceType) {
     super(resourceType);
@@ -29,13 +28,13 @@ public abstract class FolderServerArtifactCurrentUserReport extends FolderServer
   }
 
   @Override
-  public Boolean isOpen() {
-    return isOpen;
+  public boolean isOpen() {
+    return open;
   }
 
   @Override
-  public void setOpen(Boolean isOpen) {
-    this.isOpen = isOpen;
+  public void setOpen(boolean open) {
+    this.open = open;
   }
 
   public CedarArtifactId getResourceId() {

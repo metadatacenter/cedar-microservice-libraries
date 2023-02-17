@@ -142,4 +142,18 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
         " RETURN folder";
   }
+
+  public static String setOpen() {
+    return "" +
+        " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
+        " SET folder.<PROP.IS_OPEN> = true" +
+        " RETURN folder";
+  }
+
+  public static String setNotOpen() {
+    return "" +
+        " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
+        " REMOVE folder.<PROP.IS_OPEN>" +
+        " RETURN folder";
+  }
 }

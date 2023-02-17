@@ -71,6 +71,16 @@ public class FolderServerFolder extends FileSystemResource implements ResourceWi
   }
 
   @Override
+  public boolean isOpen() {
+    return folderDataGroup.isOpen();
+  }
+
+  @Override
+  public void setOpen(boolean open) {
+    this.folderDataGroup.setOpen(open);
+  }
+
+  @Override
   public String getHomeOf() {
     return homeOf;
   }
