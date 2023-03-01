@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarResourceId;
 import org.metadatacenter.model.CedarResource;
 import org.metadatacenter.model.CedarResourceType;

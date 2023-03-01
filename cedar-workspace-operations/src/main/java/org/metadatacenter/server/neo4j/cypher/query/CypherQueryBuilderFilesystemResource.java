@@ -116,4 +116,12 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
         " )" +
         " RETURN resource";
   }
+
+  public static String isFileSystemResourceOpenImplicitly() {
+    return "" +
+        " MATCH (root:<LABEL.FOLDER> {<PROP.NAME>:{<PH.NAME>}})," +
+        " (current:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>} })," +
+        " path=((root)-[:<REL.CONTAINS>*0..]->(open {<PROP.IS_OPEN>:true})-[:<REL.CONTAINS>*0..]->(current))" +
+        " RETURN path";
+  }
 }

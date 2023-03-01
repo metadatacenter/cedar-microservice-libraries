@@ -277,4 +277,11 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
     return executeWrite(q, "removing owner");
   }
 
+  public boolean isFileSystemResourceOpenImplicitly(CedarFilesystemResourceId cedarFilesystemResourceIdId) {
+    String cypher = CypherQueryBuilderFilesystemResource.isFileSystemResourceOpenImplicitly();
+    CypherParameters params = CypherParamBuilderFilesystemResource.getResourceByIdParameters(proxies.pathUtil.getRootPath(), cedarFilesystemResourceIdId);
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    List<FileSystemResource> fileSystemResources = executeReadGetList(q, FileSystemResource.class);
+    return fileSystemResources.size() > 0;
+  }
 }

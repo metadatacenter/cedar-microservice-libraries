@@ -20,7 +20,12 @@ public final class PathInfoBuilder {
                                                                          ResourcePermissionServiceSession permissionSession,
                                                                          FileSystemResource node) {
     List<FolderServerResourceExtract> pathInfo = folderSession.findNodePathExtract(node);
+    boolean isOpenImplicitly = false;
     for (FolderServerResourceExtract extract : pathInfo) {
+      if (extract.getIsOpen() != null && extract.getIsOpen()) {
+        isOpenImplicitly = true;
+      }
+      extract.setIsOpenImplicitly(isOpenImplicitly);
       extract.setActiveUserCanRead(activeUserCanRead(context, permissionSession, extract));
     }
     return pathInfo;

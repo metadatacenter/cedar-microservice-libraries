@@ -424,4 +424,9 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
     return proxies.resource().getResourceType(resourceId, cu.getResourceId());
   }
 
+  @Override
+  public boolean isArtifactOpenImplicitly(CedarArtifactId artifactId) {
+    return proxies.resource().isFileSystemResourceOpenImplicitly(artifactId);
+  }
+
 }

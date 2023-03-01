@@ -37,6 +37,8 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
 
   protected Boolean isOpen;
 
+  protected Boolean isOpenImplicitly;
+
   protected FolderServerResourceExtract(CedarResourceType resourceType) {
     super();
     this.usersData = new UsersDataGroup();
@@ -148,6 +150,14 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
 
   public void setIsOpen(Boolean isOpen) {
     this.isOpen = isOpen;
+  }
+
+  public Boolean getIsOpenImplicitly() {
+    return isOpenImplicitly;
+  }
+
+  public void setIsOpenImplicitly(Boolean openImplicitly) {
+    isOpenImplicitly = openImplicitly;
   }
 
   public static FolderServerResourceExtract forType(CedarResourceType t) {

@@ -144,4 +144,6 @@ public interface FolderServiceSession {
   long searchIsBasedOnCount(List<CedarResourceType> resourceTypeList, CedarTemplateId isBasedOn);
 
   CedarResourceType getResourceType(CedarResourceId resourceId);
+
+  boolean isArtifactOpenImplicitly(CedarArtifactId artifactId);
 }
