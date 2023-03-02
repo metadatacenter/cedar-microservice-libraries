@@ -24,8 +24,7 @@ public class CedarConfigTest {
     env.put(CedarEnvironmentVariable.CEDAR_VERSION_MODIFIER.getName(), "");
 
     env.put(CedarEnvironmentVariable.CEDAR_HOME.getName(), "/home/cedar");
-    env.put(CedarEnvironmentVariable.KEYCLOAK_HOME.getName(), "/home/cedar/keycloak");
-    env.put(CedarEnvironmentVariable.NGINX_HOME.getName(), "/etc/nginx");
+    env.put(CedarEnvironmentVariable.CEDAR_KEYCLOAK_HOME.getName(), "/home/cedar/keycloak");
 
     env.put(CedarEnvironmentVariable.CEDAR_NET_GATEWAY.getName(), "127.0.0.1");
 
@@ -84,8 +83,8 @@ public class CedarConfigTest {
 
     env.put(CedarEnvironmentVariable.CEDAR_BIOPORTAL_REST_BASE.getName(), "http://data.bioontology.org/");
 
-    env.put(CedarEnvironmentVariable.CEDAR_ELASTICSEARCH_HOST.getName(), "127.0.0.1");
-    env.put(CedarEnvironmentVariable.CEDAR_ELASTICSEARCH_TRANSPORT_PORT.getName(), "9300");
+    env.put(CedarEnvironmentVariable.CEDAR_OPENSEARCH_HOST.getName(), "127.0.0.1");
+    env.put(CedarEnvironmentVariable.CEDAR_OPENSEARCH_TRANSPORT_PORT.getName(), "9300");
 
     env.put(CedarEnvironmentVariable.CEDAR_REDIS_PERSISTENT_HOST.getName(), "127.0.0.1");
     env.put(CedarEnvironmentVariable.CEDAR_REDIS_PERSISTENT_PORT.getName(), "6379");
@@ -205,7 +204,7 @@ public class CedarConfigTest {
   @Test
   public void testElasticSearchSearchConfig() throws Exception {
     CedarConfig instance = getCedarConfig();
-    ElasticsearchSettingsMappingsConfig searchSettingsMappingsConfig = instance
+    OpensearchSettingsMappingsConfig searchSettingsMappingsConfig = instance
         .getSearchSettingsMappingsConfig();
     Assert.assertNotNull(searchSettingsMappingsConfig);
     Assert.assertNotNull(searchSettingsMappingsConfig.getSettings());
@@ -224,7 +223,7 @@ public class CedarConfigTest {
   @Test
   public void testElasticSearchRulesConfig() throws Exception {
     CedarConfig instance = getCedarConfig();
-    ElasticsearchSettingsMappingsConfig rulesSettingsMappingsConfig = instance
+    OpensearchSettingsMappingsConfig rulesSettingsMappingsConfig = instance
         .getSearchSettingsMappingsConfig();
     Assert.assertNotNull(rulesSettingsMappingsConfig);
     Assert.assertNotNull(rulesSettingsMappingsConfig.getSettings());

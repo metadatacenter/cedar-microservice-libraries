@@ -10,21 +10,21 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
   public static String getOwner() {
     return "" +
         " MATCH (user:<LABEL.USER>)" +
-        " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PROP.ID>} })" +
+        " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>} })" +
         " MATCH (user)-[:<REL.OWNS>]->(resource)" +
         " RETURN user";
   }
 
   public static String setEverybodyPermission() {
     return "" +
-        " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
         " SET resource.<PROP.EVERYBODY_PERMISSION> = {<PH.EVERYBODY_PERMISSION>}" +
         " RETURN resource";
   }
 
   public static String getAllDescendantResources() {
     return "" +
-        " MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PROP.ID>} })" +
+        " MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>} })" +
         " MATCH (child:<LABEL.FILESYSTEM_RESOURCE>)" +
         " MATCH (parent)-[:<REL.CONTAINS>*0..]->(child)" +
         " RETURN child";
@@ -32,10 +32,10 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
 
   public static String getResourceByParentIdAndName() {
     return "" +
-        " MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
         " MATCH (child:<LABEL.FILESYSTEM_RESOURCE>)" +
         " MATCH (parent)-[:<REL.CONTAINS>]->(child)" +
-        " WHERE child.<PROP.NAME> = {<PROP.NAME>}" +
+        " WHERE child.<PROP.NAME> = {<PH.NAME>}" +
         " RETURN child";
   }
 
@@ -44,8 +44,8 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE>)" +
         " RETURN resource" +
         " ORDER BY " + getOrderByExpression("resource", sortList) +
-        " SKIP {offset}" +
-        " LIMIT {limit}";
+        " SKIP $offset" +
+        " LIMIT $limit";
   }
 
   public static String getAllResourceCountQuery() {
@@ -56,8 +56,8 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
 
   public static String getResourceLookupQueryById() {
     return "" +
-        " MATCH (root:<LABEL.FOLDER> {<PROP.NAME>:{<PROP.NAME>}})," +
-        " (current:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PROP.ID>} })," +
+        " MATCH (root:<LABEL.FOLDER> {<PROP.NAME>:{<PH.NAME>}})," +
+        " (current:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>} })," +
         " path=shortestPath((root)-[:<REL.CONTAINS>*]->(current))" +
         " RETURN path";
   }
@@ -67,8 +67,8 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
     StringBuilder sb = new StringBuilder();
     sb.append(
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE>)" +
-            " WHERE EXISTS(resource.<PROP.EVERYBODY_PERMISSION>) AND resource.<PROP.EVERYBODY_PERMISSION> IS NOT NULL" +
-            " AND resource.<PROP.RESOURCE_TYPE> in {resourceTypeList}" +
+            " WHERE resource.<PROP.EVERYBODY_PERMISSION> IS NOT NULL" +
+            " AND resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
             " AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) "
     );
     if (version != null && version != ResourceVersionFilter.ALL) {
@@ -81,8 +81,8 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
     sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,");
     sb.append(getOrderByExpression("resource", sortList));
     sb.append(", resource.<PROP.VERSION> DESC");
-    sb.append(" SKIP {offset}");
-    sb.append(" LIMIT {limit}");
+    sb.append(" SKIP $offset");
+    sb.append(" LIMIT $limit");
     return sb.toString();
   }
 
@@ -90,8 +90,8 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
     StringBuilder sb = new StringBuilder();
     sb.append(
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE>)" +
-            " WHERE EXISTS(resource.<PROP.EVERYBODY_PERMISSION>) AND resource.<PROP.EVERYBODY_PERMISSION> IS NOT NULL" +
-            " AND resource.<PROP.RESOURCE_TYPE> in {resourceTypeList}" +
+            " WHERE resource.<PROP.EVERYBODY_PERMISSION> IS NOT NULL" +
+            " AND resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
             " AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) "
     );
     if (version != null && version != ResourceVersionFilter.ALL) {
@@ -106,7 +106,7 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
 
   public static String getAllVisibleByGroupQuery() {
     return "" +
-        " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})" +
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE>)" +
         " WHERE" +
         " (" +
@@ -115,5 +115,13 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
         " (group)-[:<REL.CANWRITE>]->()-[:<REL.CONTAINS>*0..]->(resource)" +
         " )" +
         " RETURN resource";
+  }
+
+  public static String isFileSystemResourceOpenImplicitly() {
+    return "" +
+        " MATCH (root:<LABEL.FOLDER> {<PROP.NAME>:{<PH.NAME>}})," +
+        " (current:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>} })," +
+        " path=((root)-[:<REL.CONTAINS>*0..]->(open {<PROP.IS_OPEN>:true})-[:<REL.CONTAINS>*0..]->(current))" +
+        " RETURN path";
   }
 }

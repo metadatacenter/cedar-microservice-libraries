@@ -11,8 +11,10 @@ import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.cypher.parameter.AbstractCypherParamBuilder;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderArtifact;
+import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFolder;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderResource;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderArtifact;
+import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFolder;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderResource;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 
@@ -182,6 +184,20 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
   public boolean setNotOpen(CedarArtifactId artifactId) {
     String cypher = CypherQueryBuilderArtifact.setNotOpen();
     CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeWrite(q, "setting isOpen");
+  }
+
+  public boolean setOpen(CedarFolderId folderId) {
+    String cypher = CypherQueryBuilderFolder.setOpen();
+    CypherParameters params = CypherParamBuilderFolder.matchId(folderId);
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeWrite(q, "setting isOpen");
+  }
+
+  public boolean setNotOpen(CedarFolderId folderId) {
+    String cypher = CypherQueryBuilderFolder.setNotOpen();
+    CypherParameters params = CypherParamBuilderFolder.matchId(folderId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeWrite(q, "setting isOpen");
   }

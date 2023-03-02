@@ -9,4 +9,6 @@ public interface FolderWithCurrentUserPermissions<T extends CedarFolderId> exten
   boolean isSystem();
 
   boolean isUserHome();
+
+  boolean isOpen();
 }

@@ -23,4 +23,10 @@ public interface ResourceWithFolderData {
   @JsonProperty(NodeProperty.Label.IS_ROOT)
   void setRoot(boolean root);
 
+  @JsonProperty(NodeProperty.Label.IS_OPEN)
+  boolean isOpen();
+
+  @JsonProperty(NodeProperty.Label.IS_OPEN)
+  void setOpen(boolean open);
+
 }

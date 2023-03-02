@@ -9,7 +9,7 @@ public class CypherQueryBuilderFilesystemResourcePermission extends AbstractCyph
     return "" +
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})" +
-        " CREATE UNIQUE (user)-[:" + RelationLabel.forFilesystemResourcePermission(permission) + "]->(resource)" +
+        " MERGE (user)-[:" + RelationLabel.forFilesystemResourcePermission(permission) + "]->(resource)" +
         " RETURN user";
   }
 
@@ -17,7 +17,7 @@ public class CypherQueryBuilderFilesystemResourcePermission extends AbstractCyph
     return "" +
         " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.GROUP_ID>}})" +
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})" +
-        " CREATE UNIQUE (group)-[:" + RelationLabel.forFilesystemResourcePermission(permission) + "]->(resource)" +
+        " MERGE (group)-[:" + RelationLabel.forFilesystemResourcePermission(permission) + "]->(resource)" +
         " RETURN group";
   }
 
@@ -169,8 +169,8 @@ public class CypherQueryBuilderFilesystemResourcePermission extends AbstractCyph
   public static String getTransitiveEverybodyPermission() {
     return "" +
         "MATCH" +
-        " (parent:<LABEL.FILESYSTEM_RESOURCE>)-[:<REL.CONTAINS>*0..]->(resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PROP.ID>}})" +
-        " WHERE EXISTS(parent.<PROP.EVERYBODY_PERMISSION>) AND parent.<PROP.EVERYBODY_PERMISSION> IS NOT NULL" +
+        " (parent:<LABEL.FILESYSTEM_RESOURCE>)-[:<REL.CONTAINS>*0..]->(resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
+        " WHERE parent.<PROP.EVERYBODY_PERMISSION> IS NOT NULL" +
         " RETURN parent.<PROP.ID> AS resourceId, parent.<PROP.EVERYBODY_PERMISSION> AS everybodyPermission";
   }
 }

@@ -81,14 +81,14 @@ searchSettings:
     delayAttempts: 10000
 
 elasticsearch:
-  clusterName: "elasticsearch_cedar"
+  clusterName: "opensearch_cedar"
   indexes:
     searchIndex:
       name: "cedar-search"
     rulesIndex:
       name: "cedar-rules"
-  host: "${CEDAR_ELASTICSEARCH_HOST}"
-  transportPort: "${CEDAR_ELASTICSEARCH_TRANSPORT_PORT}"
+  host: "${CEDAR_OPENSEARCH_HOST}"
+  transportPort: "${CEDAR_OPENSEARCH_TRANSPORT_PORT}"
   size: 1000
   scrollKeepAlive: 60000
 

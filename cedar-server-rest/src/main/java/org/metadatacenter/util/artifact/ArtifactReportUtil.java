@@ -45,6 +45,7 @@ public final class ArtifactReportUtil {
     } else if (artifact.getType() == CedarResourceType.TEMPLATE) {
       resourceReport = FolderServerSchemaArtifactReport.fromResource(artifact);
       decorateResourceWithVersionHistory(folderSession, (FolderServerSchemaArtifactReport) resourceReport);
+      decorateResourceWithNumberOfInstances(folderSession, (FolderServerTemplateReport)resourceReport);
     }
 
     decorateResourceWithDerivedFrom(folderSession, permissionSession, resourceReport);

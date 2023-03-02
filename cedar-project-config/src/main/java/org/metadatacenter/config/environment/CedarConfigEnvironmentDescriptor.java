@@ -41,11 +41,8 @@ public class CedarConfigEnvironmentDescriptor {
     cedarHome.add(SystemComponent.CADSR_TOOL);
     cedarHome.add(SystemComponent.UTIL_BIN); // utility shell scrips
 
-    Set<SystemComponent> keycloakHome = variableToComponent.get(CedarEnvironmentVariable.KEYCLOAK_HOME);
+    Set<SystemComponent> keycloakHome = variableToComponent.get(CedarEnvironmentVariable.CEDAR_KEYCLOAK_HOME);
     keycloakHome.add(SystemComponent.UTIL_BIN); // utility shell scrips
-
-    Set<SystemComponent> nginxHome = variableToComponent.get(CedarEnvironmentVariable.NGINX_HOME);
-    nginxHome.add(SystemComponent.UTIL_BIN); // utility shell scrips
 
     Set<SystemComponent> cedarFrontendBeh = variableToComponent.get(CedarEnvironmentVariable.CEDAR_FRONTEND_BEHAVIOR);
     // gulpfile.js decides that it should or not start a server for the front end code
@@ -131,6 +128,7 @@ public class CedarConfigEnvironmentDescriptor {
     cedarAdminUserApiKey.add(SystemComponent.SERVER_MESSAGING); // messages from processes
     cedarAdminUserApiKey.add(SystemComponent.SERVER_SUBMISSION);
     cedarAdminUserApiKey.add(SystemComponent.SERVER_INTERNALS);
+    cedarAdminUserApiKey.add(SystemComponent.SERVER_OPENVIEW);
 
     Set<SystemComponent> cedarAdminUserPasswd = variableToComponent.get(CedarEnvironmentVariable.CEDAR_ADMIN_USER_PASSWORD);
     cedarAdminUserPasswd.add(SystemComponent.ADMIN_TOOL); // all keycloak related tasks
@@ -158,14 +156,14 @@ public class CedarConfigEnvironmentDescriptor {
     Set<SystemComponent> cedarPortMongo = variableToComponent.get(CedarEnvironmentVariable.CEDAR_MONGO_PORT);
     cedarPortMongo.addAll(cedarMongoUserName);// used together with the username
 
-    Set<SystemComponent> cedarElasticsearchHost = variableToComponent.get(CedarEnvironmentVariable.CEDAR_ELASTICSEARCH_HOST);
-    cedarElasticsearchHost.add(SystemComponent.SERVER_WORKER);
-    cedarElasticsearchHost.add(SystemComponent.SERVER_VALUERECOMMENDER);
-    cedarElasticsearchHost.add(SystemComponent.SERVER_RESOURCE);
-    cedarElasticsearchHost.add(SystemComponent.SERVER_INTERNALS);
+    Set<SystemComponent> cedarOpensearchHost = variableToComponent.get(CedarEnvironmentVariable.CEDAR_OPENSEARCH_HOST);
+    cedarOpensearchHost.add(SystemComponent.SERVER_WORKER);
+    cedarOpensearchHost.add(SystemComponent.SERVER_VALUERECOMMENDER);
+    cedarOpensearchHost.add(SystemComponent.SERVER_RESOURCE);
+    cedarOpensearchHost.add(SystemComponent.SERVER_INTERNALS);
 
-    Set<SystemComponent> cedarElasticsearchTransportPort = variableToComponent.get(CedarEnvironmentVariable.CEDAR_ELASTICSEARCH_TRANSPORT_PORT);
-    cedarElasticsearchTransportPort.addAll(cedarElasticsearchHost);
+    Set<SystemComponent> cedarOpensearchTransportPort = variableToComponent.get(CedarEnvironmentVariable.CEDAR_OPENSEARCH_TRANSPORT_PORT);
+    cedarOpensearchTransportPort.addAll(cedarOpensearchHost);
 
     Set<SystemComponent> cedarMessagingMysqlHost = variableToComponent.get(CedarEnvironmentVariable.CEDAR_MESSAGING_MYSQL_HOST);
     cedarMessagingMysqlHost.add(SystemComponent.SERVER_MESSAGING);
@@ -246,7 +244,6 @@ public class CedarConfigEnvironmentDescriptor {
 
     Set<SystemComponent> cedarHttpPortUser = variableToComponent.get(CedarEnvironmentVariable.CEDAR_USER_HTTP_PORT);
     cedarHttpPortUser.addAll(allMicroservices);
-    cedarHttpPortUser.remove(SystemComponent.SERVER_OPENVIEW);
     Set<SystemComponent> cedarAdminPortUser = variableToComponent.get(CedarEnvironmentVariable.CEDAR_USER_ADMIN_PORT);
     cedarAdminPortUser.add(SystemComponent.SERVER_USER);
     Set<SystemComponent> cedarStopPortUser = variableToComponent.get(CedarEnvironmentVariable.CEDAR_USER_STOP_PORT);

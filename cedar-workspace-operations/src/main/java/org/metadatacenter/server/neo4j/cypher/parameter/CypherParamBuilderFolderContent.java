@@ -19,7 +19,7 @@ public class CypherParamBuilderFolderContent extends AbstractCypherParamBuilder 
     params.put(ParameterPlaceholder.FOLDER_ID, folderId);
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
-      params.put(NodeProperty.PUBLICATION_STATUS, publicationStatus.getValue());
+      params.put(ParameterPlaceholder.PUBLICATION_STATUS, publicationStatus.getValue());
     }
     return params;
   }
@@ -30,7 +30,7 @@ public class CypherParamBuilderFolderContent extends AbstractCypherParamBuilder 
     params.put(ParameterPlaceholder.FOLDER_ID, folderId);
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
-      params.put(NodeProperty.PUBLICATION_STATUS, publicationStatus.getValue());
+      params.put(ParameterPlaceholder.PUBLICATION_STATUS, publicationStatus.getValue());
     }
     params.put(ParameterPlaceholder.LIMIT, limit);
     params.put(ParameterPlaceholder.OFFSET, offset);

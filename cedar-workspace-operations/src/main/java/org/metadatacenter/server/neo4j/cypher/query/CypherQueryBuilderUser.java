@@ -28,7 +28,7 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
 
   public static String updateUser() {
     StringBuilder sb = new StringBuilder();
-    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PROP.ID>}})");
+    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})");
     sb.append(buildSetter("user", NodeProperty.NAME));
     sb.append(buildSetter("user", NodeProperty.FIRST_NAME));
     sb.append(buildSetter("user", NodeProperty.LAST_NAME));
@@ -49,12 +49,12 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (user:<LABEL.USER>)" +
         " RETURN user" +
-        " ORDER BY LOWER(user.<PROP.NAME>)";
+        " ORDER BY toLower(user.<PROP.NAME>)";
   }
 
   public static String getUserById() {
     return "" +
-        " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})" +
         " RETURN user";
   }
 
@@ -75,7 +75,7 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
 
   public static String userExists() {
     return "" +
-        " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})" +
         " RETURN COUNT(user) = 1";
   }
 }

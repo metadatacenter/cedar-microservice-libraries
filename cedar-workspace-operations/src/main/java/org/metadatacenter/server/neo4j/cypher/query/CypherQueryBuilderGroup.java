@@ -47,7 +47,7 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
 
     sb.append(" WITH group");
 
-    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{userId}})");
+    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
 
     sb.append(" MERGE (user)-[:<REL.ADMINISTERS>]->(group)");
     sb.append(" MERGE (user)-[:<REL.MEMBEROF>]->(group)");
@@ -60,12 +60,12 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (group:<LABEL.GROUP>)" +
         " RETURN group" +
-        " ORDER BY LOWER(group.<PROP.NAME>)";
+        " ORDER BY toLower(group.<PROP.NAME>)";
   }
 
   public static String updateGroupById(Map<NodeProperty, String> updateFields) {
     StringBuilder sb = new StringBuilder();
-    sb.append(" MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PROP.ID>}})");
+    sb.append(" MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})");
     sb.append(buildSetter("group", NodeProperty.LAST_UPDATED_BY));
     sb.append(buildSetter("group", NodeProperty.LAST_UPDATED_ON));
     sb.append(buildSetter("group", NodeProperty.LAST_UPDATED_ON_TS));
@@ -78,39 +78,39 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
 
   public static String deleteGroupById() {
     return "" +
-        " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})" +
         " DETACH DELETE group";
   }
 
   public static String getGroupUsersWithRelation(RelationLabel relationLabel) {
     return "" +
         " MATCH (user:<LABEL.USER>)" +
-        " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})" +
         " MATCH (user)-[:" + relationLabel + "]->(group)" +
         " RETURN user";
   }
 
   public static String getGroupBySpecialValue() {
     return "" +
-        " MATCH (group:<LABEL.GROUP> {<PROP.SPECIAL_GROUP>:{<PROP.SPECIAL_GROUP>}})" +
+        " MATCH (group:<LABEL.GROUP> {<PROP.SPECIAL_GROUP>:{<PH.SPECIAL_GROUP>}})" +
         " RETURN group";
   }
 
   public static String getGroupById() {
     return "" +
-        " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})" +
         " RETURN group";
   }
 
   public static String getGroupByName() {
     return "" +
-        " MATCH (group:<LABEL.GROUP> {<PROP.NAME>:{<PROP.NAME>}})" +
+        " MATCH (group:<LABEL.GROUP> {<PROP.NAME>:{<PH.NAME>}})" +
         " RETURN group";
   }
 
   public static String updateCategoryById(Map<NodeProperty, String> updateFields) {
     StringBuilder sb = new StringBuilder();
-    sb.append(" MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.ID>}})");
+    sb.append(" MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})");
     sb.append(buildSetter("category", NodeProperty.LAST_UPDATED_BY));
     sb.append(buildSetter("category", NodeProperty.LAST_UPDATED_ON));
     sb.append(buildSetter("category", NodeProperty.LAST_UPDATED_ON_TS));

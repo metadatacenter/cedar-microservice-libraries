@@ -9,7 +9,7 @@ public class CypherQueryBuilderCategoryPermission extends AbstractCypherQueryBui
     return "" +
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +
         " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.CATEGORY_ID>}})" +
-        " CREATE UNIQUE (user)-[:" + RelationLabel.forCategoryPermission(permission) + "]->(category)" +
+        " MERGE (user)-[:" + RelationLabel.forCategoryPermission(permission) + "]->(category)" +
         " RETURN user";
   }
 
@@ -17,7 +17,7 @@ public class CypherQueryBuilderCategoryPermission extends AbstractCypherQueryBui
     return "" +
         " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.GROUP_ID>}})" +
         " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.CATEGORY_ID>}})" +
-        " CREATE UNIQUE (group)-[:" + RelationLabel.forCategoryPermission(permission) + "]->(category)" +
+        " MERGE (group)-[:" + RelationLabel.forCategoryPermission(permission) + "]->(category)" +
         " RETURN group";
   }
 
@@ -69,7 +69,7 @@ public class CypherQueryBuilderCategoryPermission extends AbstractCypherQueryBui
   public static String getUsersWithDirectPermissionOnCategory(RelationLabel relationLabel) {
     return "" +
         " MATCH (user:<LABEL.USER>)" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
         " MATCH (user)-[:" + relationLabel + "]->(category)" +
         " RETURN user";
   }
@@ -77,7 +77,7 @@ public class CypherQueryBuilderCategoryPermission extends AbstractCypherQueryBui
   public static String getGroupsWithDirectPermissionOnCategory(RelationLabel relationLabel) {
     return "" +
         " MATCH (group:<LABEL.GROUP>)" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PROP.ID>}})" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
         " MATCH (group)-[:" + relationLabel + "]->(category)" +
         " RETURN group";
   }

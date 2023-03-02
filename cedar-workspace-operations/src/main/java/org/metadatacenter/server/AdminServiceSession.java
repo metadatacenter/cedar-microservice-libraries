@@ -18,4 +18,5 @@ public interface AdminServiceSession {
 
   boolean createIndex(NodeLabel nodeLabel, NodeProperty property);
 
+  boolean removeAllConstraintsAndIndices();
 }

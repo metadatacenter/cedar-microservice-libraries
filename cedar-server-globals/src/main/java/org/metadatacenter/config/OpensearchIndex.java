@@ -1,6 +1,6 @@
 package org.metadatacenter.config;
 
-public class ElasticsearchIndex {
+public class OpensearchIndex {
 
   private String name;
 

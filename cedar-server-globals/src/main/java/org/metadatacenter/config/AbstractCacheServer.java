@@ -2,7 +2,7 @@ package org.metadatacenter.config;
 
 public class AbstractCacheServer {
 
-  CacheServerConnection connection;
+  private CacheServerConnection connection;
 
   public CacheServerConnection getConnection() {
     return connection;

@@ -29,7 +29,7 @@ public class CedarWrappedQueryParameter extends CedarParameterNoun {
   @Override
   public String stringValue() {
     if (wrapped != null && wrapped.isPresent() && wrapped.get() != null) {
-      return wrapped.get().toString();
+      return getStringValue();
     } else {
       return null;
     }
@@ -38,9 +38,17 @@ public class CedarWrappedQueryParameter extends CedarParameterNoun {
   @Override
   public boolean booleanValue() {
     if (wrapped != null && wrapped.isPresent() && wrapped.get() != null) {
-      return "true".equals(wrapped.get().toString());
+      return "true".equals(getStringValue());
     } else {
       return false;
+    }
+  }
+
+  protected String getStringValue() {
+    if (trimmed) {
+      return wrapped.get().toString().trim();
+    } else {
+      return wrapped.get().toString();
     }
   }
 

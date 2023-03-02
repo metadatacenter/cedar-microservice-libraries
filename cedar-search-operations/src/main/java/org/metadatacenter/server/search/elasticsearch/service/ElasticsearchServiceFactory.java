@@ -1,5 +1,6 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
+import com.mongodb.util.JSON;
 import org.metadatacenter.config.CedarConfig;
 
 public class ElasticsearchServiceFactory {
@@ -22,7 +23,11 @@ public class ElasticsearchServiceFactory {
 
   private void init(CedarConfig cedarConfig) {
     this.cedarConfig = cedarConfig;
+    System.out.println("ElasticsearchServiceFactory.init");
     this.managementService = new ElasticsearchManagementService(cedarConfig.getElasticsearchConfig(), cedarConfig);
+    System.out.println("Built client:");
+    System.out.println(this.managementService.getClient());
+    System.out.println("*********************** ------------------------------------------------------");
   }
 
   public ElasticsearchManagementService getManagementService() {

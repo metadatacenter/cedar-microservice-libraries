@@ -124,7 +124,11 @@ public interface FolderServiceSession {
 
   boolean setOpen(CedarArtifactId id);
 
+  boolean setOpen(CedarFolderId folderId);
+
   boolean setNotOpen(CedarArtifactId id);
+
+  boolean setNotOpen(CedarFolderId id);
 
   long getNumberOfInstances(CedarTemplateId templateId);
 
@@ -140,4 +144,6 @@ public interface FolderServiceSession {
   long searchIsBasedOnCount(List<CedarResourceType> resourceTypeList, CedarTemplateId isBasedOn);
 
   CedarResourceType getResourceType(CedarResourceId resourceId);
+
+  boolean isArtifactOpenImplicitly(CedarArtifactId artifactId);
 }

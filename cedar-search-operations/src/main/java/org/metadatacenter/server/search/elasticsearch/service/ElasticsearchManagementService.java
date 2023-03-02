@@ -1,19 +1,18 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
-import com.carrotsearch.hppc.cursors.ObjectCursor;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.support.master.AcknowledgedResponse;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.transport.client.PreBuiltTransportClient;
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.config.ElasticsearchConfig;
-import org.metadatacenter.config.ElasticsearchMappingsConfig;
+import org.metadatacenter.config.OpensearchConfig;
+import org.metadatacenter.config.OpensearchMappingsConfig;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.search.IndexedDocumentType;
 import org.slf4j.Logger;
@@ -28,15 +27,16 @@ public class ElasticsearchManagementService {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchManagementService.class);
 
-  private final ElasticsearchConfig config;
+  private final OpensearchConfig config;
   private final Settings settings;
   private final Map<String, Object> searchIndexSettings;
   private final Map<String, Object> rulesIndexSettings;
-  private final ElasticsearchMappingsConfig searchIndexMappings;
-  private final ElasticsearchMappingsConfig rulesIndexMappings;
+  private final OpensearchMappingsConfig searchIndexMappings;
+  private final OpensearchMappingsConfig rulesIndexMappings;
   private Client elasticClient = null;
 
-  public ElasticsearchManagementService(ElasticsearchConfig config, CedarConfig cedarConfig) {
+  public ElasticsearchManagementService(OpensearchConfig config, CedarConfig cedarConfig) {
+    System.setProperty("es.set.netty.runtime.available.processors", "false");
     this.config = config;
     this.searchIndexSettings = (cedarConfig.getSearchSettingsMappingsConfig().getSettings());
     this.rulesIndexSettings = cedarConfig.getRulesSettingsMappingsConfig().getSettings();
@@ -72,7 +72,7 @@ public class ElasticsearchManagementService {
   }
 
   private void createIndex(String indexName, Map<String, Object> indexSettings,
-                           ElasticsearchMappingsConfig indexMappings)
+                           OpensearchMappingsConfig indexMappings)
       throws CedarProcessingException {
 
     Client client = getClient();
@@ -135,13 +135,16 @@ public class ElasticsearchManagementService {
 
   public List<String> getAllIndices() {
     List<String> indexNames = new ArrayList<>();
-    ImmutableOpenMap<String, IndexMetaData> indices = getClient().admin().cluster()
-        .prepareState().execute()
-        .actionGet().getState()
-        .getMetaData().getIndices();
-    for (ObjectCursor<IndexMetaData> indexMetaDataObjectCursor : indices.values()) {
-      IndexMetaData value = indexMetaDataObjectCursor.value;
-      indexNames.add(value.getIndex().getName());
+    try {
+      ImmutableOpenMap<String, IndexMetadata> indices = getClient().admin().cluster()
+              .prepareState().execute()
+              .actionGet().getState()
+              .getMetadata().getIndices();
+      for (IndexMetadata value : indices.values()) {
+        indexNames.add(value.getIndex().getName());
+      }
+    } catch (Exception e) {
+      log.error("There was an error retrieving existing indices");
     }
     return indexNames;
   }

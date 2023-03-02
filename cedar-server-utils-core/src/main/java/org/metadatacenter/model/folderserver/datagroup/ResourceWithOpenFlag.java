@@ -6,9 +6,9 @@ import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 public interface ResourceWithOpenFlag {
 
   @JsonProperty(NodeProperty.Label.IS_OPEN)
-  Boolean isOpen();
+  boolean isOpen();
 
   @JsonProperty(NodeProperty.Label.IS_OPEN)
-  void setOpen(Boolean isOpen);
+  void setOpen(boolean open);
 
 }

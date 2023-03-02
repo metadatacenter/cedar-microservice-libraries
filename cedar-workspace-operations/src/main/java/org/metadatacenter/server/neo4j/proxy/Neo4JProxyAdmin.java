@@ -36,4 +36,10 @@ public class Neo4JProxyAdmin extends AbstractNeo4JProxy {
     CypherQuery q = new CypherQueryLiteral(cypher);
     return executeWrite(q, "creating index");
   }
+
+  boolean removeAllConstraintsAndIndices() {
+    String cypher = CypherQueryBuilderAdmin.removeAllConstraintsAndIndices();
+    CypherQuery q = new CypherQueryLiteral(cypher);
+    return executeWrite(q, "removing all constraints and indices");
+  }
 }

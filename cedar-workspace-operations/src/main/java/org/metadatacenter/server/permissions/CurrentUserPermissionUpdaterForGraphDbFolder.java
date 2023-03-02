@@ -1,6 +1,7 @@
 package org.metadatacenter.server.permissions;
 
 import org.metadatacenter.id.CedarFilesystemResourceId;
+import org.metadatacenter.model.folderserver.datagroup.ResourceWithOpenFlag;
 import org.metadatacenter.permission.currentuserpermission.CurrentUserPermissionUpdater;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
@@ -30,6 +31,8 @@ public class CurrentUserPermissionUpdaterForGraphDbFolder extends CurrentUserPer
       if (!folder.isRoot() && !folder.isSystem() && !folder.isUserHome()) {
         folder.getCurrentUserPermissions().setCanShare(true);
       }
+      folder.getCurrentUserPermissions().setCanMakeOpen(!folder.isOpen());
+      folder.getCurrentUserPermissions().setCanMakeNotOpen(folder.isOpen());
     } else if (permissionSession.userHasReadAccessToResource(id)) {
       folder.getCurrentUserPermissions().setCanRead(true);
     }

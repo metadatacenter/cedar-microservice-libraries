@@ -35,6 +35,10 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
 
   protected NodeSharePermission everybodyPermission;
 
+  protected Boolean isOpen;
+
+  protected Boolean isOpenImplicitly;
+
   protected FolderServerResourceExtract(CedarResourceType resourceType) {
     super();
     this.usersData = new UsersDataGroup();
@@ -140,6 +144,22 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
     this.everybodyPermission = everybodyPermission;
   }
 
+  public Boolean getIsOpen() {
+    return isOpen;
+  }
+
+  public void setIsOpen(Boolean isOpen) {
+    this.isOpen = isOpen;
+  }
+
+  public Boolean getIsOpenImplicitly() {
+    return isOpenImplicitly;
+  }
+
+  public void setIsOpenImplicitly(Boolean openImplicitly) {
+    isOpenImplicitly = openImplicitly;
+  }
+
   public static FolderServerResourceExtract forType(CedarResourceType t) {
     switch (t) {
       case FOLDER:
@@ -164,7 +184,8 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
   }
 
   public static FolderServerArtifactExtract anonymous(FolderServerArtifactExtract resource) {
-    FolderServerArtifactExtract anon = (FolderServerArtifactExtract) FolderServerResourceExtract.forType(resource.getType());
+    FolderServerArtifactExtract anon =
+        (FolderServerArtifactExtract) FolderServerResourceExtract.forType(resource.getType());
     anon.setId(resource.getId());
     anon.setActiveUserCanRead(false);
     return anon;
