@@ -10,6 +10,8 @@ public class ServerConfig {
 
   private String base;
 
+  private String adminBase;
+
   private boolean apiDoc;
 
   public int getHttpPort() {
@@ -26,6 +28,10 @@ public class ServerConfig {
 
   public String getBase() {
     return base;
+  }
+
+  public String getAdminBase() {
+    return adminBase;
   }
 
   public boolean isApiDoc() {

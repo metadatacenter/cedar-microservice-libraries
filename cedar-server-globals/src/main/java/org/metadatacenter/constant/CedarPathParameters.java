@@ -6,5 +6,6 @@ public final class CedarPathParameters {
   }
 
   public static final String PP_ID = "id";
+  public static final String PP_SERVER = "server";
 
 }

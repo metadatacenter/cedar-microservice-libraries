@@ -23,6 +23,15 @@ public enum ServerName {
     this.name = name;
   }
 
+  public static ServerName forName(String server) {
+    for (ServerName s : ServerName.values()) {
+      if (s.getName().equals(server)) {
+        return s;
+      }
+    }
+    return null;
+  }
+
   public String getName() {
     return name;
   }

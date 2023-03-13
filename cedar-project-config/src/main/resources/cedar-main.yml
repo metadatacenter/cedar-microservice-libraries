@@ -126,21 +126,25 @@ servers:
     httpPort: "${CEDAR_GROUP_HTTP_PORT}"
     adminPort: "${CEDAR_GROUP_ADMIN_PORT}"
     stopPort: "${CEDAR_GROUP_STOP_PORT}"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_GROUP_ADMIN_PORT}/"
   messaging:
     httpPort: "${CEDAR_MESSAGING_HTTP_PORT}"
     adminPort: "${CEDAR_MESSAGING_ADMIN_PORT}"
     stopPort: "${CEDAR_MESSAGING_STOP_PORT}"
     base: "http://${CEDAR_NET_GATEWAY}:${CEDAR_MESSAGING_HTTP_PORT}/"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_MESSAGING_ADMIN_PORT}/"
   repo:
     httpPort: "${CEDAR_REPO_HTTP_PORT}"
     adminPort: "${CEDAR_REPO_ADMIN_PORT}"
     stopPort: "${CEDAR_REPO_STOP_PORT}"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_REPO_ADMIN_PORT}/"
   resource:
     httpPort: "${CEDAR_RESOURCE_HTTP_PORT}"
     adminPort: "${CEDAR_RESOURCE_ADMIN_PORT}"
     stopPort: "${CEDAR_RESOURCE_STOP_PORT}"
     apiDoc: true
     base: "http://${CEDAR_NET_GATEWAY}:${CEDAR_RESOURCE_HTTP_PORT}/"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_RESOURCE_ADMIN_PORT}/"
     loadValueSetsOntology: "http://${CEDAR_NET_GATEWAY}:${CEDAR_RESOURCE_HTTP_PORT}/command/load-valuesets-ontology"
     loadValueSetsOntologyStatus: "http://${CEDAR_NET_GATEWAY}:${CEDAR_RESOURCE_HTTP_PORT}/command/load-valuesets-ontology-status"
     regenerateSearchIndex: "http://${CEDAR_NET_GATEWAY}:${CEDAR_RESOURCE_HTTP_PORT}/command/regenerate-search-index"
@@ -151,47 +155,57 @@ servers:
     httpPort: "${CEDAR_SCHEMA_HTTP_PORT}"
     adminPort: "${CEDAR_SCHEMA_ADMIN_PORT}"
     stopPort: "${CEDAR_SCHEMA_STOP_PORT}"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_SCHEMA_ADMIN_PORT}/"
   submission:
     httpPort: "${CEDAR_SUBMISSION_HTTP_PORT}"
     adminPort: "${CEDAR_SUBMISSION_ADMIN_PORT}"
     stopPort: "${CEDAR_SUBMISSION_STOP_PORT}"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_SUBMISSION_ADMIN_PORT}/"
   artifact:
     httpPort: "${CEDAR_ARTIFACT_HTTP_PORT}"
     adminPort: "${CEDAR_ARTIFACT_ADMIN_PORT}"
     stopPort: "${CEDAR_ARTIFACT_STOP_PORT}"
     base: "http://${CEDAR_NET_GATEWAY}:${CEDAR_ARTIFACT_HTTP_PORT}/"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_ARTIFACT_ADMIN_PORT}/"
   terminology:
     httpPort: "${CEDAR_TERMINOLOGY_HTTP_PORT}"
     adminPort: "${CEDAR_TERMINOLOGY_ADMIN_PORT}"
     stopPort: "${CEDAR_TERMINOLOGY_STOP_PORT}"
     apiDoc: true
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_TERMINOLOGY_ADMIN_PORT}/"
   user:
     httpPort: "${CEDAR_USER_HTTP_PORT}"
     adminPort: "${CEDAR_USER_ADMIN_PORT}"
     stopPort: "${CEDAR_USER_STOP_PORT}"
     usersBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_USER_HTTP_PORT}/users/"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_USER_ADMIN_PORT}/"
   valuerecommender:
     httpPort: "${CEDAR_VALUERECOMMENDER_HTTP_PORT}"
     adminPort: "${CEDAR_VALUERECOMMENDER_ADMIN_PORT}"
     stopPort: "${CEDAR_VALUERECOMMENDER_STOP_PORT}"
     base: "http://${CEDAR_NET_GATEWAY}:${CEDAR_VALUERECOMMENDER_HTTP_PORT}/"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_VALUERECOMMENDER_ADMIN_PORT}/"
     apiDoc: true
   worker:
     httpPort: "${CEDAR_WORKER_HTTP_PORT}"
     adminPort: "${CEDAR_WORKER_ADMIN_PORT}"
     stopPort: "${CEDAR_WORKER_STOP_PORT}"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_WORKER_ADMIN_PORT}/"
   openview:
     httpPort: "${CEDAR_OPENVIEW_HTTP_PORT}"
     adminPort: "${CEDAR_OPENVIEW_ADMIN_PORT}"
     stopPort: "${CEDAR_OPENVIEW_STOP_PORT}"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_OPENVIEW_ADMIN_PORT}/"
   internals:
     httpPort: "${CEDAR_INTERNALS_HTTP_PORT}"
     adminPort: "${CEDAR_INTERNALS_ADMIN_PORT}"
     stopPort: "${CEDAR_INTERNALS_STOP_PORT}"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_INTERNALS_ADMIN_PORT}/"
   impex:
     httpPort: "${CEDAR_IMPEX_HTTP_PORT}"
     adminPort: "${CEDAR_IMPEX_ADMIN_PORT}"
     stopPort: "${CEDAR_IMPEX_STOP_PORT}"
+    adminBase: "http://${CEDAR_NET_GATEWAY}:${CEDAR_IMPEX_ADMIN_PORT}/"
 
 
 #Default values for user profile
