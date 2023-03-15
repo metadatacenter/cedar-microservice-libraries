@@ -96,6 +96,15 @@ public enum CedarResourceType {
     return null;
   }
 
+  public static CedarResourceType forPrefix(String prefix) {
+    for (CedarResourceType t : values()) {
+      if (t.getPrefix().equals(prefix)) {
+        return t;
+      }
+    }
+    return null;
+  }
+
   public static CedarResourceType forAtType(String atType) {
     if (atType != null) {
       for (CedarResourceType t : values()) {
