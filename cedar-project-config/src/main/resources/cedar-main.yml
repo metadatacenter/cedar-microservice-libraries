@@ -19,7 +19,7 @@ keycloak:
   clientId: "admin-cli"
   #Configuring Keycloak instead of having a keycloak.json
   realm: "CEDAR"
-  authServerUrl: "https://auth.${CEDAR_HOST}/auth"
+  authServerUrl: "https://auth.${CEDAR_HOST}"
   sslRequired: "ALL"
   resource: "cedar-angular-app"
   publicClient: true
@@ -52,21 +52,25 @@ messagingServer:
   url: "jdbc:mysql://${CEDAR_MESSAGING_MYSQL_HOST}:${CEDAR_MESSAGING_MYSQL_PORT}/${CEDAR_MESSAGING_MYSQL_DB}"
   user: "${CEDAR_MESSAGING_MYSQL_USER}"
   password: "${CEDAR_MESSAGING_MYSQL_PASSWORD}"
-  driverClass: "com.mysql.jdbc.Driver"
+  driverClass: "com.mysql.cj.jdbc.Driver"
   properties:
     createDatabaseIfNotExist: "true"
     serverTimezone: "America/Los_Angeles"
     useSSL: "false"
+    allowPublicKeyRetrieval: "true"
+    hibernate.dialect: "org.hibernate.dialect.MySQL8Dialect"
 
 dbLogging:
   url: "jdbc:mysql://${CEDAR_LOG_MYSQL_HOST}:${CEDAR_LOG_MYSQL_PORT}/${CEDAR_LOG_MYSQL_DB}"
   user: "${CEDAR_LOG_MYSQL_USER}"
   password: "${CEDAR_LOG_MYSQL_PASSWORD}"
-  driverClass: "com.mysql.jdbc.Driver"
+  driverClass: "com.mysql.cj.jdbc.Driver"
   properties:
     createDatabaseIfNotExist: "true"
     serverTimezone: "America/Los_Angeles"
     useSSL: "false"
+    allowPublicKeyRetrieval: "true"
+    hibernate.dialect: "org.hibernate.dialect.MySQL8Dialect"
 
 #Neo4J settings
 neo4j:

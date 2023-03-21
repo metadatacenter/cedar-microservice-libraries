@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.DeserializationProblemHandler;
 import com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider;
 import com.fasterxml.jackson.jaxrs.json.JacksonJsonProvider;
-import org.jboss.resteasy.client.jaxrs.ResteasyClient;
+import jakarta.ws.rs.client.Client;
 import org.jboss.resteasy.client.jaxrs.ResteasyClientBuilder;
 import org.keycloak.adapters.KeycloakDeployment;
 import org.keycloak.admin.client.Keycloak;
@@ -67,7 +67,8 @@ public class KeycloakUtils {
     }
   }
 
-  public static CedarUser getUserFromAuthRequest(LinkedDataUtil linkedDataUtil, AuthRequest authRequest, IUserService userService) throws CedarAccessException {
+  public static CedarUser getUserFromAuthRequest(LinkedDataUtil linkedDataUtil, AuthRequest authRequest,
+                                                 IUserService userService) throws CedarAccessException {
     String token = authRequest.getAuthString();
     AccessToken accessToken = checkIfTokenIsStillActiveByUserInfo(token);
     String userUuid = accessToken.getSubject();
@@ -127,8 +128,8 @@ public class KeycloakUtils {
   public static Keycloak buildKeycloak(KeycloakUtilInfo kcInfo) {
     JacksonJsonProvider jacksonJsonProvider = getCustomizedJacksonJsonProvider();
 
-    ResteasyClient resteasyClient = new ResteasyClientBuilder().connectionPoolSize(10).register(jacksonJsonProvider)
-        .build();
+    // TODO: add connectionPoolSize(10)
+    Client resteasyClient = ResteasyClientBuilder.newBuilder().register(jacksonJsonProvider).build();
 
     return KeycloakBuilder.builder()
         .serverUrl(kcInfo.getKeycloakBaseURI())

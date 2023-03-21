@@ -41,7 +41,7 @@ public class ApplicationCypherLog {
   @Column(length = 36)
   private String localRequestId;
 
-  @Column(length = 50)
+  @Column(length = 16)
   private String systemComponentName;
 
   private long duration;
@@ -64,15 +64,15 @@ public class ApplicationCypherLog {
   @Lob
   private String parameters;
 
-  @Column(length = 1024)
+  @Column(length = 35)
   private String methodName;
 
-  @Column(length = 1024)
+  @Column(length = 85)
   private String className;
 
   private int lineNumber;
 
-  @Column(length = 30)
+  @Column(length = 13)
   private String operation;
 
   @Column(length = 32)
