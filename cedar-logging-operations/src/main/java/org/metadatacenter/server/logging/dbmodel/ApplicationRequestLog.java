@@ -47,28 +47,28 @@ public class ApplicationRequestLog {
   @Column(length = 36)
   private String localRequestId;
 
-  @Column(length = 50)
+  @Column(length = 16)
   private String systemComponentName;
 
-  @Column(length = 50)
+  @Column(length = 14)
   private String type;
 
-  @Column(length = 50)
+  @Column(length = 5)
   private String subType;
 
-  @Column(length = 20)
+  @Column(length = 7)
   private String globalRequestIdSource;
 
-  @Column(length = 255)
+  @Column(length = 70)
   private String userId;
 
-  @Column(length = 255)
+  @Column(length = 36)
   private String clientSessionId;
 
   @Column(length = 32)
   private String jwtTokenHash;
 
-  @Column(length = 20)
+  @Column(length = 9)
   private String authSource;
 
   private Instant requestTime;
@@ -81,21 +81,21 @@ public class ApplicationRequestLog {
 
   private long preHandlerDuration;
 
-  @Column(length = 1024)
+  @Column(length = 35)
   private String methodName;
 
-  @Column(length = 1024)
+  @Column(length = 85)
   private String className;
 
   private int lineNumber;
 
-  @Column(length = 20)
+  @Column(length = 6)
   private String httpMethod;
 
-  @Column(length = 2048)
+  @Column(length = 150)
   private String path;
 
-  @Column(length = 2048)
+  @Column(length = 350)
   private String queryParameters;
 
   @Lob
