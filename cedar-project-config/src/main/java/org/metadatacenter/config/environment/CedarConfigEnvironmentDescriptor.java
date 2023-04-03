@@ -277,6 +277,7 @@ public class CedarConfigEnvironmentDescriptor {
     cedarStopPortResource.add(SystemComponent.SERVER_RESOURCE);
     Set<SystemComponent> cedarServerHostResource = variableToComponent.get(CedarEnvironmentVariable.CEDAR_RESOURCE_SERVER_HOST);
     cedarServerHostResource.add(SystemComponent.KEYCLOAK_EVENT_LISTENER);
+    cedarServerHostResource.add(SystemComponent.ADMIN_TOOL);
 
     Set<SystemComponent> cedarHttpPortSchema = variableToComponent.get(CedarEnvironmentVariable.CEDAR_SCHEMA_HTTP_PORT);
     cedarHttpPortSchema.add(SystemComponent.SERVER_SCHEMA);
