@@ -57,7 +57,7 @@ public enum CedarPermission {
   SEND_PROCESS_MESSAGE(CedarObjectConstants.PROCESS_MESSAGE, CedarObjectConstants.ACCESS_CREATE),
   UPDATE_NOT_ADMINISTERED_GROUP(CedarObjectConstants.NOT_ADMINISTERED_GROUP, CedarObjectConstants.ACCESS_UPDATE),
 
-  INTERNALS_READ(CedarObjectConstants.INTERNALS, CedarObjectConstants.ACCESS_READ);
+  MONITOR_READ(CedarObjectConstants.MONITOR, CedarObjectConstants.ACCESS_READ);
 
   private final String resourceType;
   private final String accessType;

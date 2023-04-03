@@ -14,7 +14,7 @@ public enum SystemComponent {
   SERVER_VALUERECOMMENDER(ServerName.VALUERECOMMENDER),
   SERVER_WORKER(ServerName.WORKER),
   SERVER_OPENVIEW(ServerName.OPENVIEW),
-  SERVER_INTERNALS(ServerName.INTERNALS),
+  SERVER_MONITOR(ServerName.MONITOR),
   SERVER_IMPEX(ServerName.IMPEX),
   FRONTEND_DEVELOPMENT("frontend-development"),
   FRONTEND_TEST("frontend-test"),

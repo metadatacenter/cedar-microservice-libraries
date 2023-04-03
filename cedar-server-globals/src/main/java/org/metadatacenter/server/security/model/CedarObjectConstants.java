@@ -14,7 +14,7 @@ public final class CedarObjectConstants {
   public static final String NOT_WRITABLE_CATEGORY_PERMISSIONS = "not_writable_category_permissions";
   public static final String PROCESS_MESSAGE = "process_message";
   public static final String NOT_ADMINISTERED_GROUP = "not_administered_group";
-  public static final String INTERNALS = "internals";
+  public static final String MONITOR = "monitor";
 
   public static final String ACCESS_CREATE = "create";
   public static final String ACCESS_READ = "read";

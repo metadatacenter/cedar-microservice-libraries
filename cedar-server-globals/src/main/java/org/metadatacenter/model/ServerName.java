@@ -14,7 +14,7 @@ public enum ServerName {
   VALUERECOMMENDER("valuerecommender"),
   WORKER("worker"),
   OPENVIEW("openview"),
-  INTERNALS("internals"),
+  MONITOR("monitor"),
   IMPEX("impex");
 
   private String name;

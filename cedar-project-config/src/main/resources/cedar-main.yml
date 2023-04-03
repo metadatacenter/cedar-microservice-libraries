@@ -200,11 +200,11 @@ servers:
     adminPort: "${CEDAR_OPENVIEW_ADMIN_PORT}"
     stopPort: "${CEDAR_OPENVIEW_STOP_PORT}"
     adminBase: "http://${CEDAR_OPENVIEW_SERVER_HOST}:${CEDAR_OPENVIEW_ADMIN_PORT}/"
-  internals:
-    httpPort: "${CEDAR_INTERNALS_HTTP_PORT}"
-    adminPort: "${CEDAR_INTERNALS_ADMIN_PORT}"
-    stopPort: "${CEDAR_INTERNALS_STOP_PORT}"
-    adminBase: "http://${CEDAR_INTERNALS_SERVER_HOST}:${CEDAR_INTERNALS_ADMIN_PORT}/"
+  monitor:
+    httpPort: "${CEDAR_MONITOR_HTTP_PORT}"
+    adminPort: "${CEDAR_MONITOR_ADMIN_PORT}"
+    stopPort: "${CEDAR_MONITOR_STOP_PORT}"
+    adminBase: "http://${CEDAR_MONITOR_SERVER_HOST}:${CEDAR_MONITOR_ADMIN_PORT}/"
   impex:
     httpPort: "${CEDAR_IMPEX_HTTP_PORT}"
     adminPort: "${CEDAR_IMPEX_ADMIN_PORT}"
@@ -239,7 +239,7 @@ blueprintUserProfile:
       - "categoryPrivilegedAdministrator"
       - "searchReindexer"
       - "processMessageSender"
-      - "internalsManager"
+      - "monitorManager"
   uiPreferences:
     folderView:
       sortBy: "name"

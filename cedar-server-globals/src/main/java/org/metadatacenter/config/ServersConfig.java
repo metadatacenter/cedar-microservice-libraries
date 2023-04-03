@@ -28,7 +28,7 @@ public class ServersConfig {
 
   private ServerConfig openview;
 
-  private ServerConfig internals;
+  private ServerConfig monitor;
 
   private ServerConfig impex;
 
@@ -80,8 +80,8 @@ public class ServersConfig {
     return openview;
   }
 
-  public ServerConfig getInternals() {
-    return internals;
+  public ServerConfig getMonitor() {
+    return monitor;
   }
 
   public ServerConfig getImpex() {
@@ -114,8 +114,8 @@ public class ServersConfig {
         return worker;
       case OPENVIEW:
         return openview;
-      case INTERNALS:
-        return internals;
+      case MONITOR:
+        return monitor;
       case IMPEX:
         return impex;
       default:
