@@ -306,6 +306,7 @@ public class CedarConfigEnvironmentDescriptor {
     Set<SystemComponent> cedarStopPortTemplate = variableToComponent.get(CedarEnvironmentVariable.CEDAR_ARTIFACT_STOP_PORT);
     cedarStopPortTemplate.add(SystemComponent.SERVER_ARTIFACT);
     Set<SystemComponent> cedarServerHostArtifact = variableToComponent.get(CedarEnvironmentVariable.CEDAR_ARTIFACT_SERVER_HOST);
+    cedarServerHostArtifact.add(SystemComponent.SERVER_WORKER);
     cedarServerHostArtifact.add(SystemComponent.SERVER_RESOURCE);
     cedarServerHostArtifact.add(SystemComponent.SERVER_OPENVIEW);
     cedarServerHostArtifact.add(SystemComponent.SERVER_MONITOR);
