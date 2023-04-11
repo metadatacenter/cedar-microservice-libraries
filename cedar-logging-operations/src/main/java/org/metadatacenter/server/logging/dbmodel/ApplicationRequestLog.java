@@ -92,7 +92,7 @@ public class ApplicationRequestLog {
   @Column(length = 6)
   private String httpMethod;
 
-  @Column(length = 150)
+  @Column(length = 350)
   private String path;
 
   @Column(length = 350)
