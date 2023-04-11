@@ -7,18 +7,19 @@ import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.UserServiceSession;
 import org.metadatacenter.server.neo4j.AbstractNeo4JUserSession;
-import org.metadatacenter.server.neo4j.Neo4JFieldValues;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.List;
 
 public class Neo4JUserSessionUserService extends AbstractNeo4JUserSession implements UserServiceSession {
 
-  private Neo4JUserSessionUserService(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cu, String globalRequestId, String localRequestId) {
+  private Neo4JUserSessionUserService(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cu,
+                                      String globalRequestId, String localRequestId) {
     super(cedarConfig, proxies, cu, globalRequestId, localRequestId);
   }
 
-  public static UserServiceSession get(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cedarUser, String globalRequestId,
+  public static UserServiceSession get(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cedarUser,
+                                       String globalRequestId,
                                        String localRequestId) {
     return new Neo4JUserSessionUserService(cedarConfig, proxies, cedarUser, globalRequestId, localRequestId);
   }
@@ -40,5 +41,9 @@ public class Neo4JUserSessionUserService extends AbstractNeo4JUserSession implem
       return proxies.user().addUserToGroup(userId, everybody.getResourceId());
     }
     return false;
+  }
+
+  public long getUserCount() {
+    return proxies.user().getUserCount();
   }
 }

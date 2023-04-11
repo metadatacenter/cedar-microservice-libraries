@@ -78,4 +78,10 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})" +
         " RETURN COUNT(user) = 1";
   }
+
+  public static String getTotalCount() {
+    return "" +
+        " MATCH (user:<LABEL.USER>)" +
+        " RETURN count(user)";
+  }
 }

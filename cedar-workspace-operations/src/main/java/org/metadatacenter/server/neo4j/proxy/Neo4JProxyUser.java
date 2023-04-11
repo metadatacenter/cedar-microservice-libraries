@@ -132,5 +132,12 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetBoolean(q);
   }
+
+  public long getUserCount() {
+    String cypher = CypherQueryBuilderUser.getTotalCount();
+    CypherParameters params = new CypherParameters();
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeReadGetLong(q);
+  }
 }
 

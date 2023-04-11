@@ -146,4 +146,6 @@ public interface FolderServiceSession {
   CedarResourceType getResourceType(CedarResourceId resourceId);
 
   boolean isArtifactOpenImplicitly(CedarArtifactId artifactId);
+
+  long getFolderCount();
 }

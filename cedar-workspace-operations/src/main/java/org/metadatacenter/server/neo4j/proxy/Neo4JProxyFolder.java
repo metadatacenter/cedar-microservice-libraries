@@ -12,7 +12,7 @@ import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFolder;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderUser;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFolder;
-import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderResource;
+import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderGroup;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 
 import java.util.List;
@@ -60,7 +60,8 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     return executeWrite(q, "linking folder");
   }
 
-  FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields, CedarUserId updatedBy) {
+  FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields,
+                                      CedarUserId updatedBy) {
     String cypher = CypherQueryBuilderFolder.updateFolderById(updateFields);
     CypherParameters params = CypherParamBuilderFolder.updateFolderById(folderId, updateFields, updatedBy);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
@@ -84,7 +85,8 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
 
   private <T extends CedarResource> List<T> findFolderPathGenericById(CedarFolderId id, Class<T> klazz) {
     String cypher = CypherQueryBuilderFolder.getFolderLookupQueryById();
-    CypherParameters params = CypherParamBuilderFolder.getFolderLookupByIdParameters(proxies.pathUtil.getRootPath(), id);
+    CypherParameters params = CypherParamBuilderFolder.getFolderLookupByIdParameters(proxies.pathUtil.getRootPath(),
+        id);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, klazz);
   }
@@ -103,7 +105,8 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
 
   FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId) {
     String cypher = CypherQueryBuilderFolder.createFolderAsChildOfId(newFolder);
-    CypherParameters params = CypherParamBuilderFolder.createFolder(proxies.getLinkedDataUtil(), newFolder, parentFolderId);
+    CypherParameters params = CypherParamBuilderFolder.createFolder(proxies.getLinkedDataUtil(), newFolder,
+        parentFolderId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeWriteGetOne(q, FolderServerFolder.class);
   }
@@ -166,4 +169,10 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     return executeReadGetList(q, FileSystemResource.class);
   }
 
+  public long getFolderCount() {
+    String cypher = CypherQueryBuilderFolder.getTotalCount();
+    CypherParameters params = new CypherParameters();
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeReadGetLong(q);
+  }
 }

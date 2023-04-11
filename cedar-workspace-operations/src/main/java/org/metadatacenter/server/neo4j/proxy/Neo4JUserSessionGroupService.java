@@ -19,11 +19,13 @@ import java.util.*;
 
 public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession implements GroupServiceSession {
 
-  private Neo4JUserSessionGroupService(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cu, String globalRequestId, String localRequestId) {
+  private Neo4JUserSessionGroupService(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cu,
+                                       String globalRequestId, String localRequestId) {
     super(cedarConfig, proxies, cu, globalRequestId, localRequestId);
   }
 
-  public static GroupServiceSession get(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cedarUser, String globalRequestId,
+  public static GroupServiceSession get(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cedarUser,
+                                        String globalRequestId,
                                         String localRequestId) {
     return new Neo4JUserSessionGroupService(cedarConfig, proxies, cedarUser, globalRequestId, localRequestId);
   }
@@ -118,5 +120,10 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
       }
     }
     return false;
+  }
+
+  @Override
+  public long getGroupCount() {
+    return proxies.group().getGroupCount();
   }
 }

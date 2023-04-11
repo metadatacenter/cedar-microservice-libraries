@@ -37,7 +37,8 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentFolderId) {
+  public FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource,
+                                                        CedarFolderId parentFolderId) {
     newResource.setCreatedByTotal(cu.getResourceId());
     return proxies.artifact().createResourceAsChildOfId(newResource, parentFolderId);
   }
@@ -48,7 +49,8 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType, Map<NodeProperty, String> updateFields) {
+  public FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
+                                                 Map<NodeProperty, String> updateFields) {
     return proxies.artifact().updateArtifactById(artifactId, updateFields, cu.getResourceId());
   }
 
@@ -121,7 +123,8 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
 
   @Override
   public long findFolderContentsCount(CedarFolderId folderId, NodeListRequest req) {
-    return proxies.resource().findFolderContentsCount(folderId, req.getResourceTypes(), req.getVersion(), req.getPublicationStatus(),
+    return proxies.resource().findFolderContentsCount(folderId, req.getResourceTypes(), req.getVersion(),
+        req.getPublicationStatus(),
         cu.getResourceId());
   }
 
@@ -156,21 +159,27 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public List<FileSystemResource> findFolderContentsFiltered(CedarFolderId folderId, List<CedarResourceType> resourceTypeList,
-                                                             ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+  public List<FileSystemResource> findFolderContentsFiltered(CedarFolderId folderId,
+                                                             List<CedarResourceType> resourceTypeList,
+                                                             ResourceVersionFilter version,
+                                                             ResourcePublicationStatusFilter publicationStatus,
                                                              int limit, int offset, List<String> sortList) {
-    return proxies.resource().findFolderContentsFiltered(folderId, resourceTypeList, version, publicationStatus, limit, offset, sortList, cu);
+    return proxies.resource().findFolderContentsFiltered(folderId, resourceTypeList, version, publicationStatus,
+        limit, offset, sortList, cu);
   }
 
   @Override
   public List<FolderServerResourceExtract> findFolderContentsExtract(CedarFolderId folderId, NodeListRequest req) {
-    return proxies.resource().findFolderContentsExtract(folderId, req.getResourceTypes(), req.getVersion(), req.getPublicationStatus(),
+    return proxies.resource().findFolderContentsExtract(folderId, req.getResourceTypes(), req.getVersion(),
+        req.getPublicationStatus(),
         req.getLimit(), req.getOffset(), req.getSort(), cu.getResourceId());
   }
 
   @Override
-  public List<Map<String, Object>> findFolderContentsExtractMap(CedarFolderId folderId, NodeListRequest req, List<String> fieldNameList) {
-    return proxies.resource().findFolderContentsExtractMap(folderId, req.getResourceTypes(), req.getVersion(), req.getPublicationStatus(),
+  public List<Map<String, Object>> findFolderContentsExtractMap(CedarFolderId folderId, NodeListRequest req,
+                                                                List<String> fieldNameList) {
+    return proxies.resource().findFolderContentsExtractMap(folderId, req.getResourceTypes(), req.getVersion(),
+        req.getPublicationStatus(),
         req.getLimit(), req.getOffset(), req.getSort(), cu.getResourceId(), fieldNameList);
   }
 
@@ -249,36 +258,47 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public List<FolderServerResourceExtract> viewSharedWithMe(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
-                                                            ResourcePublicationStatusFilter publicationStatus, int limit, int offset,
+  public List<FolderServerResourceExtract> viewSharedWithMe(List<CedarResourceType> resourceTypeList,
+                                                            ResourceVersionFilter version,
+                                                            ResourcePublicationStatusFilter publicationStatus,
+                                                            int limit, int offset,
                                                             List<String> sortList) {
-    return proxies.resource().viewSharedWithMeFiltered(resourceTypeList, version, publicationStatus, limit, offset, sortList, cu.getResourceId());
+    return proxies.resource().viewSharedWithMeFiltered(resourceTypeList, version, publicationStatus, limit, offset,
+        sortList, cu.getResourceId());
   }
 
   @Override
-  public List<FolderServerResourceExtract> viewSharedWithEverybody(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
-                                                                   ResourcePublicationStatusFilter publicationStatus, int limit, int offset,
+  public List<FolderServerResourceExtract> viewSharedWithEverybody(List<CedarResourceType> resourceTypeList,
+                                                                   ResourceVersionFilter version,
+                                                                   ResourcePublicationStatusFilter publicationStatus,
+                                                                   int limit, int offset,
                                                                    List<String> sortList) {
-    return proxies.resource().viewSharedWithEverybodyFiltered(resourceTypeList, version, publicationStatus, limit, offset, sortList,
+    return proxies.resource().viewSharedWithEverybodyFiltered(resourceTypeList, version, publicationStatus, limit,
+        offset, sortList,
         cu.getResourceId());
   }
 
   @Override
   public long viewSharedWithMeCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
                                     ResourcePublicationStatusFilter publicationStatus) {
-    return proxies.resource().viewSharedWithMeFilteredCount(resourceTypeList, version, publicationStatus, cu.getResourceId());
+    return proxies.resource().viewSharedWithMeFilteredCount(resourceTypeList, version, publicationStatus,
+        cu.getResourceId());
   }
 
   @Override
   public long viewSharedWithEverybodyCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
                                            ResourcePublicationStatusFilter publicationStatus) {
-    return proxies.resource().viewSharedWithEverybodyFilteredCount(resourceTypeList, version, publicationStatus, cu.getResourceId());
+    return proxies.resource().viewSharedWithEverybodyFilteredCount(resourceTypeList, version, publicationStatus,
+        cu.getResourceId());
   }
 
   @Override
-  public List<FolderServerResourceExtract> viewAll(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
-                                                   ResourcePublicationStatusFilter publicationStatus, int limit, int offset, List<String> sortList) {
-    return proxies.resource().viewAllFiltered(resourceTypeList, version, publicationStatus, limit, offset, sortList, cu);
+  public List<FolderServerResourceExtract> viewAll(List<CedarResourceType> resourceTypeList,
+                                                   ResourceVersionFilter version,
+                                                   ResourcePublicationStatusFilter publicationStatus, int limit,
+                                                   int offset, List<String> sortList) {
+    return proxies.resource().viewAllFiltered(resourceTypeList, version, publicationStatus, limit, offset, sortList,
+        cu);
   }
 
   @Override
@@ -409,7 +429,8 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public List<FolderServerResourceExtract> searchIsBasedOn(List<CedarResourceType> resourceTypeList, CedarTemplateId isBasedOnId, int limit,
+  public List<FolderServerResourceExtract> searchIsBasedOn(List<CedarResourceType> resourceTypeList,
+                                                           CedarTemplateId isBasedOnId, int limit,
                                                            int offset, List<String> sortList) {
     return proxies.resource().searchIsBasedOn(resourceTypeList, isBasedOnId, limit, offset, sortList, cu);
   }
@@ -427,6 +448,11 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   @Override
   public boolean isArtifactOpenImplicitly(CedarArtifactId artifactId) {
     return proxies.resource().isFileSystemResourceOpenImplicitly(artifactId);
+  }
+
+  @Override
+  public long getFolderCount() {
+    return proxies.folder().getFolderCount();
   }
 
 }

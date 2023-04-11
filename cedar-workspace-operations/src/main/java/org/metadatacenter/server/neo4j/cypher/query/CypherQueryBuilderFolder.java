@@ -156,4 +156,10 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " REMOVE folder.<PROP.IS_OPEN>" +
         " RETURN folder";
   }
+
+  public static String getTotalCount() {
+    return "" +
+        " MATCH (folder:<LABEL.FOLDER>)" +
+        " RETURN count(folder)";
+  }
 }

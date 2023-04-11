@@ -1,11 +1,13 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
+import org.apache.lucene.search.TotalHits;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.search.SearchHits;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.OpensearchConfig;
@@ -45,8 +47,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static org.metadatacenter.constant.ElasticsearchConstants.DOCUMENT_CEDAR_ID;
-import static org.metadatacenter.constant.ElasticsearchConstants.GROUPS;
+import static org.metadatacenter.constant.ElasticsearchConstants.*;
 
 public class NodeSearchingService extends AbstractSearchingService {
 
@@ -213,4 +214,19 @@ public class NodeSearchingService extends AbstractSearchingService {
     }
   }
 
+  public long getTotalCount(CedarResourceType resourceType) throws CedarProcessingException {
+    try {
+      SearchResponse responseSearch =
+          client.prepareSearch(config.getIndexes().getSearchIndex().getName())
+              .setQuery(QueryBuilders.matchQuery(RESOURCE_TYPE, resourceType.getValue()))
+              .setSize(0)
+              .execute().actionGet();
+
+      SearchHits hits = responseSearch.getHits();
+      TotalHits totalHits = hits.getTotalHits();
+      return totalHits.value;
+    } catch (Exception e) {
+      throw new CedarProcessingException(e);
+    }
+  }
 }

@@ -1,5 +1,7 @@
 package org.metadatacenter.server.neo4j.cypher.query;
 
+import org.metadatacenter.model.CedarResourceType;
+import org.metadatacenter.server.neo4j.NodeLabel;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
@@ -7,7 +9,8 @@ import java.util.List;
 
 public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
 
-  public static String getSharedWithMeLookupQuery(ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+  public static String getSharedWithMeLookupQuery(ResourceVersionFilter version,
+                                                  ResourcePublicationStatusFilter publicationStatus,
                                                   List<String> sortList) {
     StringBuilder sb = new StringBuilder();
     sb.append(
@@ -36,7 +39,8 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     return sb.toString();
   }
 
-  public static String getSharedWithMeCountQuery(ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus) {
+  public static String getSharedWithMeCountQuery(ResourceVersionFilter version,
+                                                 ResourcePublicationStatusFilter publicationStatus) {
     StringBuilder sb = new StringBuilder();
     sb.append(
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})-" +
@@ -61,7 +65,8 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     return sb.toString();
   }
 
-  public static String getAllLookupQuery(ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, List<String> sortList,
+  public static String getAllLookupQuery(ResourceVersionFilter version,
+                                         ResourcePublicationStatusFilter publicationStatus, List<String> sortList,
                                          boolean addPermissionConditions) {
     StringBuilder sb = new StringBuilder();
     if (addPermissionConditions) {
@@ -86,7 +91,8 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     return sb.toString();
   }
 
-  public static String getAllCountQuery(ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+  public static String getAllCountQuery(ResourceVersionFilter version,
+                                        ResourcePublicationStatusFilter publicationStatus,
                                         boolean addPermissionConditions) {
     StringBuilder sb = new StringBuilder();
     if (addPermissionConditions) {
@@ -213,4 +219,9 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     return sb.toString();
   }
 
+  public static String getTotalCount(CedarResourceType resourceType) {
+    return "" +
+        " MATCH (resource:" + NodeLabel.forCedarResourceType(resourceType) + ")" +
+        " RETURN count(resource)";
+  }
 }

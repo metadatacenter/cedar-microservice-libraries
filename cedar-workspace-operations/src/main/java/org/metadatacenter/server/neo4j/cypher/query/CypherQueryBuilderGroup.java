@@ -134,4 +134,10 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
         " MATCH (user)-[:<REL.ADMINISTERS>]->(group:<LABEL.GROUP>)" +
         " RETURN group";
   }
+
+  public static String getTotalCount() {
+    return "" +
+        " MATCH (group:<LABEL.GROUP>)" +
+        " RETURN count(group)";
+  }
 }

@@ -13,4 +13,6 @@ public interface UserServiceSession {
   FolderServerUser getUser(CedarUserId userId);
 
   boolean addUserToEverybodyGroup(CedarUserId userId) throws CedarProcessingException;
+
+  long getUserCount();
 }

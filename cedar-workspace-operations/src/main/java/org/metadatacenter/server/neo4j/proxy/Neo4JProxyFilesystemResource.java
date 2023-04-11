@@ -3,6 +3,7 @@ package org.metadatacenter.server.neo4j.proxy;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.model.CedarResource;
+import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
 import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
@@ -12,6 +13,7 @@ import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFilesystemResource;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderArtifact;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFilesystemResource;
+import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFolder;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderResource;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 
@@ -60,5 +62,12 @@ public class Neo4JProxyFilesystemResource extends AbstractNeo4JProxy {
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, klazz);
   }
-  
+
+  public long getTotalCount(CedarResourceType resourceType) {
+    String cypher = CypherQueryBuilderResource.getTotalCount(resourceType);
+    CypherParameters params = new CypherParameters();
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeReadGetLong(q);
+  }
+
 }

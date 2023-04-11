@@ -29,4 +29,6 @@ public interface GroupServiceSession {
   BackendCallResult updateGroupUsers(CedarGroupId groupId, CedarGroupUsersRequest request);
 
   boolean userAdministersGroup(CedarGroupId groupId);
+
+  long getGroupCount();
 }

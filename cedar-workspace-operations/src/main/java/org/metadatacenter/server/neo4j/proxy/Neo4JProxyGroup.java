@@ -1,7 +1,6 @@
 package org.metadatacenter.server.neo4j.proxy;
 
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.RelationLabel;
@@ -13,6 +12,7 @@ import org.metadatacenter.server.neo4j.cypher.parameter.AbstractCypherParamBuild
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderGroup;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderUser;
 import org.metadatacenter.server.neo4j.cypher.query.AbstractCypherQueryBuilder;
+import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderCategory;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderGroup;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 
@@ -25,7 +25,8 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
     super(proxies, cedarConfig);
   }
 
-  FolderServerGroup createGroup(CedarGroupId groupId, String name, String description, CedarUserId ownerId, String specialGroup) {
+  FolderServerGroup createGroup(CedarGroupId groupId, String name, String description, CedarUserId ownerId,
+                                String specialGroup) {
     String cypher = CypherQueryBuilderGroup.createGroupWithAdministrator();
     CypherParameters params = CypherParamBuilderGroup.createGroup(groupId, name, description, ownerId, specialGroup);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
@@ -52,7 +53,8 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
     return executeReadGetOne(q, FolderServerGroup.class);
   }
 
-  FolderServerGroup updateGroupById(CedarGroupId groupId, Map<NodeProperty, String> updateFields, CedarUserId updatedBy) {
+  FolderServerGroup updateGroupById(CedarGroupId groupId, Map<NodeProperty, String> updateFields,
+                                    CedarUserId updatedBy) {
     String cypher = CypherQueryBuilderGroup.updateGroupById(updateFields);
     CypherParameters params = CypherParamBuilderGroup.updateGroupById(groupId, updateFields, updatedBy);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
@@ -137,6 +139,13 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
 
   public FolderServerGroup getEverybodyGroup() {
     return findGroupBySpecialValue(Neo4JFieldValues.SPECIAL_GROUP_EVERYBODY);
+  }
+
+  public long getGroupCount() {
+    String cypher = CypherQueryBuilderGroup.getTotalCount();
+    CypherParameters params = new CypherParameters();
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeReadGetLong(q);
   }
 
 }
