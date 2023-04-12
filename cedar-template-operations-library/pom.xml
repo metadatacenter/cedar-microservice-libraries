@@ -4,12 +4,12 @@
 
   <parent>
     <groupId>org.metadatacenter</groupId>
-    <artifactId>cedar-server-core-library</artifactId>
+    <artifactId>cedar-microservice-libraries</artifactId>
     <version>2.6.24-SNAPSHOT</version>
   </parent>
 
   <groupId>org.metadatacenter</groupId>
-  <artifactId>cedar-template-operations</artifactId>
+  <artifactId>cedar-template-operations-library</artifactId>
   <packaging>jar</packaging>
 
   <name>CEDAR Template Server Operations</name>
@@ -20,7 +20,7 @@
   <dependencies>
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-server-utils-core</artifactId>
+      <artifactId>cedar-server-utils-core-library</artifactId>
     </dependency>
 
     <dependency>
@@ -35,7 +35,7 @@
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-server-utils-dropwizard</artifactId>
+      <artifactId>cedar-server-utils-dropwizard-library</artifactId>
     </dependency>
   </dependencies>
 

@@ -4,12 +4,12 @@
 
   <parent>
     <groupId>org.metadatacenter</groupId>
-    <artifactId>cedar-server-core-library</artifactId>
+    <artifactId>cedar-microservice-libraries</artifactId>
     <version>2.6.24-SNAPSHOT</version>
   </parent>
 
   <groupId>org.metadatacenter</groupId>
-  <artifactId>cedar-logging-operations</artifactId>
+  <artifactId>cedar-logging-operations-library</artifactId>
   <packaging>jar</packaging>
 
   <name>CEDAR Logging Operations</name>
@@ -18,12 +18,12 @@
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-server-utils-core</artifactId>
+      <artifactId>cedar-server-utils-core-library</artifactId>
     </dependency>
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-queue-operations</artifactId>
+      <artifactId>cedar-queue-operations-library</artifactId>
     </dependency>
 
     <dependency>

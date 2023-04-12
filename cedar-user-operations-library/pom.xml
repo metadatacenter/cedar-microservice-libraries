@@ -4,12 +4,12 @@
 
   <parent>
     <groupId>org.metadatacenter</groupId>
-    <artifactId>cedar-server-core-library</artifactId>
+    <artifactId>cedar-microservice-libraries</artifactId>
     <version>2.6.24-SNAPSHOT</version>
   </parent>
 
   <groupId>org.metadatacenter</groupId>
-  <artifactId>cedar-user-operations</artifactId>
+  <artifactId>cedar-user-operations-library</artifactId>
   <packaging>jar</packaging>
 
   <name>CEDAR User Server Operations</name>
@@ -20,12 +20,12 @@
   <dependencies>
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-server-utils-core</artifactId>
+      <artifactId>cedar-server-utils-core-library</artifactId>
     </dependency>
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-workspace-operations</artifactId>
+      <artifactId>cedar-workspace-operations-library</artifactId>
     </dependency>
 
     <dependency>

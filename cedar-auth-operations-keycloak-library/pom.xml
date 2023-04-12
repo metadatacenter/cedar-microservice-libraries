@@ -4,12 +4,12 @@
 
   <parent>
     <groupId>org.metadatacenter</groupId>
-    <artifactId>cedar-server-core-library</artifactId>
+    <artifactId>cedar-microservice-libraries</artifactId>
     <version>2.6.24-SNAPSHOT</version>
   </parent>
 
   <groupId>org.metadatacenter</groupId>
-  <artifactId>cedar-auth-operations-keycloak</artifactId>
+  <artifactId>cedar-auth-operations-keycloak-library</artifactId>
   <packaging>jar</packaging>
 
   <name>CEDAR Auth Operations - Keycloak related code</name>
@@ -18,7 +18,7 @@
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-server-globals</artifactId>
+      <artifactId>cedar-server-globals-library</artifactId>
     </dependency>
 
     <dependency>

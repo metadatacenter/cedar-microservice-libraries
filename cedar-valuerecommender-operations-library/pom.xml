@@ -4,12 +4,12 @@
 
   <parent>
     <groupId>org.metadatacenter</groupId>
-    <artifactId>cedar-server-core-library</artifactId>
+    <artifactId>cedar-microservice-libraries</artifactId>
     <version>2.6.24-SNAPSHOT</version>
   </parent>
 
   <groupId>org.metadatacenter</groupId>
-  <artifactId>cedar-valuerecommender-operations</artifactId>
+  <artifactId>cedar-valuerecommender-operations-library</artifactId>
   <packaging>jar</packaging>
 
   <name>CEDAR ValueRecommender Operations</name>
@@ -21,12 +21,12 @@
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-server-utils-core</artifactId>
+      <artifactId>cedar-server-utils-core-library</artifactId>
     </dependency>
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-queue-operations</artifactId>
+      <artifactId>cedar-queue-operations-library</artifactId>
     </dependency>
 
     <dependency>
@@ -36,7 +36,7 @@
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-server-rest</artifactId>
+      <artifactId>cedar-server-rest-library</artifactId>
     </dependency>
 
   </dependencies>

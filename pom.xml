@@ -9,16 +9,16 @@
   </parent>
 
   <groupId>org.metadatacenter</groupId>
-  <artifactId>cedar-server-core-library</artifactId>
+  <artifactId>cedar-microservice-libraries</artifactId>
   <version>2.6.24-SNAPSHOT</version>
   <packaging>pom</packaging>
 
-  <name>CEDAR Server Core Library</name>
+  <name>CEDAR Microservice Libraries</name>
 
   <scm>
-    <connection>scm:git:https://github.com/metadatacenter/cedar-server-core-library.git</connection>
-    <developerConnection>scm:git:https://github.com/metadatacenter/cedar-server-core-library.git</developerConnection>
-    <url>https://github.com/metadatacenter/cedar-server-core-library</url>
+    <connection>scm:git:https://github.com/metadatacenter/cedar-microservice-libraries.git</connection>
+    <developerConnection>scm:git:https://github.com/metadatacenter/cedar-microservice-libraries.git</developerConnection>
+    <url>https://github.com/metadatacenter/cedar-microservice-libraries</url>
     <tag>HEAD</tag>
   </scm>
 

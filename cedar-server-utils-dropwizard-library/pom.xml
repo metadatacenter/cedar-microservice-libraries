@@ -4,12 +4,12 @@
 
   <parent>
     <groupId>org.metadatacenter</groupId>
-    <artifactId>cedar-server-core-library</artifactId>
+    <artifactId>cedar-microservice-libraries</artifactId>
     <version>2.6.24-SNAPSHOT</version>
   </parent>
 
   <groupId>org.metadatacenter</groupId>
-  <artifactId>cedar-server-utils-dropwizard</artifactId>
+  <artifactId>cedar-server-utils-dropwizard-library</artifactId>
   <packaging>jar</packaging>
 
   <name>CEDAR Server Utils - Dropwizard</name>
@@ -18,7 +18,7 @@
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-server-rest</artifactId>
+      <artifactId>cedar-server-rest-library</artifactId>
     </dependency>
 
     <dependency>
@@ -33,12 +33,12 @@
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-auth-operations-keycloak</artifactId>
+      <artifactId>cedar-auth-operations-keycloak-library</artifactId>
     </dependency>
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-logging-operations</artifactId>
+      <artifactId>cedar-logging-operations-library</artifactId>
     </dependency>
 
     <dependency>
