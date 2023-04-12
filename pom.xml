@@ -23,22 +23,21 @@
   </scm>
 
   <modules>
-    <module>cedar-auth-operations</module>
-    <module>cedar-auth-operations-keycloak</module>
-    <module>cedar-workspace-operations</module>
-    <module>cedar-project-config</module>
-    <module>cedar-server-globals</module>
-    <module>cedar-server-utils-core</module>
-    <module>cedar-server-utils-dropwizard</module>
-    <module>cedar-template-operations</module>
-    <module>cedar-user-operations</module>
-    <module>cedar-server-rest</module>
-    <module>cedar-cache-operations</module>
-    <module>cedar-search-operations</module>
-    <module>cedar-queue-operations</module>
-    <module>cedar-permissions-operations</module>
-    <module>cedar-logging-operations</module>
-    <module>cedar-valuerecommender-operations</module>
+    <module>cedar-auth-operations-library</module>
+    <module>cedar-auth-operations-keycloak-library</module>
+    <module>cedar-workspace-operations-library</module>
+    <module>cedar-server-globals-library</module>
+    <module>cedar-server-utils-core-library</module>
+    <module>cedar-server-utils-dropwizard-library</module>
+    <module>cedar-template-operations-library</module>
+    <module>cedar-user-operations-library</module>
+    <module>cedar-server-rest-library</module>
+    <module>cedar-cache-operations-library</module>
+    <module>cedar-search-operations-library</module>
+    <module>cedar-queue-operations-library</module>
+    <module>cedar-permissions-operations-library</module>
+    <module>cedar-logging-operations-library</module>
+    <module>cedar-valuerecommender-operations-library</module>
   </modules>
 
   <build>
