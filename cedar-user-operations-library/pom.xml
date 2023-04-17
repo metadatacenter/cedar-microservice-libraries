@@ -12,7 +12,7 @@
   <artifactId>cedar-user-operations-library</artifactId>
   <packaging>jar</packaging>
 
-  <name>CEDAR User Server Operations</name>
+  <name>CEDAR User Operations Library</name>
 
   <properties>
   </properties>

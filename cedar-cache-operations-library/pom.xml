@@ -12,7 +12,7 @@
   <artifactId>cedar-cache-operations-library</artifactId>
   <packaging>jar</packaging>
 
-  <name>CEDAR Cache Operations</name>
+  <name>CEDAR Cache Operations Library</name>
 
 
   <dependencies>

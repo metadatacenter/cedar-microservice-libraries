@@ -12,7 +12,7 @@
   <artifactId>cedar-workspace-operations-library</artifactId>
   <packaging>jar</packaging>
 
-  <name>CEDAR Workspace Server Operations</name>
+  <name>CEDAR Workspace Operations Library</name>
 
   <dependencies>
 
