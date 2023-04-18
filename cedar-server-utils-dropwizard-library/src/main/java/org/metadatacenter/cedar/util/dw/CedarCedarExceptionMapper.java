@@ -43,7 +43,7 @@ public class CedarCedarExceptionMapper extends AbstractExceptionMapper implement
     } else {
       log.warn(":CCEM:msg :" + exception.getMessage());
     }
-    return Response.status(errorPack.getStatus())
+    return Response.status(errorPack.getStatus().getStatusCode())
         .entity(errorPack)
         .type(MediaType.APPLICATION_JSON)
         .build();

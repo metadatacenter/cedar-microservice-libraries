@@ -4,6 +4,7 @@ import org.metadatacenter.error.CedarAssertionResult;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.error.CedarErrorPack;
 import org.metadatacenter.error.CedarSuggestedAction;
+import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.rest.CedarAssertionNoun;
 import org.metadatacenter.rest.assertion.CedarAssertion;
 import org.metadatacenter.rest.assertion.PermissionChecker;
@@ -11,7 +12,6 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.exception.CedarAssertionException;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
 
-import javax.ws.rs.core.Response;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -51,7 +51,7 @@ public class AssertionNounTargetPresentImpl implements AssertionNounTargetPresen
               .message("Missing permission: '" + permissionName + "'.")
               .errorKey(CedarErrorKey.PERMISSION_MISSING)
               .suggestedAction(CedarSuggestedAction.REQUEST_ROLE)
-              .status(Response.Status.FORBIDDEN)
+              .status(CedarResponseStatus.FORBIDDEN)
               .parameter("permissionName", permissionName);
           throw new CedarAssertionException(ep);
         }
