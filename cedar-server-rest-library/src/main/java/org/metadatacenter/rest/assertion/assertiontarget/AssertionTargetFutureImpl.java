@@ -1,13 +1,13 @@
 package org.metadatacenter.rest.assertion.assertiontarget;
 
+import org.metadatacenter.error.CedarAssertionResult;
 import org.metadatacenter.error.CedarErrorPack;
+import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.rest.CedarAssertionNoun;
 import org.metadatacenter.rest.assertion.CedarAssertion;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.exception.CedarAssertionException;
-import org.metadatacenter.error.CedarAssertionResult;
 
-import javax.ws.rs.core.Response;
 import java.util.Collection;
 
 public abstract class AssertionTargetFutureImpl<T> implements AssertionTargetFuture {
@@ -18,27 +18,28 @@ public abstract class AssertionTargetFutureImpl<T> implements AssertionTargetFut
 
   @Override
   public void otherwiseBadRequest() throws CedarAssertionException {
-    buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), null, Response.Status.BAD_REQUEST);
+    buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), null, CedarResponseStatus.BAD_REQUEST);
   }
 
   @Override
   public void otherwiseBadRequest(CedarErrorPack errorPack) throws CedarAssertionException {
-    buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), errorPack, Response.Status.BAD_REQUEST);
+    buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), errorPack, CedarResponseStatus.BAD_REQUEST);
   }
 
   @Override
   public void otherwiseInternalServerError(CedarErrorPack errorPack) throws CedarAssertionException {
-    buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), errorPack, Response.Status.INTERNAL_SERVER_ERROR);
+    buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), errorPack,
+        CedarResponseStatus.INTERNAL_SERVER_ERROR);
   }
 
   @Override
   public void otherwiseNotFound(CedarErrorPack errorPack) throws CedarAssertionException {
-    buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), errorPack, Response.Status.NOT_FOUND);
+    buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), errorPack, CedarResponseStatus.NOT_FOUND);
   }
 
   @Override
   public void otherwiseForbidden(CedarErrorPack errorPack) throws CedarAssertionException {
-    buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), errorPack, Response.Status.FORBIDDEN);
+    buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), errorPack, CedarResponseStatus.FORBIDDEN);
   }
 
   protected CedarAssertionResult getFirstAssertionError() {
@@ -59,7 +60,7 @@ public abstract class AssertionTargetFutureImpl<T> implements AssertionTargetFut
   }
 
   private void buildAndThrowAssertionExceptionIfNeeded(CedarAssertionResult assertionResult, CedarErrorPack errorPack,
-                                                       Response.Status status) throws CedarAssertionException {
+                                                       CedarResponseStatus status) throws CedarAssertionException {
     if (assertionResult == null) {
       return;
     }

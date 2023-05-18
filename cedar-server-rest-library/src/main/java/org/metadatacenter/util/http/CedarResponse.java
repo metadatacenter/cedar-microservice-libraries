@@ -5,6 +5,7 @@ import org.metadatacenter.constant.CustomHttpConstants;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.error.CedarErrorPack;
 import org.metadatacenter.error.CedarErrorReasonKey;
+import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.server.result.BackendCallError;
 import org.metadatacenter.server.result.BackendCallResult;
 
@@ -40,7 +41,7 @@ public abstract class CedarResponse {
     private CedarErrorReasonKey errorReasonKey;
     private String errorMessage;
     private Exception exception;
-    private Response.Status status;
+    private CedarResponseStatus status;
     private Object entity;
     private URI createdResourceUri;
     private Map<String, Object> headers = Maps.newHashMap();
@@ -62,7 +63,7 @@ public abstract class CedarResponse {
 
     public Response build() {
       Response.ResponseBuilder responseBuilder = Response.noContent();
-      responseBuilder.status(status);
+      responseBuilder.status(status.getStatusCode());
 
       if (!headers.isEmpty()) {
         for (String property : headers.keySet()) {
@@ -72,7 +73,7 @@ public abstract class CedarResponse {
       responseBuilder.header(CustomHttpConstants.HEADER_ACCESS_CONTROL_EXPOSE_HEADERS,
           CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS);
       if (createdResourceUri != null) {
-        responseBuilder.status(Response.Status.CREATED).location(createdResourceUri);
+        responseBuilder.status(CedarResponseStatus.CREATED.getStatusCode()).location(createdResourceUri);
       }
       if (entity != null) {
         responseBuilder.entity(entity);
@@ -99,7 +100,7 @@ public abstract class CedarResponse {
       return responseBuilder.build();
     }
 
-    public CedarResponseBuilder status(Response.Status status) {
+    public CedarResponseBuilder status(CedarResponseStatus status) {
       this.status = status;
       return this;
     }
@@ -155,54 +156,54 @@ public abstract class CedarResponse {
   }
 
   public static CedarResponseBuilder ok() {
-    return newResponseBuilder().status(Response.Status.OK);
+    return newResponseBuilder().status(CedarResponseStatus.OK);
   }
 
   public static CedarResponseBuilder internalServerError() {
-    return newResponseBuilder().status(Response.Status.INTERNAL_SERVER_ERROR);
+    return newResponseBuilder().status(CedarResponseStatus.INTERNAL_SERVER_ERROR);
   }
 
   public static CedarResponseBuilder badGateway() {
-    return newResponseBuilder().status(Response.Status.BAD_GATEWAY);
+    return newResponseBuilder().status(CedarResponseStatus.BAD_GATEWAY);
   }
 
   public static CedarResponseBuilder noContent() {
-    return newResponseBuilder().status(Response.Status.NO_CONTENT);
+    return newResponseBuilder().status(CedarResponseStatus.NO_CONTENT);
   }
 
   public static CedarResponseBuilder notFound() {
-    return newResponseBuilder().status(Response.Status.NOT_FOUND);
+    return newResponseBuilder().status(CedarResponseStatus.NOT_FOUND);
   }
 
   public static CedarResponseBuilder unauthorized() {
-    return newResponseBuilder().status(Response.Status.UNAUTHORIZED);
+    return newResponseBuilder().status(CedarResponseStatus.UNAUTHORIZED);
   }
 
   public static CedarResponseBuilder forbidden() {
-    return newResponseBuilder().status(Response.Status.FORBIDDEN);
+    return newResponseBuilder().status(CedarResponseStatus.FORBIDDEN);
   }
 
   public static CedarResponseBuilder badRequest() {
-    return newResponseBuilder().status(Response.Status.BAD_REQUEST);
+    return newResponseBuilder().status(CedarResponseStatus.BAD_REQUEST);
   }
 
   public static CedarResponseBuilder notAcceptable() {
-    return newResponseBuilder().status(Response.Status.NOT_ACCEPTABLE);
+    return newResponseBuilder().status(CedarResponseStatus.NOT_ACCEPTABLE);
   }
 
   public static CedarResponseBuilder methodNotAllowed() {
-    return newResponseBuilder().status(Response.Status.METHOD_NOT_ALLOWED);
+    return newResponseBuilder().status(CedarResponseStatus.METHOD_NOT_ALLOWED);
   }
 
   public static CedarResponseBuilder httpVersionNotSupported() {
-    return newResponseBuilder().status(Response.Status.HTTP_VERSION_NOT_SUPPORTED);
+    return newResponseBuilder().status(CedarResponseStatus.HTTP_VERSION_NOT_SUPPORTED);
   }
 
   public static CedarResponseBuilder created(URI createdResourceLocation) {
-    return newResponseBuilder().status(Response.Status.CREATED).created(createdResourceLocation);
+    return newResponseBuilder().status(CedarResponseStatus.CREATED).created(createdResourceLocation);
   }
 
-  public static CedarResponseBuilder status(Response.Status status) {
+  public static CedarResponseBuilder status(CedarResponseStatus status) {
     return newResponseBuilder().status(status);
   }
 

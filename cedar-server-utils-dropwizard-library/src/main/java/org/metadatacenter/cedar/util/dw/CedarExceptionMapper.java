@@ -1,6 +1,7 @@
 package org.metadatacenter.cedar.util.dw;
 
 import org.metadatacenter.error.CedarErrorPack;
+import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.server.logging.AppLogger;
 import org.metadatacenter.server.logging.filter.LoggingContext;
 import org.metadatacenter.server.logging.filter.ThreadLocalRequestIdHolder;
@@ -58,7 +59,7 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
         .param(AppLogParam.EXCEPTION, errorPack)
         .enqueue();
 
-    return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+    return Response.status(CedarResponseStatus.INTERNAL_SERVER_ERROR.getStatusCode())
         .entity(errorPack)
         .type(MediaType.APPLICATION_JSON)
         .build();
