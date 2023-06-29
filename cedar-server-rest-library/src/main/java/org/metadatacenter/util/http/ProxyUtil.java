@@ -1,16 +1,21 @@
 package org.metadatacenter.util.http;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Lists;
+import org.apache.commons.codec.CharEncoding;
 import org.apache.http.Header;
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.fluent.Request;
 import org.apache.http.entity.ContentType;
+import org.apache.http.util.EntityUtils;
 import org.metadatacenter.constant.CedarHeaderParameters;
 import org.metadatacenter.constant.CustomHttpConstants;
 import org.metadatacenter.constant.HttpConnectionConstants;
 import org.metadatacenter.exception.CedarBadRequestException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
+import org.metadatacenter.util.json.JsonMapper;
 
 import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.core.HttpHeaders;
@@ -110,6 +115,17 @@ public class ProxyUtil {
   private static void copyHeader(Request proxyRequest, String headerKey, String value) {
     if (value != null) {
       proxyRequest.setHeader(headerKey, value);
+    }
+  }
+
+  public static JsonNode proxyGetBodyAsJsonNode(String url, CedarRequestContext context) throws CedarProcessingException {
+    HttpResponse proxyResponse = ProxyUtil.proxyGet(url, context);
+    HttpEntity proxyEntity = proxyResponse.getEntity();
+    try {
+      String proxyString = EntityUtils.toString(proxyEntity, CharEncoding.UTF_8);
+      return JsonMapper.MAPPER.readTree(proxyString);
+    } catch (IOException e) {
+      throw new CedarProcessingException(e);
     }
   }
 }
