@@ -25,7 +25,7 @@ public class AppLoggerQueueService extends QueueServiceWithBlockingQueue {
     //
     // See metadatacenter/cedar-server-core-library#8 for a description of a principled way of enabling/disabling
     // this type of logging.
-    if (message.getType() != AppLogType.CYPHER_QUERY)
+    // if (message.getType() != AppLogType.CYPHER_QUERY)
       try (Jedis jedis = pool.getResource()) {
         String json = null;
         try {
