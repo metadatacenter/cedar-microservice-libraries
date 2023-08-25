@@ -72,7 +72,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     if (addPermissionConditions) {
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
     }
-    sb.append(" MATCH (resource)");
+    sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
     sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
     sb.append(" AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) ");
     if (addPermissionConditions) {
@@ -98,7 +98,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     if (addPermissionConditions) {
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
     }
-    sb.append(" MATCH (resource)");
+    sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
     sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
     sb.append(" AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) ");
     if (addPermissionConditions) {
@@ -119,7 +119,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     if (addPermissionConditions) {
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
     }
-    sb.append(" MATCH (resource)");
+    sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
     sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
     sb.append(" AND (resource.<PROP.IS_BASED_ON> = {<PH.IS_BASED_ON>}) ");
     if (addPermissionConditions) {
@@ -137,7 +137,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     if (addPermissionConditions) {
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
     }
-    sb.append(" MATCH (resource)");
+    sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
     sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
     sb.append(" AND (resource.<PROP.IS_BASED_ON> = {<PH.IS_BASED_ON>}) ");
     if (addPermissionConditions) {
