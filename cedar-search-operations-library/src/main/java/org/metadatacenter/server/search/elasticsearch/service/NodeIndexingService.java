@@ -55,11 +55,10 @@ public class NodeIndexingService extends AbstractIndexingService {
     instanceContentExtractor = new TemplateInstanceContentExtractor(cedarConfig);
   }
 
-  public void readValueSets() throws CedarProcessingException
-  {
-    if (nciCADSRValueSetsOntologyFilePath != null && !nciCADSRValueSetsOntologyFilePath.isEmpty())
+  public void readValueSets() throws CedarProcessingException {
+    if (nciCADSRValueSetsOntologyFilePath != null && !nciCADSRValueSetsOntologyFilePath.isEmpty()) {
       ValueSetsExtractor.getInstance().loadValueSetsOntology(nciCADSRValueSetsOntologyFilePath);
-    else {
+    } else {
       throw new CedarProcessingException("No path configured for value set ontology");
     }
   }
@@ -111,14 +110,16 @@ public class NodeIndexingService extends AbstractIndexingService {
             if (components.length == 2) {
               String namespace = components[0];
               String fragment = components[1];
-              if (!fragment.isEmpty())
+              if (!fragment.isEmpty()) {
                 valueConcepts.add(fragment);
+              }
             }
           }
         }
       }
-      if (!valueLabels.isEmpty() || !valueConcepts.isEmpty() )
+      if (!valueLabels.isEmpty() || !valueConcepts.isEmpty()) {
         ir.setPossibleValues(new PossibleValues(valueLabels, valueConcepts));
+      }
     }
     return ir;
   }
@@ -164,7 +165,7 @@ public class NodeIndexingService extends AbstractIndexingService {
       sb.append(node.getName());
     }
     if (node.getDescription() != null && !node.getDescription().isBlank()) {
-      if (sb.length() > 0) {
+      if (!sb.isEmpty()) {
         sb.append(" ");
       }
       sb.append(node.getDescription().trim());
@@ -174,7 +175,7 @@ public class NodeIndexingService extends AbstractIndexingService {
         FolderServerSchemaArtifact resource = (FolderServerSchemaArtifact) node;
         ResourceVersion version = resource.getVersion();
         if (version != null && version.getValue() != null && !version.getValue().isBlank()) {
-          if (sb.length() > 0) {
+          if (!sb.isEmpty()) {
             sb.append(" ");
           }
           sb.append(version.getValue().trim());
@@ -184,7 +185,7 @@ public class NodeIndexingService extends AbstractIndexingService {
       FolderServerArtifact resource = (FolderServerArtifact) node;
       String identifier = resource.getIdentifier();
       if (identifier != null && !identifier.isBlank()) {
-        if (sb.length() > 0) {
+        if (!sb.isEmpty()) {
           sb.append(" ");
         }
         sb.append(identifier.trim());
@@ -206,18 +207,22 @@ public class NodeIndexingService extends AbstractIndexingService {
     if (!retry) {
       return removeDocumentFromIndex(resourceId);
     }
-    final int MAX_TRIES = 5;
-    final int WAIT_MS = 1000;
+    final int MAX_TRIES = 10;
+    final int WAIT_MS = 300;
     int currentTry = 1;
     long removedCount = 0;
 
     while (currentTry <= MAX_TRIES) {
       log.debug("Removing resource from index (id = " + resourceId + ")");
-      removedCount = indexWorker.removeAllFromIndex(resourceId);
+      removedCount = 0;
+      try {
+        removedCount = indexWorker.removeAllFromIndex(resourceId);
+      } catch (CedarProcessingException e) {
+        // DO nothing, we will retry
+      }
       if (removedCount > 0) {
         return removedCount;
-      }
-      else {
+      } else {
         log.debug("Could not remove resource from index (id = " + resourceId + ")");
         try {
           Thread.sleep(WAIT_MS);
@@ -225,6 +230,7 @@ public class NodeIndexingService extends AbstractIndexingService {
           log.error("Error while waiting before update execution", e);
         }
       }
+      currentTry++;
     }
     return removedCount;
   }
