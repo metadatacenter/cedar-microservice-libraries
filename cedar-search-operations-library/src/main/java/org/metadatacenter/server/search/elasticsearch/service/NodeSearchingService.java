@@ -220,6 +220,7 @@ public class NodeSearchingService extends AbstractSearchingService {
           client.prepareSearch(config.getIndexes().getSearchIndex().getName())
               .setQuery(QueryBuilders.matchQuery(RESOURCE_TYPE, resourceType.getValue()))
               .setSize(0)
+              .setTrackTotalHits(true)
               .execute().actionGet();
 
       SearchHits hits = responseSearch.getHits();
