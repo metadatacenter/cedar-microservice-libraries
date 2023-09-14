@@ -1,6 +1,7 @@
 package org.metadatacenter.server.neo4j.cypher.query;
 
 import org.metadatacenter.model.CedarResourceType;
+import org.metadatacenter.model.RelationLabel;
 import org.metadatacenter.server.neo4j.NodeLabel;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
@@ -95,22 +96,49 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
                                         ResourcePublicationStatusFilter publicationStatus,
                                         boolean addPermissionConditions) {
     StringBuilder sb = new StringBuilder();
+
     if (addPermissionConditions) {
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
+      sb.append(" RETURN COUNT {");
+      sb.append("  MATCH ").append(getUserToResourceRelationWithContains(RelationLabel.OWNS, "resource"));
+      sb.append("  WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList"); // TODO: elevate
+      sb.append("  AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) "); // TODO: elevate
+      if (version != null && version != ResourceVersionFilter.ALL) { // TODO: handle in one call
+        sb.append(getVersionConditions(version, " AND ", "resource"));
+      }
+      if (publicationStatus != null && publicationStatus != ResourcePublicationStatusFilter.ALL) { // TODO: handle in one call
+        sb.append(getPublicationStatusConditions(" AND ", "resource"));
+      }
+      sb.append("  RETURN resource");
+
+      sb.append("  UNION");
+
+      sb.append("  MATCH ").append(getUserToResourceRelationThroughGroupWithContains(RelationLabel.CANREAD + "|" + RelationLabel.CANWRITE, "resource"));
+      sb.append("  WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList"); // TODO: elevate
+      sb.append("  AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) "); // TODO: elevate
+      if (version != null && version != ResourceVersionFilter.ALL) { // TODO: handle in one call
+        sb.append(getVersionConditions(version, " AND ", "resource"));
+      }
+      if (publicationStatus != null && publicationStatus != ResourcePublicationStatusFilter.ALL) { // TODO: handle in one call
+        sb.append(getPublicationStatusConditions(" AND ", "resource"));
+      }
+      sb.append("  RETURN resource");
+      sb.append(" }");
+    } else {
+      sb.append(" RETURN COUNT {");
+      sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
+      sb.append("  WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList"); // TODO: elevate
+      sb.append("  AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) "); // TODO: elevate
+      if (version != null && version != ResourceVersionFilter.ALL) { // TODO: handle in one call
+        sb.append(getVersionConditions(version, " AND ", "resource"));
+      }
+      if (publicationStatus != null && publicationStatus != ResourcePublicationStatusFilter.ALL) { // TODO: handle in one call
+        sb.append(getPublicationStatusConditions(" AND ", "resource"));
+      }
+      sb.append("  RETURN resource");
+      sb.append(" }");
     }
-    sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
-    sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
-    sb.append(" AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) ");
-    if (addPermissionConditions) {
-      sb.append(getResourcePermissionConditions(" AND ", "resource"));
-    }
-    if (version != null && version != ResourceVersionFilter.ALL) {
-      sb.append(getVersionConditions(version, " AND ", "resource"));
-    }
-    if (publicationStatus != null && publicationStatus != ResourcePublicationStatusFilter.ALL) {
-      sb.append(getPublicationStatusConditions(" AND ", "resource"));
-    }
-    sb.append(" RETURN count(resource)");
+
     return sb.toString();
   }
 

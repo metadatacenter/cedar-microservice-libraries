@@ -245,6 +245,10 @@ public abstract class AbstractCypherQueryBuilder {
     return "(user)-[:<REL.MEMBEROF>*0..1]->()-[:" + relationLabel + "]->()-[:<REL.CONTAINS>*0..]->(" + nodeAlias + ")";
   }
 
+  protected static String getUserToResourceRelationThroughGroupWithContains(String relationLabels, String nodeAlias) {
+    return "(user)-[:<REL.MEMBEROF>*0..1]->()-[:" + relationLabels + "]->()-[:<REL.CONTAINS>*0..]->(" + nodeAlias + ")";
+  }
+
   protected static String getResourcePermissionConditions(String relationPrefix, String nodeAlias) {
     return "" +
         " " + relationPrefix + " " +
