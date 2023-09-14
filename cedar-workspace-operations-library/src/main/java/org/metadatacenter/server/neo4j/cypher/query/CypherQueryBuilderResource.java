@@ -218,7 +218,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     if (addPermissionConditions) {
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
     }
-    sb.append(" MATCH (resource)");
+    sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
     sb.append(" WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL");
     if (addPermissionConditions) {
       sb.append(getResourcePermissionConditions(" AND ", "resource"));
@@ -236,7 +236,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     if (addPermissionConditions) {
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
     }
-    sb.append(" MATCH (resource)");
+    sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
     sb.append(" WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL");
     if (addPermissionConditions) {
       sb.append(getResourcePermissionConditions(" AND ", "resource"));
