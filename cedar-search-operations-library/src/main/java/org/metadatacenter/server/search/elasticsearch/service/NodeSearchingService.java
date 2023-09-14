@@ -160,7 +160,7 @@ public class NodeSearchingService extends AbstractSearchingService {
 
         FolderServerNodeInfo info = indexedDocument.getInfo();
         FolderServerResourceExtract folderServerNodeExtract = FolderServerResourceExtract.fromNodeInfo(info);
-        TrustedByUtil.decorateWithTrustedby(folderServerNodeExtract, info.getParentFolderId(), trustedFoldersConfig.getFoldersMap());
+        TrustedByUtil.decorateWithTrustedBy(folderServerNodeExtract, info.getParentFolderId(), trustedFoldersConfig.getFoldersMap());
         resources.add(folderServerNodeExtract);
       } catch (IOException e) {
         log.error("Error while deserializing the search result document", e);

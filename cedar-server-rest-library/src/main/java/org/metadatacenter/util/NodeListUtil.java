@@ -50,7 +50,7 @@ public abstract class NodeListUtil {
     boolean isOpenImplicitly = pathInfo.get(pathInfo.size() -1).getIsOpenImplicitly();
 
     for (FolderServerResourceExtract resourceExtract : resources) {
-      TrustedByUtil.decorateWithTrustedby(resourceExtract, pathInfo, cedarConfig.getTrustedFolders().getFoldersMap());
+      TrustedByUtil.decorateWithTrustedBy(resourceExtract, pathInfo, cedarConfig.getTrustedFolders().getFoldersMap());
       resourceExtract.setIsOpenImplicitly(isOpenImplicitly);
     }
 

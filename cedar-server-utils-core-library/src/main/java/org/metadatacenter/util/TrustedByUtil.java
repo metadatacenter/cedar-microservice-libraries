@@ -1,7 +1,7 @@
 package org.metadatacenter.util;
 
-import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.model.CedarResourceType;
+import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.model.folderserver.extract.FolderServerArtifactExtract;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.model.folderserver.report.FolderServerArtifactReport;
@@ -11,24 +11,29 @@ import java.util.Map;
 
 public class TrustedByUtil {
 
-  public static void decorateWithTrustedby(FolderServerResourceExtract resourceExtract,
+  public static void decorateWithTrustedBy(FolderServerResourceExtract resourceExtract,
                                            List<FolderServerResourceExtract> pathInfo,
                                            Map<String, String> folderIdsToEntitiesMap) {
-    decorateWithTrustedby(resourceExtract, extractParentFolderIdFromPathInfo(pathInfo), folderIdsToEntitiesMap);
+    decorateWithTrustedBy(resourceExtract, extractParentFolderIdFromPathInfo(pathInfo), folderIdsToEntitiesMap);
   }
 
-  public static void decorateWithTrustedby(FolderServerArtifactReport artifactReport,
+  public static void decorateWithTrustedBy(FolderServerArtifactReport artifactReport,
                                            Map<String, String> folderIdsToEntitiesMap) {
     String parentFolderId = extractParentFolderIdFromPathInfo(artifactReport.getPathInfo());
     artifactReport.setTrustedBy(generateTrustedBy(parentFolderId, artifactReport.getType(), folderIdsToEntitiesMap));
   }
 
-  public static void decorateWithTrustedby(FolderServerResourceExtract resourceExtract, String parentFolderId,
+  public static void decorateWithTrustedBy(FolderServerResourceExtract resourceExtract, String parentFolderId,
                                            Map<String, String> folderIdsToEntitiesMap) {
     if (!resourceExtract.getType().equals(CedarResourceType.FOLDER)) { // cast exception when using folders
       ((FolderServerArtifactExtract) resourceExtract).
           setTrustedBy(generateTrustedBy(parentFolderId, resourceExtract.getType(), folderIdsToEntitiesMap));
     }
+  }
+
+  public static void decorateWithTrustedBy(FolderServerResourceExtract resourceExtract, FolderServerFolder parentFolder,
+                                           Map<String, String> folderIdsToEntitiesMap) {
+    decorateWithTrustedBy(resourceExtract, parentFolder.getId(), folderIdsToEntitiesMap);
   }
 
   private static String generateTrustedBy(String parentFolderId, CedarResourceType resourceType,
@@ -45,7 +50,7 @@ public class TrustedByUtil {
   }
 
   private static String extractParentFolderIdFromPathInfo(List<FolderServerResourceExtract> pathInfo) {
-    if (pathInfo.size() == 0) {
+    if (pathInfo.isEmpty()) {
       return null;
     }
     if (pathInfo.get(pathInfo.size() - 1).getType().equals(CedarResourceType.FOLDER)) {

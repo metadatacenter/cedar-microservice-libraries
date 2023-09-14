@@ -1,6 +1,7 @@
 package org.metadatacenter.server.neo4j.proxy;
 
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarFolderId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.CedarResource;
@@ -9,6 +10,7 @@ import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
+import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderArtifact;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFolder;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderUser;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFolder;
@@ -174,5 +176,12 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     CypherParameters params = new CypherParameters();
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetLong(q);
+  }
+
+  public FolderServerFolder getParentFolder(CedarArtifactId artifactId) {
+    String cypher = CypherQueryBuilderFolder.getParentFolderById();
+    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeReadGetOne(q, FolderServerFolder.class);
   }
 }

@@ -162,4 +162,10 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " MATCH (folder:<LABEL.FOLDER>)" +
         " RETURN count(folder)";
   }
+
+  public static String getParentFolderById() {
+    return "" +
+        " MATCH (folder:<LABEL.FOLDER>)-[:<REL.CONTAINS>]->(resource:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
+        " RETURN folder";
+  }
 }
