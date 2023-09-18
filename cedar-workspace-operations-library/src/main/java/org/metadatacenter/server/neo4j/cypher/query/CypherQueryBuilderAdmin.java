@@ -15,17 +15,16 @@ public class CypherQueryBuilderAdmin extends AbstractCypherQueryBuilder {
   }
 
   public static String createUniqueConstraint(NodeLabel nodeLabel, NodeProperty property) {
-    return "CALL apoc.schema.assert({}, {" +
-        nodeLabel.getSimpleLabel() +
-        ":[\"" + Neo4JUtil.escapePropertyName(property.getValue()) +"\"]" +
-        "});";
+    return "CREATE CONSTRAINT " +
+        "FOR (n:" + nodeLabel.getSimpleLabel() + ") " +
+        "REQUIRE n." + Neo4JUtil.escapePropertyName(property.getValue()) + " IS UNIQUE;";
   }
 
   public static String createIndex(NodeLabel nodeLabel, NodeProperty property) {
-    return "CALL apoc.schema.assert({" +
-        nodeLabel.getSimpleLabel() +
-        ":[\"" + Neo4JUtil.escapePropertyName(property.getValue()) +"\"]" +
-        "}, {});";
+    return "CREATE INDEX " +
+        nodeLabel.getSimpleLabel() + "_" + Neo4JUtil.escapePropertyName(property.getValue()) + " " +
+        "FOR (n:" + nodeLabel.getSimpleLabel() + ") " +
+        "ON (n." + Neo4JUtil.escapePropertyName(property.getValue()) + ");";
   }
 
   public static String removeAllConstraintsAndIndices() {
