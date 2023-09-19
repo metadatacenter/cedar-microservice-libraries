@@ -23,7 +23,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
             " WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
             " AND resource.<PROP.EVERYBODY_PERMISSION> IS NULL" +
             " AND resource.<PROP.OWNED_BY> <> {<PH.USER_ID>}" +
-            " AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) "
+            " AND resource.<PROP.IS_USER_HOME> IS NULL "
     );
     if (version != null && version != ResourceVersionFilter.ALL) {
       sb.append(getVersionConditions(version, " AND ", "resource"));
@@ -52,7 +52,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
             " WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
             " AND resource.<PROP.EVERYBODY_PERMISSION> IS NULL" +
             " AND resource.<PROP.OWNED_BY> <> {<PH.USER_ID>}" +
-            " AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) "
+            " AND resource.<PROP.IS_USER_HOME> IS NULL "
     );
     if (version != null && version != ResourceVersionFilter.ALL) {
       sb.append(getVersionConditions(version, " AND ", "resource"));
@@ -75,7 +75,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     }
     sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
     sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
-    sb.append(" AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) ");
+    sb.append(" AND resource.<PROP.IS_USER_HOME> IS NULL ");
     if (addPermissionConditions) {
       sb.append(getResourcePermissionConditions(" AND ", "resource"));
     }
