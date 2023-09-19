@@ -33,6 +33,8 @@ public class CypherQueryBuilderFolderContent extends AbstractCypherQueryBuilder 
 
   public static String getFolderContentsFilteredLookupQuery(List<String> sortList, ResourceVersionFilter version,
                                                             ResourcePublicationStatusFilter publicationStatus) {
+    // The child node is intentionally not labelled
+    // This gives a better performance, 1M hit nodes vs 1.2M if the label is present (200K nodes, 10 users)
     StringBuilder sb = new StringBuilder();
     sb.append(" MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PH.FOLDER_ID>}})");
     sb.append(" MATCH (child)");
