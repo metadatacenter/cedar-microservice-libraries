@@ -218,42 +218,71 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
   }
 
   public static String getSpecialFoldersLookupQuery(List<String> sortList, boolean addPermissionConditions) {
-    StringBuilder sb = new StringBuilder();
     if (addPermissionConditions) {
-      sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
+      return """
+          MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
+          MATCH (resource:<LABEL.RESOURCE>)
+          WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
+                  
+          OPTIONAL MATCH p1 = (resource)<-[:CONTAINS*0..]-()<-[:OWNS]-(user:User)
+          OPTIONAL MATCH p2 = (resource)<-[:CONTAINS*0..]-()<-[:CANREAD|CANWRITE]-()<-[:MEMBEROF*0..1]-(user:User)
+
+          WITH user, resource, p1, p2
+          WHERE p1 IS NOT NULL OR p2 IS NOT NULL
+          RETURN DISTINCT resource
+
+          ORDER BY resource.<PROP.NODE_SORT_ORDER>,
+                   %s
+          SKIP $offset
+          LIMIT $limit
+          """.formatted(getOrderByExpression("resource", sortList));
+    } else {
+      return """
+          MATCH (resource:<LABEL.RESOURCE>)
+          WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
+                  
+          RETURN DISTINCT resource
+
+          ORDER BY resource.<PROP.NODE_SORT_ORDER>,
+                   %s
+          SKIP $offset
+          LIMIT $limit
+          """.formatted(getOrderByExpression("resource", sortList));
     }
-    sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
-    sb.append(" WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL");
-    if (addPermissionConditions) {
-      sb.append(getResourcePermissionConditions(" AND ", "resource"));
-    }
-    sb.append(" RETURN DISTINCT(resource)");
-    sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,");
-    sb.append(getOrderByExpression("resource", sortList));
-    sb.append(" SKIP $offset");
-    sb.append(" LIMIT $limit");
-    return sb.toString();
   }
 
   public static String getSpecialFoldersCountQuery(boolean addPermissionConditions) {
-    StringBuilder sb = new StringBuilder();
     if (addPermissionConditions) {
-      sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
+      return """
+          MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
+          RETURN COUNT {
+          MATCH (resource:<LABEL.RESOURCE>)
+          WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
+                  
+          OPTIONAL MATCH p1 = (resource)<-[:CONTAINS*0..]-()<-[:OWNS]-(user:User)
+          OPTIONAL MATCH p2 = (resource)<-[:CONTAINS*0..]-()<-[:CANREAD|CANWRITE]-()<-[:MEMBEROF*0..1]-(user:User)
+
+          WITH user, resource, p1, p2
+          WHERE p1 IS NOT NULL OR p2 IS NOT NULL
+          RETURN DISTINCT resource
+          }
+          """;
+    } else {
+      return """
+          RETURN COUNT {
+          MATCH (resource:<LABEL.RESOURCE>)
+          WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
+          RETURN DISTINCT resource
+          }
+          """;
     }
-    sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
-    sb.append(" WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL");
-    if (addPermissionConditions) {
-      sb.append(getResourcePermissionConditions(" AND ", "resource"));
-    }
-    sb.append(
-        " RETURN count(resource)"
-    );
-    return sb.toString();
   }
 
   public static String getTotalCount(CedarResourceType resourceType) {
-    return "" +
-        " MATCH (resource:" + NodeLabel.forCedarResourceType(resourceType) + ")" +
-        " RETURN count(resource)";
+    return """
+        MATCH (resource:%s)
+        RETURN count(resource)
+        """.formatted(NodeLabel.forCedarResourceType(resourceType));
+
   }
 }
