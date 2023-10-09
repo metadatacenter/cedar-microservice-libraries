@@ -69,7 +69,7 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE>)" +
             " WHERE resource.<PROP.EVERYBODY_PERMISSION> IS NOT NULL" +
             " AND resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
-            " AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) "
+            " AND resource.<PROP.IS_USER_HOME> IS NULL "
     );
     if (version != null && version != ResourceVersionFilter.ALL) {
       sb.append(getVersionConditions(version, " AND ", "resource"));
@@ -92,7 +92,7 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE>)" +
             " WHERE resource.<PROP.EVERYBODY_PERMISSION> IS NOT NULL" +
             " AND resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
-            " AND (resource.<PROP.IS_USER_HOME> IS NULL OR resource.<PROP.IS_USER_HOME> <> true) "
+            " AND resource.<PROP.IS_USER_HOME> IS NULL "
     );
     if (version != null && version != ResourceVersionFilter.ALL) {
       sb.append(getVersionConditions(version, " AND ", "resource"));

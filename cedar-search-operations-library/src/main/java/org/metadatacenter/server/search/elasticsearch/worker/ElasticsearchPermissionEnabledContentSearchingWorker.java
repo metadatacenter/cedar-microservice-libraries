@@ -58,6 +58,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
     searchRequest.setFrom(offset);
     searchRequest.setSize(limit);
+    searchRequest.setTrackTotalHits(true);
 
     // Execute request
     SearchResponse response = searchRequest.execute().actionGet();
@@ -86,6 +87,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     TimeValue timeout = TimeValue.timeValueMinutes(2);
     searchRequest.setScroll(timeout);
     searchRequest.setSize(offset + limit);
+    searchRequest.setTrackTotalHits(true);
 
     //log.debug("Search query in Query DSL: " + searchRequest);
 
@@ -567,6 +569,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
     // Set main query
     searchRequest.setQuery(mainQuery);
+    searchRequest.setTrackTotalHits(true);
 
     // Execute request
     SearchResponse response = searchRequest.execute().actionGet();

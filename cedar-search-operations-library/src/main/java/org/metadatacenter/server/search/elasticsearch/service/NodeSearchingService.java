@@ -160,7 +160,7 @@ public class NodeSearchingService extends AbstractSearchingService {
 
         FolderServerNodeInfo info = indexedDocument.getInfo();
         FolderServerResourceExtract folderServerNodeExtract = FolderServerResourceExtract.fromNodeInfo(info);
-        TrustedByUtil.decorateWithTrustedby(folderServerNodeExtract, info.getParentFolderId(), trustedFoldersConfig.getFoldersMap());
+        TrustedByUtil.decorateWithTrustedBy(folderServerNodeExtract, info.getParentFolderId(), trustedFoldersConfig.getFoldersMap());
         resources.add(folderServerNodeExtract);
       } catch (IOException e) {
         log.error("Error while deserializing the search result document", e);
@@ -220,6 +220,7 @@ public class NodeSearchingService extends AbstractSearchingService {
           client.prepareSearch(config.getIndexes().getSearchIndex().getName())
               .setQuery(QueryBuilders.matchQuery(RESOURCE_TYPE, resourceType.getValue()))
               .setSize(0)
+              .setTrackTotalHits(true)
               .execute().actionGet();
 
       SearchHits hits = responseSearch.getHits();

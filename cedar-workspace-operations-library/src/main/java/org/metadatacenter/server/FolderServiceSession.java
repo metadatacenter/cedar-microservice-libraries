@@ -148,4 +148,7 @@ public interface FolderServiceSession {
   boolean isArtifactOpenImplicitly(CedarArtifactId artifactId);
 
   long getFolderCount();
+
+  FolderServerFolder getParentFolder(CedarArtifactId artifactId);
+
 }

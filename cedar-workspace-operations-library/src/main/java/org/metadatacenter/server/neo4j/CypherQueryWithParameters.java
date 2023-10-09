@@ -28,7 +28,7 @@ public class CypherQueryWithParameters extends AbstractCypherQuery {
         q = q.replace("{" + parameter + "}", v);
       }
     }
-    return q.replace("\n", "").replace("\r", "");
+    return q.replace("\n", " ").replace("\r", "");
   }
 
   private String getVariableRepresentation(Object o) {

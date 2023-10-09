@@ -455,4 +455,8 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
     return proxies.folder().getFolderCount();
   }
 
+  @Override
+  public FolderServerFolder getParentFolder(CedarArtifactId artifactId) {
+    return proxies.folder().getParentFolder(artifactId);
+  }
 }
