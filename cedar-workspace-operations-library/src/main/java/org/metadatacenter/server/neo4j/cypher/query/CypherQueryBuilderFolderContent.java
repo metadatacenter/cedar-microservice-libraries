@@ -50,6 +50,7 @@ public class CypherQueryBuilderFolderContent extends AbstractCypherQueryBuilder 
     sb.append(" ORDER BY child.<PROP.NODE_SORT_ORDER>,");
     sb.append(getOrderByExpression("child", sortList));
     sb.append(", child.<PROP.VERSION> DESC");
+    sb.append(", child.<PROP.CREATED_ON_TS> DESC");
     sb.append(" SKIP $offset");
     sb.append(" LIMIT $limit");
     return sb.toString();
