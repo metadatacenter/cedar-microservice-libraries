@@ -58,13 +58,11 @@ public class ProxyUtil {
     }
   }
 
-  public static HttpResponse proxyPost(String url, CedarRequestContext context) throws CedarProcessingException,
-      CedarBadRequestException {
+  public static HttpResponse proxyPost(String url, CedarRequestContext context) throws CedarProcessingException, CedarBadRequestException {
     return proxyPost(url, context, context.request().getRequestBody().asJsonString());
   }
 
-  public static HttpResponse proxyPost(String url, CedarRequestContext context, String content) throws
-      CedarProcessingException {
+  public static HttpResponse proxyPost(String url, CedarRequestContext context, String content) throws CedarProcessingException {
     Request proxyRequest = Request.Post(url)
         .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
         .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT)
@@ -77,13 +75,11 @@ public class ProxyUtil {
     }
   }
 
-  public static HttpResponse proxyPut(String url, CedarRequestContext context) throws CedarProcessingException,
-      CedarBadRequestException {
+  public static HttpResponse proxyPut(String url, CedarRequestContext context) throws CedarProcessingException, CedarBadRequestException {
     return proxyPut(url, context, context.request().getRequestBody().asJsonString());
   }
 
-  public static HttpResponse proxyPut(String url, CedarRequestContext context, String content) throws
-      CedarProcessingException {
+  public static HttpResponse proxyPut(String url, CedarRequestContext context, String content) throws CedarProcessingException {
     Request proxyRequest = Request.Put(url)
         .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
         .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT)
