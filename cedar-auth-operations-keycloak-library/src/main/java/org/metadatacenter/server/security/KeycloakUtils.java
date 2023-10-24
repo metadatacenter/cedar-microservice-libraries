@@ -28,7 +28,16 @@ import org.metadatacenter.server.security.model.user.CedarUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
+import java.security.cert.X509Certificate;
+import javax.net.ssl.X509TrustManager;
+import java.security.cert.X509Certificate;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.HttpsURLConnection;
 
 public class KeycloakUtils {
 
@@ -125,11 +134,37 @@ public class KeycloakUtils {
     return jacksonJsonProvider;
   }
 
-  public static Keycloak buildKeycloak(KeycloakUtilInfo kcInfo) {
+  public static Keycloak buildKeycloak(KeycloakUtilInfo kcInfo)
+  {
+    SSLContext sslContext = null;
+    try {
+      TrustManager[] trustAllCerts = new TrustManager[] {
+              new X509TrustManager() {
+                public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                  return null;
+                }
+                public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                }
+                public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                }
+              }
+      };
+
+      sslContext = SSLContext.getInstance("SSL");
+      sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+    }
+    catch (Exception ex) {
+      throw new RuntimeException(ex);
+    }
+
     JacksonJsonProvider jacksonJsonProvider = getCustomizedJacksonJsonProvider();
 
     // TODO: add connectionPoolSize(10)
-    Client resteasyClient = ResteasyClientBuilder.newBuilder().register(jacksonJsonProvider).build();
+    Client resteasyClient = ResteasyClientBuilder
+            .newBuilder()
+            .register(jacksonJsonProvider)
+            .sslContext(sslContext)
+            .build();
 
     return KeycloakBuilder.builder()
         .serverUrl(kcInfo.getKeycloakBaseURI())
