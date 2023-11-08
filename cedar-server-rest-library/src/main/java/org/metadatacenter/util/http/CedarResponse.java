@@ -6,6 +6,7 @@ import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.error.CedarErrorPack;
 import org.metadatacenter.error.CedarErrorReasonKey;
 import org.metadatacenter.http.CedarResponseStatus;
+import org.metadatacenter.operation.CedarOperationDescriptor;
 import org.metadatacenter.server.result.BackendCallError;
 import org.metadatacenter.server.result.BackendCallResult;
 
@@ -44,6 +45,7 @@ public abstract class CedarResponse {
     private CedarResponseStatus status;
     private Object entity;
     private URI createdResourceUri;
+    private CedarOperationDescriptor operation;
     private Map<String, Object> headers = Maps.newHashMap();
 
     protected CedarResponseBuilder() {
@@ -59,6 +61,7 @@ public abstract class CedarResponse {
       errorMessage = errorPack.getMessage();
       exception = errorPack.getOriginalException();
       status = errorPack.getStatus();
+      operation = errorPack.getOperation();
     }
 
     public Response build() {
@@ -86,6 +89,7 @@ public abstract class CedarResponse {
         r.put("errorMessage", errorMessage);
         r.put("status", status);
         r.put("statusCode", status.getStatusCode());
+        r.put("operation", operation.asJson());
         if (exception != null) {
           StackTraceElement[] stackTrace = exception.getStackTrace();
           if (stackTrace != null) {
@@ -153,6 +157,12 @@ public abstract class CedarResponse {
       headers.put(property, value);
       return this;
     }
+
+    public CedarResponseBuilder operation(CedarOperationDescriptor operation) {
+      this.operation = operation;
+      return this;
+    }
+
   }
 
   public static CedarResponseBuilder ok() {

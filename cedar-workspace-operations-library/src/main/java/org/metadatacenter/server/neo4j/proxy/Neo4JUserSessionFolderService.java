@@ -204,9 +204,9 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId) {
+  public FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId, CedarFolderId newFolderId) {
     newFolder.setCreatedByTotal(cu.getResourceId());
-    return proxies.folder().createFolderAsChildOfId(newFolder, parentFolderId);
+    return proxies.folder().createFolderAsChildOfId(newFolder, parentFolderId, newFolderId);
   }
 
   @Override
@@ -354,7 +354,8 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
     newUserHome.setUserHome(true);
     newUserHome.setCreatedByTotal(userId);
     newUserHome.setHomeOf(userId.getId());
-    currentUserHomeFolder = createFolderAsChildOfId(newUserHome, usersFolder.getResourceId());
+    CedarFolderId newHomeFolderId = linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class);
+    currentUserHomeFolder = createFolderAsChildOfId(newUserHome, usersFolder.getResourceId(), newHomeFolderId);
     return currentUserHomeFolder;
   }
 

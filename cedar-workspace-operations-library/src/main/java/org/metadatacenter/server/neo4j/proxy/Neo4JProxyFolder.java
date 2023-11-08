@@ -104,10 +104,9 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     return null;
   }
 
-  FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId) {
+  FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId, CedarFolderId newFolderId) {
     String cypher = CypherQueryBuilderFolder.createFolderAsChildOfId(newFolder);
-    CypherParameters params = CypherParamBuilderFolder.createFolder(proxies.getLinkedDataUtil(), newFolder,
-        parentFolderId);
+    CypherParameters params = CypherParamBuilderFolder.createFolder(newFolder, parentFolderId, newFolderId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeWriteGetOne(q, FolderServerFolder.class);
   }
@@ -134,7 +133,7 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     return false;
   }
 
-  FolderServerFolder createRootFolder(CedarUserId creatorId) {
+  FolderServerFolder createRootFolder(CedarUserId creatorId, CedarFolderId rootFolderId) {
     FolderServerFolder newRoot = new FolderServerFolder();
     newRoot.setName(proxies.config.getRootFolderPath());
     newRoot.setDescription(proxies.config.getRootFolderDescription());
@@ -143,7 +142,7 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     newRoot.setSystem(true);
     newRoot.setUserHome(false);
     String cypher = CypherQueryBuilderFolder.createRootFolder(newRoot);
-    CypherParameters params = CypherParamBuilderFolder.createFolder(proxies.getLinkedDataUtil(), newRoot, null);
+    CypherParameters params = CypherParamBuilderFolder.createFolder(newRoot, null, rootFolderId);
 
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeWriteGetOne(q, FolderServerFolder.class);

@@ -36,7 +36,7 @@ public interface FolderServiceSession {
 
   FileSystemResource findResourceById(CedarFilesystemResourceId resourceId);
 
-  FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId);
+  FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId, CedarFolderId newFolderId);
 
   FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentFolderId);
 

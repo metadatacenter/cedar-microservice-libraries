@@ -93,7 +93,8 @@ public class Neo4JUserSessionAdminService extends AbstractNeo4JUserSession imple
     FolderServerFolder rootFolder = proxies.folder().findFolderByPath(config.getRootFolderPath());
     CedarFolderId rootFolderId = null;
     if (rootFolder == null) {
-      rootFolder = proxies.folder().createRootFolder(userId);
+      CedarFolderId newRootFolderId = linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class);
+      rootFolder = proxies.folder().createRootFolder(userId, newRootFolderId);
     }
     if (rootFolder != null) {
       rootFolderId = rootFolder.getResourceId();
@@ -111,7 +112,8 @@ public class Neo4JUserSessionAdminService extends AbstractNeo4JUserSession imple
       newUsersFolder.setSystem(true);
       newUsersFolder.setUserHome(false);
 
-      proxies.folder().createFolderAsChildOfId(newUsersFolder, rootFolderId);
+      CedarFolderId newUsersFolderId = linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class);
+      proxies.folder().createFolderAsChildOfId(newUsersFolder, rootFolderId, newUsersFolderId);
     }
 
     log.info("Looking for Root Category in Neo4j");
