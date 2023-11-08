@@ -79,8 +79,7 @@ public class CurrentUserPermissionUpdaterForGraphDbResource extends CurrentUserP
       }
     }
     currentUserResourcePermissions.setCanCopy(true);
-    if (resource instanceof ResourceWithOpenFlag) {
-      ResourceWithOpenFlag res = (ResourceWithOpenFlag) resource;
+    if (resource instanceof ResourceWithOpenFlag res) {
       currentUserResourcePermissions.setCanMakeOpen(!res.isOpen());
       currentUserResourcePermissions.setCanMakeNotOpen(res.isOpen());
     } else {

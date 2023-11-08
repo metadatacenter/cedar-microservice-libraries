@@ -24,9 +24,8 @@ public class RulesIndexingService extends AbstractIndexingService {
 
   public void indexRules(JsonNode rules, String templateId) throws CedarProcessingException {
     log.info("Indexing template rules for template: " + templateId);
-    Iterator it = rules.iterator();
-    while (it.hasNext()) {
-      indexRule((JsonNode) it.next());
+    for (JsonNode rule : rules) {
+      indexRule(rule);
     }
   }
 

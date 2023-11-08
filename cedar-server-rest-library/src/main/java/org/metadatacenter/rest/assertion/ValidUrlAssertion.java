@@ -25,10 +25,9 @@ public class ValidUrlAssertion implements CedarAssertion {
 
   @Override
   public CedarAssertionResult check(CedarRequestContext requestContext, Object target) {
-    if (!(target instanceof String)) {
+    if (!(target instanceof String id)) {
       return new CedarAssertionResult("The id should be a non-null String");
     } else {
-      String id = (String) target;
       if (id != null) {
         // There is no way currently to customize the URL Validator.
         // We replace our orgx TLD with the valid org just for this test

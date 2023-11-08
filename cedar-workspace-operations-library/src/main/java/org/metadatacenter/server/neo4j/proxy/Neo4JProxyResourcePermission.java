@@ -110,15 +110,11 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
   }
 
   List<FolderServerUser> getUsersWithDirectPermissionOnResource(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    RelationLabel relationLabel = null;
-    switch (permission) {
-      case READ:
-        relationLabel = RelationLabel.CANREAD;
-        break;
-      case WRITE:
-        relationLabel = RelationLabel.CANWRITE;
-        break;
-    }
+    RelationLabel relationLabel = switch (permission) {
+      case READ -> RelationLabel.CANREAD;
+      case WRITE -> RelationLabel.CANWRITE;
+      default -> null;
+    };
     String cypher = CypherQueryBuilderFilesystemResourcePermission.getUsersWithDirectPermissionOnFilesystemResource(relationLabel);
     CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResource(resourceId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
@@ -126,15 +122,11 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
   }
 
   List<FolderServerGroup> getGroupsWithDirectPermissionOnResource(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    RelationLabel relationLabel = null;
-    switch (permission) {
-      case READ:
-        relationLabel = RelationLabel.CANREAD;
-        break;
-      case WRITE:
-        relationLabel = RelationLabel.CANWRITE;
-        break;
-    }
+    RelationLabel relationLabel = switch (permission) {
+      case READ -> RelationLabel.CANREAD;
+      case WRITE -> RelationLabel.CANWRITE;
+      default -> null;
+    };
     String cypher = CypherQueryBuilderFilesystemResourcePermission.getGroupsWithDirectPermissionOnFilesystemResource(relationLabel);
     CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResource(resourceId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
@@ -142,15 +134,11 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
   }
 
   List<CedarUserId> getUserIdsWithTransitivePermissionOnResource(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    String cypher = null;
-    switch (permission) {
-      case READ:
-        cypher = CypherQueryBuilderFilesystemResourcePermission.getUserIdsWithTransitiveReadOnFilesystemResource();
-        break;
-      case WRITE:
-        cypher = CypherQueryBuilderFilesystemResourcePermission.getUserIdsWithTransitiveWriteOnFilesystemResource();
-        break;
-    }
+    String cypher = switch (permission) {
+      case READ -> CypherQueryBuilderFilesystemResourcePermission.getUserIdsWithTransitiveReadOnFilesystemResource();
+      case WRITE -> CypherQueryBuilderFilesystemResourcePermission.getUserIdsWithTransitiveWriteOnFilesystemResource();
+      default -> null;
+    };
 
     CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResource(resourceId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
@@ -158,15 +146,11 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
   }
 
   List<CedarGroupId> getGroupIdsWithTransitivePermissionOnResource(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    String cypher = null;
-    switch (permission) {
-      case READ:
-        cypher = CypherQueryBuilderFilesystemResourcePermission.getGroupIdsWithTransitiveReadOnFilesystemResource();
-        break;
-      case WRITE:
-        cypher = CypherQueryBuilderFilesystemResourcePermission.getGroupIdsWithTransitiveWriteOnFilesystemResource();
-        break;
-    }
+    String cypher = switch (permission) {
+      case READ -> CypherQueryBuilderFilesystemResourcePermission.getGroupIdsWithTransitiveReadOnFilesystemResource();
+      case WRITE -> CypherQueryBuilderFilesystemResourcePermission.getGroupIdsWithTransitiveWriteOnFilesystemResource();
+      default -> null;
+    };
 
     CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResource(resourceId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);

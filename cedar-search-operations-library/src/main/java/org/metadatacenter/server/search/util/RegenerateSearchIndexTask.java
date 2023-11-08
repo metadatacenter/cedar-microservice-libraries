@@ -118,7 +118,7 @@ public class RegenerateSearchIndexTask {
             currentBatch.add(nodeIndexingService.createIndexDocument(node, perm, categories, requestContext, true));
 
             if (count % 100 == 0) {
-              float progress = (100 * count++) / resources.size();
+              float progress = (float) (100 * count++) / resources.size();
               log.info(String.format("Progress: %.0f%%", progress));
             }
             if (currentBatch.size() >= BATCH_SIZE) {

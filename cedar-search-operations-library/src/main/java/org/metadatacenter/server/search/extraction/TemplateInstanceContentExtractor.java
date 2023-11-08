@@ -235,8 +235,7 @@ public class TemplateInstanceContentExtractor {
     Iterator<Map.Entry<String, JsonNode>> jsonNodesIterator = currentNode.fields();
     while (jsonNodesIterator.hasNext()) {
       Map.Entry<String, JsonNode> currentNodeMap = jsonNodesIterator.next();
-      List<String> tmpPath = new ArrayList<>();
-      tmpPath.addAll(currentPath);
+      List<String> tmpPath = new ArrayList<>(currentPath);
       tmpPath.add(currentNodeMap.getKey());
       String tmpPathDotNotation = getPathDotNotation(tmpPath);
       TemplateNode templateNode = null;

@@ -109,15 +109,10 @@ public class Neo4JProxyCategoryPermission extends AbstractNeo4JProxy {
   }
 
   public List<FolderServerUser> getUsersWithDirectPermissionOnCategory(CedarCategoryId categoryId, CategoryPermission permission) {
-    RelationLabel relationLabel = null;
-    switch (permission) {
-      case ATTACH:
-        relationLabel = RelationLabel.CANATTACHCATEGORY;
-        break;
-      case WRITE:
-        relationLabel = RelationLabel.CANWRITECATEGORY;
-        break;
-    }
+    RelationLabel relationLabel = switch (permission) {
+      case ATTACH -> RelationLabel.CANATTACHCATEGORY;
+      case WRITE -> RelationLabel.CANWRITECATEGORY;
+    };
     String cypher = CypherQueryBuilderCategoryPermission.getUsersWithDirectPermissionOnCategory(relationLabel);
     CypherParameters params = CypherParamBuilderFilesystemResource.matchId(categoryId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
@@ -125,15 +120,10 @@ public class Neo4JProxyCategoryPermission extends AbstractNeo4JProxy {
   }
 
   public List<FolderServerGroup> getGroupsWithDirectPermissionOnCategory(CedarCategoryId categoryId, CategoryPermission permission) {
-    RelationLabel relationLabel = null;
-    switch (permission) {
-      case ATTACH:
-        relationLabel = RelationLabel.CANATTACHCATEGORY;
-        break;
-      case WRITE:
-        relationLabel = RelationLabel.CANWRITE;
-        break;
-    }
+    RelationLabel relationLabel = switch (permission) {
+      case ATTACH -> RelationLabel.CANATTACHCATEGORY;
+      case WRITE -> RelationLabel.CANWRITE;
+    };
     String cypher = CypherQueryBuilderCategoryPermission.getGroupsWithDirectPermissionOnCategory(relationLabel);
     CypherParameters params = CypherParamBuilderFilesystemResource.matchId(categoryId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);

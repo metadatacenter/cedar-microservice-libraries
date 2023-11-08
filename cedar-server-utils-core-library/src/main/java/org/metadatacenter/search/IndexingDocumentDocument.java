@@ -34,7 +34,7 @@ public class IndexingDocumentDocument extends IndexedDocumentDocument {
     for (String userId : permissions.getUserPermissions().keySet()) {
       FilesystemResourcePermission nodePermission = permissions.getUserPermissions().get(userId);
       users.add(CedarNodeMaterializedPermissions.getKey(userId, FilesystemResourcePermission.READ));
-      if (nodePermission.equals(nodePermission.WRITE)) {
+      if (nodePermission.equals(FilesystemResourcePermission.WRITE)) {
         users.add(CedarNodeMaterializedPermissions.getKey(userId, FilesystemResourcePermission.WRITE));
       }
     }

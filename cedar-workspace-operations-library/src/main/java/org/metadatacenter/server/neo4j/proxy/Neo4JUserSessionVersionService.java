@@ -2,7 +2,6 @@ package org.metadatacenter.server.neo4j.proxy;
 
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.error.CedarErrorKey;
-import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarSchemaArtifactId;
 import org.metadatacenter.model.BiboStatus;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
@@ -37,9 +36,7 @@ public class Neo4JUserSessionVersionService extends AbstractNeo4JUserSession imp
 
   @Override
   public OutcomeWithReason resourceCanBePublished(FilesystemResourceWithCurrentUserPermissions resource) {
-    if (resource instanceof FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus) {
-      FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus res =
-          (FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus) resource;
+    if (resource instanceof FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus res) {
       if (res.getPublicationStatus() != BiboStatus.DRAFT) {
         return OutcomeWithReason.negative(CedarErrorKey.PUBLISH_ONLY_DRAFT);
       }
@@ -54,9 +51,7 @@ public class Neo4JUserSessionVersionService extends AbstractNeo4JUserSession imp
 
   @Override
   public OutcomeWithReason resourceCanBeDrafted(FilesystemResourceWithCurrentUserPermissions resource) {
-    if (resource instanceof FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus) {
-      FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus res =
-          (FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus) resource;
+    if (resource instanceof FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus res) {
       if (res.getPublicationStatus() != BiboStatus.PUBLISHED) {
         return OutcomeWithReason.negative(CedarErrorKey.CREATE_DRAFT_ONLY_FROM_PUBLISHED);
       }

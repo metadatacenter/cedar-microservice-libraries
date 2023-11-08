@@ -18,8 +18,7 @@ public class SuccessfulAssertion implements CedarAssertion {
   @Override
   public CedarAssertionResult check(CedarRequestContext requestContext, Object target) {
     if (target != null) {
-      if (target instanceof BackendCallResult) {
-        BackendCallResult backendCallResult = (BackendCallResult)target;
+      if (target instanceof BackendCallResult backendCallResult) {
         if (backendCallResult.isError()) {
           return new CedarAssertionResult(backendCallResult);
         } else {

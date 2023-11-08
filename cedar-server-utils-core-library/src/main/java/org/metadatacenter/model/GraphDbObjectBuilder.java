@@ -19,18 +19,13 @@ public abstract class GraphDbObjectBuilder {
   }
 
   public static FolderServerArtifact forResourceType(CedarResourceType resourceType) {
-    switch (resourceType) {
-      case TEMPLATE:
-        return new FolderServerTemplate();
-      case ELEMENT:
-        return new FolderServerElement();
-      case FIELD:
-        return new FolderServerField();
-      case INSTANCE:
-        return new FolderServerInstance();
-      default:
-        return null;
-    }
+    return switch (resourceType) {
+      case TEMPLATE -> new FolderServerTemplate();
+      case ELEMENT -> new FolderServerElement();
+      case FIELD -> new FolderServerField();
+      case INSTANCE -> new FolderServerInstance();
+      default -> null;
+    };
   }
 
   public static FolderServerArtifact forResourceType(CedarResourceType resourceType, CedarArtifactId newId, String name, String description,

@@ -83,9 +83,7 @@ public class Neo4JUserSessionCategoryService extends AbstractNeo4JUserSession im
       //categoryMap.put(extract.getId(), extract);
 
       String parentId = extract.getParentCategoryId();
-      if (categoryChildMap.get(parentId) == null) {
-        categoryChildMap.put(parentId, new ArrayList<>());
-      }
+      categoryChildMap.computeIfAbsent(parentId, k -> new ArrayList<>());
       categoryChildMap.get(parentId).add(extract);
     }
 

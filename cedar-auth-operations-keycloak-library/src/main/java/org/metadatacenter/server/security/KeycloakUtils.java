@@ -111,8 +111,7 @@ public class KeycloakUtils {
           deserializer, Object beanOrClass, String propertyName) throws IOException {
         //out.info("Run into unknown property:" + propertyName + "=>" + ctxt.getParser().getText());
         if ("access_token".equals(propertyName)) {
-          if (beanOrClass instanceof AccessTokenResponse) {
-            AccessTokenResponse atr = (AccessTokenResponse) beanOrClass;
+          if (beanOrClass instanceof AccessTokenResponse atr) {
             String text = ctxt.getParser().getText();
             atr.setToken(text);
           }

@@ -99,14 +99,12 @@ public class PagedSortedTypedQuery extends PagedSortedQuery {
   protected void validateResourceTypes() throws CedarException {
     String resourceTypesString = null;
     List<String> resourceTypeStringList;
-    if (!resourceTypesInput.isPresent()) {
+    if (resourceTypesInput.isEmpty()) {
       resourceTypeStringList = CedarResourceTypeUtil.getValidResourceTypeValuesForRestCalls();
     } else {
       resourceTypesString = resourceTypesInput.get();
-      if (resourceTypesString != null) {
-        resourceTypesString = resourceTypesString.trim();
-      }
-      if (resourceTypesString == null || resourceTypesString.isEmpty()) {
+      resourceTypesString = resourceTypesString.trim();
+      if (resourceTypesString.isEmpty()) {
         throw new CedarAssertionException("If present, 'resource_types' must be a comma separated list!")
             .badRequest()
             .parameter("resource_types", resourceTypesString);
@@ -132,11 +130,11 @@ public class PagedSortedTypedQuery extends PagedSortedQuery {
   }
 
   private void validateVersion() throws CedarException {
-    if (!versionInput.isPresent()) {
+    if (versionInput.isEmpty()) {
       version = ResourceVersionFilter.ALL;
     } else {
       String versionString = versionInput.get();
-      if (versionString == null || versionString.isEmpty()) {
+      if (versionString.isEmpty()) {
         throw new CedarAssertionException("If present, 'version' must be one of the following:" +
             ResourceVersionFilter.getValidValues())
             .badRequest()
@@ -153,11 +151,11 @@ public class PagedSortedTypedQuery extends PagedSortedQuery {
   }
 
   private void validatePublicationStatus() throws CedarException {
-    if (!publicationStatusInput.isPresent()) {
+    if (publicationStatusInput.isEmpty()) {
       publicationStatus = ResourcePublicationStatusFilter.ALL;
     } else {
       String publicationStatusString = publicationStatusInput.get();
-      if (publicationStatusString == null || publicationStatusString.isEmpty()) {
+      if (publicationStatusString.isEmpty()) {
         throw new CedarAssertionException("If present, 'publicationStatus' must be one of the following:" +
             ResourcePublicationStatusFilter.getValidValues())
             .badRequest()

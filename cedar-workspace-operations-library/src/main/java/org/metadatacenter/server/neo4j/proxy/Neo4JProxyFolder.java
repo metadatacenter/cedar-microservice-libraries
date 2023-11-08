@@ -14,7 +14,6 @@ import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderArtifa
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFolder;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderUser;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFolder;
-import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderGroup;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 
 import java.util.List;

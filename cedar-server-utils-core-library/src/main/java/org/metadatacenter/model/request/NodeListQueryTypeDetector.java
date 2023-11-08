@@ -10,11 +10,11 @@ public class NodeListQueryTypeDetector {
       return NodeListQueryType.SEARCH_ID;
     }
 
-    if ((q == null || !q.isPresent() || q.get().isEmpty() || "*".equals(q.get())) &&
-        (isBasedOn == null || !isBasedOn.isPresent() || isBasedOn.get().isEmpty()) &&
-        (sharing == null || !sharing.isPresent() || sharing.get().isEmpty()) &&
-        (mode == null || !mode.isPresent() || mode.get().isEmpty()) &&
-        (categoryId == null || !categoryId.isPresent() || categoryId.get().isEmpty())) {
+    if ((q == null || q.isEmpty() || q.get().isEmpty() || "*".equals(q.get())) &&
+        (isBasedOn == null || isBasedOn.isEmpty() || isBasedOn.get().isEmpty()) &&
+        (sharing == null || sharing.isEmpty() || sharing.get().isEmpty()) &&
+        (mode == null || mode.isEmpty() || mode.get().isEmpty()) &&
+        (categoryId == null || categoryId.isEmpty() || categoryId.get().isEmpty())) {
       return NodeListQueryType.VIEW_ALL;
     }
 

@@ -116,7 +116,6 @@ public class SearchPermissionExecutorService {
       }
     } catch (CedarProcessingException e) {
       log.error("Error while retrieving all the affected documents for group:" + groupId);
-      return;
     }
   }
 

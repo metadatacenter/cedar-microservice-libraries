@@ -20,7 +20,7 @@ public class CypherParamBuilderGroup extends AbstractCypherParamBuilder {
   public static CypherParameters createGroup(CedarGroupId groupURL, String name, String description, CedarUserId ownerId, String specialGroup) {
     Instant now = Instant.now();
     String nowString = CedarConstants.xsdDateTimeFormatter.format(now);
-    Long nowTS = now.getEpochSecond();
+    long nowTS = now.getEpochSecond();
     CypherParameters params = new CypherParameters();
     params.put(NodeProperty.ID, groupURL);
     params.put(NodeProperty.NAME, name);

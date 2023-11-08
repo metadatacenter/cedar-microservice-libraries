@@ -2,7 +2,6 @@ package org.metadatacenter.server.neo4j.cypher.parameter;
 
 import org.metadatacenter.id.*;
 import org.metadatacenter.model.CedarResourceType;
-import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;

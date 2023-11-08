@@ -29,8 +29,7 @@ public final class ProvenanceNameUtil {
       if (owner != null) {
         resource.setOwnedByUserName(owner.getScreenName());
       }
-      if (resource instanceof FileSystemResource) {
-        FileSystemResource res = (FileSystemResource) resource;
+      if (resource instanceof FileSystemResource res) {
         for (FolderServerResourceExtract pi : res.getPathInfo()) {
           addProvenanceDisplayName(pi);
         }
@@ -63,8 +62,7 @@ public final class ProvenanceNameUtil {
       addProvenanceDisplayName(pi);
     }
     addProvenanceDisplayName(report.getDerivedFromExtract());
-    if (report instanceof FolderServerInstanceReport) {
-      FolderServerInstanceReport instanceReport = (FolderServerInstanceReport) report;
+    if (report instanceof FolderServerInstanceReport instanceReport) {
       addProvenanceDisplayName(instanceReport.getIsBasedOnExtract());
     }
   }

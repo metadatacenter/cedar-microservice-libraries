@@ -12,7 +12,6 @@ import org.metadatacenter.server.neo4j.cypher.parameter.AbstractCypherParamBuild
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderGroup;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderUser;
 import org.metadatacenter.server.neo4j.cypher.query.AbstractCypherQueryBuilder;
-import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderCategory;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderGroup;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 

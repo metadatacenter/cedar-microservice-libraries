@@ -15,8 +15,7 @@ public class NonNullAssertion implements CedarAssertion {
     if (target == null) {
       return new CedarAssertionResult("The object should be not null");
     } else {
-      if (target instanceof CedarParameter) {
-        CedarParameter param = (CedarParameter) target;
+      if (target instanceof CedarParameter param) {
         if (param.isMissing()) {
           return new CedarAssertionResult("The parameter named '" + param.getName() + "' from " + param.getSource() +
               " should be present")

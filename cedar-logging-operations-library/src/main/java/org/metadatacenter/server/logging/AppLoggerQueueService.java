@@ -3,7 +3,6 @@ package org.metadatacenter.server.logging;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.metadatacenter.config.CacheServerPersistent;
 import org.metadatacenter.server.logging.model.AppLogMessage;
-import org.metadatacenter.server.logging.model.AppLogType;
 import org.metadatacenter.server.queue.util.QueueServiceWithBlockingQueue;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;

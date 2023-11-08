@@ -64,7 +64,7 @@ public class CedarWrappedQueryParameter extends CedarParameterNoun {
 
   @Override
   public boolean isMissing() {
-    return wrapped == null || !wrapped.isPresent();
+    return wrapped == null || wrapped.isEmpty();
   }
 
   @Override

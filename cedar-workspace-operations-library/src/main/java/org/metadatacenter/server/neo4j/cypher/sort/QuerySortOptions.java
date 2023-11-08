@@ -1,7 +1,7 @@
 package org.metadatacenter.server.neo4j.cypher.sort;
 
-import org.metadatacenter.server.folder.QuerySortField;
-import org.metadatacenter.server.folder.QuerySortFieldType;
+import org.metadatacenter.server.workspace.QuerySortField;
+import org.metadatacenter.server.workspace.QuerySortFieldType;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.util.Neo4JUtil;
 
@@ -12,7 +12,7 @@ import java.util.Set;
 public class QuerySortOptions {
 
   final static Map<String, QuerySortField> knownSortKeys;
-  private static final QuerySortField DEFAULT_SORT_FIELD;
+  public static final QuerySortField DEFAULT_SORT_FIELD;
 
   static {
     knownSortKeys = new HashMap<>();

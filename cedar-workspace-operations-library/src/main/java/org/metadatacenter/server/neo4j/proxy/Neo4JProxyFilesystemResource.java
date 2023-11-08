@@ -13,7 +13,6 @@ import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFilesystemResource;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderArtifact;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFilesystemResource;
-import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFolder;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderResource;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 

@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarResourceId;
 import org.metadatacenter.model.CedarResource;
 import org.metadatacenter.model.CedarResourceType;
@@ -70,8 +69,7 @@ public abstract class AbstractNeo4JProxy {
     boolean result = false;
     CypherQueryLog queryLog = null;
     try (Session session = driver.session()) {
-      if (q instanceof CypherQueryWithParameters) {
-        CypherQueryWithParameters qp = (CypherQueryWithParameters) q;
+      if (q instanceof CypherQueryWithParameters qp) {
         final String runnableQuery = qp.getRunnableQuery();
         final Map<String, Object> parameterMap = qp.getParameterMap();
         queryLog = prepareQueryLog("write", qp);
@@ -167,8 +165,7 @@ public abstract class AbstractNeo4JProxy {
     org.neo4j.driver.Record record = null;
     CypherQueryLog queryLog = null;
     try (Session session = driver.session()) {
-      if (q instanceof CypherQueryWithParameters) {
-        CypherQueryWithParameters qp = (CypherQueryWithParameters) q;
+      if (q instanceof CypherQueryWithParameters qp) {
         final String runnableQuery = qp.getRunnableQuery();
         final Map<String, Object> parameterMap = qp.getParameterMap();
         queryLog = prepareQueryLog("writeGetOne", qp);
@@ -209,8 +206,7 @@ public abstract class AbstractNeo4JProxy {
   private org.neo4j.driver.Record executeQueryGetRecord(Session session, CypherQuery q) {
     org.neo4j.driver.Record record = null;
     CypherQueryLog queryLog = null;
-    if (q instanceof CypherQueryWithParameters) {
-      CypherQueryWithParameters qp = (CypherQueryWithParameters) q;
+    if (q instanceof CypherQueryWithParameters qp) {
       final String runnableQuery = qp.getRunnableQuery();
       final Map<String, Object> parameterMap = qp.getParameterMap();
       queryLog = prepareQueryLog("getRecord", qp);
@@ -294,8 +290,7 @@ public abstract class AbstractNeo4JProxy {
   private List<org.neo4j.driver.Record> executeQueryGetRecordList(Session session, CypherQuery q) {
     List<org.neo4j.driver.Record> records = null;
     CypherQueryLog queryLog = null;
-    if (q instanceof CypherQueryWithParameters) {
-      CypherQueryWithParameters qp = (CypherQueryWithParameters) q;
+    if (q instanceof CypherQueryWithParameters qp) {
       final String runnableQuery = qp.getRunnableQuery();
       final Map<String, Object> parameterMap = qp.getParameterMap();
       queryLog = prepareQueryLog("getRecordList", qp);
@@ -351,8 +346,7 @@ public abstract class AbstractNeo4JProxy {
             } else if (value.type().equals(driver.defaultTypeSystem().LIST())) {
               List<Object> list = value.asList();
               for (Object o : list) {
-                if (o instanceof Node) {
-                  Node n = (Node) o;
+                if (o instanceof Node n) {
                   JsonNode node = JsonMapper.MAPPER.valueToTree(n.asMap());
                   T folderServerNode = buildClass(node, type);
                   folderServerNodeList.add(folderServerNode);
