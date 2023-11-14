@@ -161,19 +161,14 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
   }
 
   public static FolderServerResourceExtract forType(CedarResourceType t) {
-    switch (t) {
-      case FOLDER:
-        return new FolderServerFolderExtract();
-      case FIELD:
-        return new FolderServerFieldExtract();
-      case ELEMENT:
-        return new FolderServerElementExtract();
-      case TEMPLATE:
-        return new FolderServerTemplateExtract();
-      case INSTANCE:
-        return new FolderServerTemplateInstanceExtract();
-    }
-    return null;
+    return switch (t) {
+      case FOLDER -> new FolderServerFolderExtract();
+      case FIELD -> new FolderServerFieldExtract();
+      case ELEMENT -> new FolderServerElementExtract();
+      case TEMPLATE -> new FolderServerTemplateExtract();
+      case INSTANCE -> new FolderServerTemplateInstanceExtract();
+      default -> null;
+    };
   }
 
   public static FolderServerTemplateExtract anonymous(FolderServerTemplateExtract resource) {

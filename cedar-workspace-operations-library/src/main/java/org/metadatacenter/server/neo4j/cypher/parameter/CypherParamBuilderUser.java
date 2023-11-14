@@ -31,7 +31,7 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
     String displayName = CedarUserNameUtil.getDisplayName(cedarConfig, user);
     Instant now = Instant.now();
     String nowString = CedarConstants.xsdDateTimeFormatter.format(now);
-    Long nowTS = now.getEpochSecond();
+    long nowTS = now.getEpochSecond();
     CypherParameters params = new CypherParameters();
     params.put(NodeProperty.ID, user.getId());
     params.put(NodeProperty.NAME, displayName);
@@ -96,7 +96,7 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
   public static CypherParameters updateUser(CedarUser user, CedarConfig cedarConfig) throws CedarProcessingException {
     Instant now = Instant.now();
     String nowString = CedarConstants.xsdDateTimeFormatter.format(now);
-    Long nowTS = now.getEpochSecond();
+    long nowTS = now.getEpochSecond();
     CypherParameters params = new CypherParameters();
     params.put(NodeProperty.ID, user.getId());
     params.put(NodeProperty.LAST_UPDATED_ON, nowString);

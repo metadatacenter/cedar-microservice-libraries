@@ -10,7 +10,6 @@ import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.model.folderserver.datagroup.ResourceWithEverybodyPermission;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.neo4j.AbstractNeo4JUserSession;
-import org.metadatacenter.server.neo4j.Neo4JFieldValues;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.*;
 import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;

@@ -25,7 +25,7 @@ public abstract class AbstractCypherParamBuilder {
                                                              CedarFolderId parentFolderId) {
     Instant now = Instant.now();
     String nowString = CedarConstants.xsdDateTimeFormatter.format(now);
-    Long nowTS = now.getEpochSecond();
+    long nowTS = now.getEpochSecond();
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.PARENT_ID, parentFolderId);
     params.put(ParameterPlaceholder.USER_ID, newResource.getOwnedBy());
@@ -49,21 +49,18 @@ public abstract class AbstractCypherParamBuilder {
       params.put(NodeProperty.SOURCE_HASH, newResource.getSourceHash());
     }
 
-    if (newResource instanceof FolderServerFolder) {
-      FolderServerFolder newFolder = (FolderServerFolder) newResource;
+    if (newResource instanceof FolderServerFolder newFolder) {
       params.put(NodeProperty.IS_ROOT, newFolder.isRoot());
       params.put(NodeProperty.IS_SYSTEM, newFolder.isSystem());
       params.put(NodeProperty.IS_USER_HOME, newFolder.isUserHome());
       params.put(NodeProperty.HOME_OF, newFolder.getHomeOf());
     }
-    if (newResource instanceof FolderServerArtifact) {
-      FolderServerArtifact newArtifact = (FolderServerArtifact) newResource;
+    if (newResource instanceof FolderServerArtifact newArtifact) {
       if (newArtifact.getDerivedFrom() != null) {
         params.put(NodeProperty.DERIVED_FROM, newArtifact.getDerivedFrom());
       }
     }
-    if (newResource instanceof FolderServerSchemaArtifact) {
-      FolderServerSchemaArtifact newSchemaArtifact = (FolderServerSchemaArtifact) newResource;
+    if (newResource instanceof FolderServerSchemaArtifact newSchemaArtifact) {
       if (newSchemaArtifact.getVersion() != null) {
         params.put(NodeProperty.VERSION, newSchemaArtifact.getVersion());
       }
@@ -97,7 +94,7 @@ public abstract class AbstractCypherParamBuilder {
                                                        CedarUserId updatedBy) {
     Instant now = Instant.now();
     String nowString = CedarConstants.xsdDateTimeFormatter.format(now);
-    Long nowTS = now.getEpochSecond();
+    long nowTS = now.getEpochSecond();
     CypherParameters params = new CypherParameters();
     params.put(NodeProperty.LAST_UPDATED_BY, updatedBy);
     params.put(NodeProperty.LAST_UPDATED_ON, nowString);
@@ -161,7 +158,7 @@ public abstract class AbstractCypherParamBuilder {
 
   public static CypherParameters mapAllProperties(JsonNode node) {
     CypherParameters params = new CypherParameters();
-    for (Map.Entry<String, JsonNode> entry : (Iterable<Map.Entry<String, JsonNode>>) () -> node.fields()) {
+    for (Map.Entry<String, JsonNode> entry : (Iterable<Map.Entry<String, JsonNode>>) node::fields) {
       String key = entry.getKey();
       if (key != null) {
         CypherQueryParameter param = NodeProperty.forValue(key);

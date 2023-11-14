@@ -131,27 +131,25 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
   }
 
   public static String getVersionHistory() {
-    StringBuilder sb = new StringBuilder();
-    sb.append(" MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})");
-    sb.append(" MATCH p=(resnew:<LABEL.ARTIFACT>)-[:<REL.PREVIOUSVERSION>*0..]->");
-    sb.append("(artifact)-[:<REL.PREVIOUSVERSION>*0..]->(resold:<LABEL.ARTIFACT>)");
-    sb.append(" RETURN p ORDER BY length(p) DESC LIMIT 1");
-    return sb.toString();
+    return "" +
+        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
+        " MATCH p=(resnew:<LABEL.ARTIFACT>)-[:<REL.PREVIOUSVERSION>*0..]->" +
+        "(artifact)-[:<REL.PREVIOUSVERSION>*0..]->(resold:<LABEL.ARTIFACT>)" +
+        " RETURN p ORDER BY length(p) DESC LIMIT 1";
   }
 
   public static String getVersionHistoryWithPermission() {
-    StringBuilder sb = new StringBuilder();
-    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
-    sb.append(" MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ARTIFACT_ID>}})");
-    sb.append(" MATCH p=(resnew:<LABEL.ARTIFACT>)-[:<REL.PREVIOUSVERSION>*0..]->");
-    sb.append("(artifact)-[:<REL.PREVIOUSVERSION>*0..]->(resold:<LABEL.ARTIFACT>)");
-    sb.append(" WITH nodes(p) as ns, user");
-    sb.append(" ORDER BY length(p) DESC LIMIT 1");
-    sb.append(" UNWIND ns AS artifact");
-    sb.append(" MATCH (artifact:Artifact)");
-    sb.append(getResourcePermissionConditions(" WHERE ", "artifact"));
-    sb.append(" RETURN artifact");
-    return sb.toString();
+    return "" +
+        " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +
+        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ARTIFACT_ID>}})" +
+        " MATCH p=(resnew:<LABEL.ARTIFACT>)-[:<REL.PREVIOUSVERSION>*0..]->" +
+        "(artifact)-[:<REL.PREVIOUSVERSION>*0..]->(resold:<LABEL.ARTIFACT>)" +
+        " WITH nodes(p) as ns, user" +
+        " ORDER BY length(p) DESC LIMIT 1" +
+        " UNWIND ns AS artifact" +
+        " MATCH (artifact:Artifact)" +
+        getResourcePermissionConditions(" WHERE ", "artifact") +
+        " RETURN artifact";
   }
 
   public static String setOpen() {

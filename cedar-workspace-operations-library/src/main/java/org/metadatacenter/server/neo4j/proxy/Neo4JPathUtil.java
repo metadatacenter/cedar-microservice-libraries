@@ -7,7 +7,6 @@ import org.metadatacenter.server.neo4j.PathUtil;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@SuppressWarnings("IndexOfReplaceableByContains")
 public class Neo4JPathUtil implements PathUtil {
 
   private static final String SEPARATOR = "/";

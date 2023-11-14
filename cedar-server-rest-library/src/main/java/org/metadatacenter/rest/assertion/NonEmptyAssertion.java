@@ -19,8 +19,7 @@ public class NonEmptyAssertion implements CedarAssertion {
       return new CedarAssertionResult(
           "Only instances of CedarParameter and CedarRequestBody can be checked with this assertion");
     }
-    if (target instanceof CedarParameter) {
-      CedarParameter cedarParameter = (CedarParameter) target;
+    if (target instanceof CedarParameter cedarParameter) {
       String s = cedarParameter.stringValue();
       if (s != null && !s.trim().isEmpty()) {
         return null;

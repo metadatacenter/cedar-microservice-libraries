@@ -85,15 +85,11 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
       findIterable.skip(offset);
     }
     if (fieldNames != null && fieldNames.size() > 0) {
-      Bson fields = null;
-      switch (includeExclude) {
-        case INCLUDE:
-          fields = Projections.fields(Projections.include(fieldNames), Projections.excludeId());
-          break;
-        case EXCLUDE:
-          fields = Projections.exclude(fieldNames);
-          break;
-      }
+      Bson fields = switch (includeExclude) {
+        case INCLUDE -> Projections.fields(Projections.include(fieldNames), Projections.excludeId());
+        case EXCLUDE -> Projections.exclude(fieldNames);
+        default -> null;
+      };
       if (fields != null) {
         findIterable.projection(fields);
       }

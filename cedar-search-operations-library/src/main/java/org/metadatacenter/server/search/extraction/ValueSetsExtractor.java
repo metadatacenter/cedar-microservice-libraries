@@ -96,10 +96,7 @@ public class ValueSetsExtractor
 
   public Set<String> getSubClassURIs(String superclassURI)
   {
-    if (classHierarchy.containsKey(superclassURI))
-      return classHierarchy.get(superclassURI);
-    else
-      return Collections.EMPTY_SET;
+    return classHierarchy.getOrDefault(superclassURI, Collections.EMPTY_SET);
   }
 
   public Optional<String> getAnnotation(String classURI, Annotation annotation)

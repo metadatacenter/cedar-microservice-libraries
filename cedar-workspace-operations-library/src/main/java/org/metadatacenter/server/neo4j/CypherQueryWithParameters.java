@@ -39,9 +39,8 @@ public class CypherQueryWithParameters extends AbstractCypherQuery {
       sb.append("\"").append(((String) o).replace("\"", "\\\"")).append("\"");
     } else if (o instanceof Boolean || o instanceof Integer || o instanceof Long) {
       sb.append(String.valueOf(o));
-    } else if (o instanceof List) {
+    } else if (o instanceof List l) {
       sb.append("[");
-      List l = (List) o;
       String separator = "";
       for (Object li : l) {
         sb.append(separator);

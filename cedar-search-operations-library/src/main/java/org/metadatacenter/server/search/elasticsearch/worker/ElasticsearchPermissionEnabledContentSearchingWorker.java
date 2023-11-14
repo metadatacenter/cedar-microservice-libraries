@@ -221,12 +221,10 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
           sortOrder = SortOrder.DESC;
           s = s.substring(1);
         }
-        if (SORT_BY_NAME.equals(s)) {
-          searchRequestBuilder.addSort(INFO_SCHEMA_NAME, sortOrder);
-        } else if (SORT_LAST_UPDATED_ON_FIELD.equals(s)) {
-          searchRequestBuilder.addSort(INFO_PAV_LAST_UPDATED_ON, sortOrder);
-        } else if (SORT_CREATED_ON_FIELD.equals(s)) {
-          searchRequestBuilder.addSort(INFO_PAV_CREATED_ON, sortOrder);
+        switch (s) {
+          case SORT_BY_NAME -> searchRequestBuilder.addSort(INFO_SCHEMA_NAME, sortOrder);
+          case SORT_LAST_UPDATED_ON_FIELD -> searchRequestBuilder.addSort(INFO_PAV_LAST_UPDATED_ON, sortOrder);
+          case SORT_CREATED_ON_FIELD -> searchRequestBuilder.addSort(INFO_PAV_CREATED_ON, sortOrder);
         }
       }
     }

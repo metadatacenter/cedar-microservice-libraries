@@ -1,7 +1,6 @@
 package org.metadatacenter.server.permissions;
 
 import org.metadatacenter.id.CedarFilesystemResourceId;
-import org.metadatacenter.model.folderserver.datagroup.ResourceWithOpenFlag;
 import org.metadatacenter.permission.currentuserpermission.CurrentUserPermissionUpdater;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;

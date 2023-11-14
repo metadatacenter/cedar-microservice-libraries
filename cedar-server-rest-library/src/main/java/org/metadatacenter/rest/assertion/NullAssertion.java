@@ -15,8 +15,7 @@ public class NullAssertion implements CedarAssertion {
     if (target == null) {
       return null;
     } else {
-      if (target instanceof CedarParameter) {
-        CedarParameter param = (CedarParameter) target;
+      if (target instanceof CedarParameter param) {
         if (param.isNull()) {
           return null;
         } else {

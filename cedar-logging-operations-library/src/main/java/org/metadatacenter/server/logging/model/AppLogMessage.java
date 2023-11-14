@@ -2,7 +2,6 @@ package org.metadatacenter.server.logging.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import org.metadatacenter.model.ServerName;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.server.logging.AppLogger;
 

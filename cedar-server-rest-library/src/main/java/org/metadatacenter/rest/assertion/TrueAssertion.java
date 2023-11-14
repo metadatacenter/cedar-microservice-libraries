@@ -17,8 +17,7 @@ public class TrueAssertion implements CedarAssertion {
   @Override
   public CedarAssertionResult check(CedarRequestContext requestContext, Object target) {
     if (target != null) {
-      if (target instanceof Boolean) {
-        Boolean b = (Boolean) target;
+      if (target instanceof Boolean b) {
         if (b.equals(Boolean.TRUE)) {
           return null;
         }

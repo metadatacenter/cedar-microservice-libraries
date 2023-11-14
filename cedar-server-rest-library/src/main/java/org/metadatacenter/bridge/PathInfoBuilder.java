@@ -36,8 +36,7 @@ public final class PathInfoBuilder {
     if (context.getCedarUser().has(CedarPermission.READ_NOT_READABLE_NODE)) {
       return true;
     }
-    if (nodeExtract instanceof FolderServerFolderExtract) {
-      FolderServerFolderExtract folderExtract = (FolderServerFolderExtract) nodeExtract;
+    if (nodeExtract instanceof FolderServerFolderExtract folderExtract) {
       if (folderExtract.isRoot() || folderExtract.isSystem()) {
         return false;
       }

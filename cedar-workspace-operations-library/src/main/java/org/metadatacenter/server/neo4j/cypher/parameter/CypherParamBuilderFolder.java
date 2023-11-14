@@ -42,9 +42,8 @@ public class CypherParamBuilderFolder extends AbstractCypherParamBuilder {
     return getResourceByIdentityAndName(folderId, pathName);
   }
 
-  public static CypherParameters createFolder(LinkedDataUtil linkedDataUtil, FolderServerFolder newFolder, CedarFolderId cedarFolderId) {
-    String newFolderId = linkedDataUtil.buildNewLinkedDataId(CedarResourceType.FOLDER);
-    newFolder.setId(newFolderId);
+  public static CypherParameters createFolder(FolderServerFolder newFolder, CedarFolderId cedarFolderId, CedarFolderId newFolderId) {
+    newFolder.setId(newFolderId.getId());
     return createFilesystemResource(newFolder, cedarFolderId);
   }
 

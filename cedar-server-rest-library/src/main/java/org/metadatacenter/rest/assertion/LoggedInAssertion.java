@@ -15,12 +15,10 @@ public class LoggedInAssertion implements CedarAssertion {
 
   @Override
   public CedarAssertionResult check(CedarRequestContext requestContext, CedarAssertionNoun target) {
-    if (!(target instanceof CedarUserNoun)) {
+    if (!(target instanceof CedarUserNoun cedarUserNoun)) {
       return new CedarAssertionResult("Only instances of CedarUserNoun can be checked with this assertion");
     }
-    CedarUserNoun cedarUserNoun = (CedarUserNoun) target;
-    //noinspection ConstantConditions
-    CedarUser user = cedarUserNoun.getUser();
+    CedarUser user = cedarUserNoun.user();
     if (user != null) {
       String cn = CedarPermission.LOGGED_IN.getPermissionName();
       if (user.getPermissions() == null || !user.getPermissions().contains(cn)) {

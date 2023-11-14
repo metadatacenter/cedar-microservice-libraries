@@ -14,11 +14,10 @@ public class JsonMergePatchAssertion implements CedarAssertion {
 
   @Override
   public CedarAssertionResult check(CedarRequestContext requestContext, CedarAssertionNoun target) {
-    if (!(target instanceof CedarRequestNoun)) {
+    if (!(target instanceof CedarRequestNoun cedarRequestNoun)) {
       return new CedarAssertionResult("Only instances of CedarRequestNoun can be checked with this assertion");
     }
     String contentType;
-    CedarRequestNoun cedarRequestNoun = (CedarRequestNoun) target;
     contentType = cedarRequestNoun.getContentType();
     if (CONTENT_TYPE_APPLICATION_MERGE_PATCH_JSON.equals(contentType)) {
       return null;

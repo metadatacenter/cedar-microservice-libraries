@@ -83,8 +83,7 @@ public abstract class AbstractCypherQueryBuilder {
 
     sb.append(buildCreateAssignment(NodeProperty.IS_OPEN)).append(",");
 
-    if (newNode instanceof FolderServerFolder) {
-      FolderServerFolder newFolder = (FolderServerFolder) newNode;
+    if (newNode instanceof FolderServerFolder newFolder) {
       if (newFolder.isRoot()) {
         sb.append(buildCreateAssignment(NodeProperty.IS_ROOT)).append(",");
       }
@@ -129,8 +128,7 @@ public abstract class AbstractCypherQueryBuilder {
         sb.append(buildCreateAssignment(NodeProperty.IS_LATEST_PUBLISHED_VERSION)).append(",");
       }
     }
-    if (newNode instanceof FolderServerInstanceArtifact) {
-      FolderServerInstanceArtifact newInstance = (FolderServerInstanceArtifact) newNode;
+    if (newNode instanceof FolderServerInstanceArtifact newInstance) {
       if (newInstance.getIsBasedOn() != null) {
         sb.append(buildCreateAssignment(NodeProperty.IS_BASED_ON)).append(",");
       }

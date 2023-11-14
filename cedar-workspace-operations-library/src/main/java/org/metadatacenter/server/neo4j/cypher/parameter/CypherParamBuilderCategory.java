@@ -18,7 +18,7 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
                                                 String categoryDescription, String categoryIdentifier, CedarUserId userId) {
     Instant now = Instant.now();
     String nowString = CedarConstants.xsdDateTimeFormatter.format(now);
-    Long nowTS = now.getEpochSecond();
+    long nowTS = now.getEpochSecond();
     CypherParameters params = new CypherParameters();
     // BaseDataGroup
     params.put(NodeProperty.ID, newCategoryId);

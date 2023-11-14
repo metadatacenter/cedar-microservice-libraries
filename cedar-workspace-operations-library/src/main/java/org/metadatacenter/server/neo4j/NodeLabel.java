@@ -88,17 +88,13 @@ public enum NodeLabel {
   }
 
   public static NodeLabel forCedarResourceType(CedarResourceType resourceType) {
-    switch (resourceType) {
-      case FIELD:
-        return FIELD;
-      case ELEMENT:
-        return ELEMENT;
-      case TEMPLATE:
-        return TEMPLATE;
-      case INSTANCE:
-        return INSTANCE;
-    }
-    return null;
+    return switch (resourceType) {
+      case FIELD -> FIELD;
+      case ELEMENT -> ELEMENT;
+      case TEMPLATE -> TEMPLATE;
+      case INSTANCE -> INSTANCE;
+      default -> null;
+    };
   }
 
   @JsonIgnore

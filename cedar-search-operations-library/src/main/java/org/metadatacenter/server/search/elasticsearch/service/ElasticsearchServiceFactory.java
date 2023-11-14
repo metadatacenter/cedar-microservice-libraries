@@ -1,6 +1,5 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
-import com.mongodb.util.JSON;
 import org.metadatacenter.config.CedarConfig;
 
 public class ElasticsearchServiceFactory {

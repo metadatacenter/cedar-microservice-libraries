@@ -1,4 +1,4 @@
-package org.metadatacenter.server.folder;
+package org.metadatacenter.server.workspace;
 
 public enum QuerySortFieldType {
   TEXTUAL, NUMERIC
