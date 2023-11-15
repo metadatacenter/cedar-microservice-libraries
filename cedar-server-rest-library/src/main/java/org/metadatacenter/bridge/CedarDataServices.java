@@ -131,6 +131,18 @@ public final class CedarDataServices {
     }
   }
 
+  public static InclusionSubgraphServiceSession getInclusionSubgraphServiceSession(CedarRequestContext context) {
+    if (instance.proxies == null) {
+      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
+      System.exit(-2);
+      return null;
+    } else {
+      return Neo4JUserSessionInclusionSubgraphService.get(instance.cedarConfig, instance.proxies, context.getCedarUser(),
+          context.getGlobalRequestIdHeader(),
+          context.getLocalRequestIdHeader());
+    }
+  }
+
   public static UserServiceSession getUserServiceSession(CedarRequestContext context) {
     if (instance.proxies == null) {
       log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");

@@ -25,7 +25,7 @@ public class CypherQueryWithParameters extends AbstractCypherQuery {
       for (String parameter : pMap.keySet()) {
         Object o = pMap.get(parameter);
         String v = getVariableRepresentation(o);
-        q = q.replace("{" + parameter + "}", v);
+        q = q.replace("$" + parameter, v);
       }
     }
     return q.replace("\n", " ").replace("\r", "");

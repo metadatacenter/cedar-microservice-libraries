@@ -11,6 +11,7 @@ import org.metadatacenter.server.neo4j.parameter.ParameterLiteral;
 import org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 public abstract class AbstractCypherParamBuilder {
@@ -195,6 +196,13 @@ public abstract class AbstractCypherParamBuilder {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.RESOURCE_ID, resourceId);
     params.put(ParameterPlaceholder.USER_ID, userId);
+    return params;
+  }
+
+  public static CypherParameters matchSourceAndTargetIds(CedarResourceId sourceId, List<String> targetIds) {
+    CypherParameters params = new CypherParameters();
+    params.put(ParameterPlaceholder.SOURCE_ID, sourceId);
+    params.put(ParameterPlaceholder.TARGET_IDS, targetIds);
     return params;
   }
 
