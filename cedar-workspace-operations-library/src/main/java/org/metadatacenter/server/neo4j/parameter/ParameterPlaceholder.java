@@ -20,6 +20,7 @@ public enum ParameterPlaceholder implements CypherQueryParameter {
   OFFSET("offset"),
   SOURCE_ID("sourceId"),
   TARGET_ID("targetId"),
+  TARGET_IDS("targetIds"),
   IS_BASED_ON("isBasedOn"),
   EVERYBODY_PERMISSION("everybodyPermission"),
   CATEGORY_ID("categoryId"),

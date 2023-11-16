@@ -74,4 +74,18 @@ public class Neo4JProxyGraph extends AbstractNeo4JProxy {
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeWrite(q, "creating arc");
   }
+
+  public boolean updateInclusionArcsDelete(CedarResourceId sourceId, List<String> includedIds) {
+    String cypher = CypherQueryBuilderGraph.updateInclusionArcsDelete(RelationLabel.INCLUDES);
+    CypherParameters params = AbstractCypherParamBuilder.matchSourceAndTargetIds(sourceId, includedIds);
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeWrite(q, "deleting old inclusion arcs");
+  }
+
+  public boolean updateInclusionArcsCreate(CedarResourceId sourceId, List<String> includedIds) {
+    String cypher = CypherQueryBuilderGraph.updateInclusionArcsCreate(RelationLabel.INCLUDES);
+    CypherParameters params = AbstractCypherParamBuilder.matchSourceAndTargetIds(sourceId, includedIds);
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeWrite(q, "creating new inclusion arcs");
+  }
 }

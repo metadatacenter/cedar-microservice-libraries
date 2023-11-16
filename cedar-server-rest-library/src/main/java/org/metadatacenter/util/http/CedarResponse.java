@@ -89,7 +89,7 @@ public abstract class CedarResponse {
         r.put("errorMessage", errorMessage);
         r.put("status", status);
         r.put("statusCode", status.getStatusCode());
-        r.put("operation", operation.asJson());
+        r.put("operation", operation == null ? null : operation.asJson());
         if (exception != null) {
           StackTraceElement[] stackTrace = exception.getStackTrace();
           if (stackTrace != null) {
