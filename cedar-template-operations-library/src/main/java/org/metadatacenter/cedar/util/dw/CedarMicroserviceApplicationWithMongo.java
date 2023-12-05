@@ -1,7 +1,7 @@
 package org.metadatacenter.cedar.util.dw;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mongodb.MongoClient;
+import com.mongodb.client.MongoClient;
 import org.metadatacenter.config.MongoConfig;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.server.service.TemplateElementService;

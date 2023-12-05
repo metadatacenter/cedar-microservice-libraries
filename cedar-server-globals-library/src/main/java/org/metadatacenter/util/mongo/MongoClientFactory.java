@@ -1,12 +1,13 @@
 package org.metadatacenter.util.mongo;
 
-import com.mongodb.MongoClient;
+import com.mongodb.MongoClientSettings;
 import com.mongodb.MongoCredential;
 import com.mongodb.ServerAddress;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
 import org.metadatacenter.config.MongoConnection;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Collections;
 
 public class MongoClientFactory {
 
@@ -20,15 +21,18 @@ public class MongoClientFactory {
 
   public void buildClient() {
     ServerAddress address = new ServerAddress(mongoConnection.getHost(), mongoConnection.getPort());
-    List<MongoCredential> credentials = new ArrayList<>();
-    credentials.add(
-        MongoCredential.createScramSha1Credential(
-            mongoConnection.getUser(),
-            mongoConnection.getDatabaseName(),
-            mongoConnection.getPassword().toCharArray()
-        )
+    MongoCredential credential = MongoCredential.createScramSha1Credential(
+        mongoConnection.getUser(),
+        mongoConnection.getDatabaseName(),
+        mongoConnection.getPassword().toCharArray()
     );
-    this.mongoClient = new MongoClient(address, credentials);
+
+    MongoClientSettings settings = MongoClientSettings.builder()
+        .applyToClusterSettings(builder -> builder.hosts(Collections.singletonList(address)))
+        .credential(credential)
+        .build();
+
+    this.mongoClient = MongoClients.create(settings);
   }
 
   public MongoClient getClient() {

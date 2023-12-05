@@ -1,7 +1,7 @@
 package org.metadatacenter.server.dao.mongodb;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mongodb.MongoClient;
+import com.mongodb.client.MongoClient;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
@@ -200,7 +200,7 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
 
   @Override
   public long count() {
-    return entityCollection.count();
+    return entityCollection.countDocuments();
   }
 
 }

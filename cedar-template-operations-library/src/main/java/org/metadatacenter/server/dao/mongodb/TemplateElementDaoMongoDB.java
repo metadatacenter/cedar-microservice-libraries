@@ -1,6 +1,6 @@
 package org.metadatacenter.server.dao.mongodb;
 
-import com.mongodb.MongoClient;
+import com.mongodb.client.MongoClient;
 
 public class TemplateElementDaoMongoDB extends GenericLDDaoMongoDB {
 
