@@ -6,7 +6,9 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import org.metadatacenter.id.CedarUntypedArtifactId;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.currentuserpermissions.FolderServerArtifactCurrentUserReport;
+import org.metadatacenter.model.folderserver.datagroup.DOIGroup;
 import org.metadatacenter.model.folderserver.datagroup.DerivedFromGroup;
+import org.metadatacenter.model.folderserver.datagroup.ResourceWithDOIData;
 import org.metadatacenter.model.folderserver.datagroup.ResourceWithDerivedFromData;
 import org.metadatacenter.util.json.JsonMapper;
 
@@ -23,13 +25,15 @@ import java.io.IOException;
     @JsonSubTypes.Type(value = FolderServerInstance.class, name = CedarResourceType.Types.INSTANCE)
 })
 @JsonIgnoreProperties(ignoreUnknown = true)
-public abstract class FolderServerArtifact extends FileSystemResource implements ResourceWithDerivedFromData {
+public abstract class FolderServerArtifact extends FileSystemResource implements ResourceWithDerivedFromData, ResourceWithDOIData {
 
   protected DerivedFromGroup provenanceDataGroup;
+  protected DOIGroup doiDataGroup;
 
   public FolderServerArtifact(CedarResourceType resourceType) {
     super(resourceType);
     provenanceDataGroup = new DerivedFromGroup();
+    doiDataGroup = new DOIGroup();
   }
 
   public static FolderServerArtifact fromFolderServerResourceCurrentUserReport(FolderServerArtifactCurrentUserReport cur) {
@@ -53,4 +57,13 @@ public abstract class FolderServerArtifact extends FileSystemResource implements
     provenanceDataGroup.setDerivedFrom(df);
   }
 
+  @Override
+  public String getDOI() {
+    return doiDataGroup.getDOI();
+  }
+
+  @Override
+  public void setDOI(String doi) {
+    doiDataGroup.setDOI(doi);
+  }
 }

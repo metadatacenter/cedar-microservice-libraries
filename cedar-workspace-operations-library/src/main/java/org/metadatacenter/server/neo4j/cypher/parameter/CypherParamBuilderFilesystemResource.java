@@ -36,9 +36,8 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     return params;
   }
 
-  public static CypherParameters getSharedWithMeLookupParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
-                                                                 ResourcePublicationStatusFilter publicationStatus, int limit, int offset,
-                                                                 CedarUserId ownerId) {
+  public static CypherParameters getSharedWithMeLookupParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, int limit,
+                                                                 int offset, CedarUserId ownerId) {
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
@@ -50,9 +49,8 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     return params;
   }
 
-  public static CypherParameters getSharedWithEverybodyLookupParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
-                                                                        ResourcePublicationStatusFilter publicationStatus, int limit, int offset,
-                                                                        CedarUserId ownerId) {
+  public static CypherParameters getSharedWithEverybodyLookupParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                                                        int limit, int offset, CedarUserId ownerId) {
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
@@ -64,8 +62,8 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     return params;
   }
 
-  public static CypherParameters getSharedWithMeCountParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
-                                                                ResourcePublicationStatusFilter publicationStatus, CedarUserId ownerId) {
+  public static CypherParameters getSharedWithMeCountParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                                                CedarUserId ownerId) {
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
@@ -75,8 +73,8 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     return params;
   }
 
-  public static CypherParameters getSharedWithEverybodyCountParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
-                                                                       ResourcePublicationStatusFilter publicationStatus, CedarUserId ownerId) {
+  public static CypherParameters getSharedWithEverybodyCountParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                                                       CedarUserId ownerId) {
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
@@ -86,9 +84,8 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     return params;
   }
 
-  public static CypherParameters getAllLookupParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
-                                                        ResourcePublicationStatusFilter publicationStatus, long limit, long offset,
-                                                        CedarUserId ownerId, boolean addPermissionConditions) {
+  public static CypherParameters getAllLookupParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, long limit,
+                                                        long offset, CedarUserId ownerId, boolean addPermissionConditions) {
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     if (publicationStatus != null) {
@@ -102,8 +99,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     return params;
   }
 
-  public static CypherParameters getAllCountParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
-                                                       ResourcePublicationStatusFilter publicationStatus, CedarUserId ownerId,
+  public static CypherParameters getAllCountParameters(List<CedarResourceType> resourceTypes, ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, CedarUserId ownerId,
                                                        boolean addPermissionConditions) {
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
@@ -120,8 +116,8 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     return matchResourceByIdentity(resourceId);
   }
 
-  public static CypherParameters getSearchIsBasedOnLookupParameters(List<CedarResourceType> resourceTypes, CedarTemplateId isBasedOnId, int limit,
-                                                                    int offset, CedarUserId ownerId, boolean addPermissionConditions) {
+  public static CypherParameters getSearchIsBasedOnLookupParameters(List<CedarResourceType> resourceTypes, CedarTemplateId isBasedOnId, int limit, int offset, CedarUserId ownerId,
+                                                                    boolean addPermissionConditions) {
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     params.put(ParameterPlaceholder.IS_BASED_ON, isBasedOnId);
@@ -133,8 +129,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     return params;
   }
 
-  public static CypherParameters getSearchIsBasedOnCountParameters(List<CedarResourceType> resourceTypes, CedarTemplateId isBasedOnId,
-                                                                   CedarUserId ownerId, boolean addPermissionConditions) {
+  public static CypherParameters getSearchIsBasedOnCountParameters(List<CedarResourceType> resourceTypes, CedarTemplateId isBasedOnId, CedarUserId ownerId, boolean addPermissionConditions) {
     CypherParameters params = new CypherParameters();
     params.addResourceTypes(resourceTypes);
     params.put(ParameterPlaceholder.IS_BASED_ON, isBasedOnId);
@@ -144,8 +139,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     return params;
   }
 
-  public static CypherParameters matchResourceIdAndEverybodyPermission(CedarFilesystemResourceId resourceId,
-                                                                       NodeSharePermission everybodyPermission) {
+  public static CypherParameters matchResourceIdAndEverybodyPermission(CedarFilesystemResourceId resourceId, NodeSharePermission everybodyPermission) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.ID, resourceId);
     params.put(ParameterPlaceholder.EVERYBODY_PERMISSION, everybodyPermission.getValue());

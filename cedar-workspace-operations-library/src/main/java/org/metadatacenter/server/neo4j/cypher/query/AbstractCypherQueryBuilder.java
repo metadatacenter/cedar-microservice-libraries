@@ -133,6 +133,9 @@ public abstract class AbstractCypherQueryBuilder {
         sb.append(buildCreateAssignment(NodeProperty.IS_BASED_ON)).append(",");
       }
     }
+    if (newNode.getType().supportsDOI()) {
+      sb.append(buildCreateAssignment(NodeProperty.DOI)).append(",");
+    }
 
     sb.append(NodeProperty.NODE_SORT_ORDER).append(":")
         .append(label.isFolder() ? ORDER_FOLDER : ORDER_NON_FOLDER).append(",");

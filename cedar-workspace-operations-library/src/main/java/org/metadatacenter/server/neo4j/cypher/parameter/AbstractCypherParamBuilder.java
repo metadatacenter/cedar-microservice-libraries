@@ -22,8 +22,7 @@ public abstract class AbstractCypherParamBuilder {
     return new ParameterLiteral(FOLDER_ALIAS_PREFIX + i);
   }
 
-  protected static CypherParameters createFilesystemResource(FileSystemResource newResource,
-                                                             CedarFolderId parentFolderId) {
+  protected static CypherParameters createFilesystemResource(FileSystemResource newResource, CedarFolderId parentFolderId) {
     Instant now = Instant.now();
     String nowString = CedarConstants.xsdDateTimeFormatter.format(now);
     long nowTS = now.getEpochSecond();
@@ -60,6 +59,9 @@ public abstract class AbstractCypherParamBuilder {
       if (newArtifact.getDerivedFrom() != null) {
         params.put(NodeProperty.DERIVED_FROM, newArtifact.getDerivedFrom());
       }
+      if (newArtifact.getType().supportsDOI()) {
+        params.put(NodeProperty.DOI, newArtifact.getDOI());
+      }
     }
     if (newResource instanceof FolderServerSchemaArtifact newSchemaArtifact) {
       if (newSchemaArtifact.getVersion() != null) {
@@ -90,9 +92,7 @@ public abstract class AbstractCypherParamBuilder {
     return params;
   }
 
-  protected static CypherParameters updateResourceById(CedarResourceId resourceId, Map<? extends CypherQueryParameter
-      , String> updateFields,
-                                                       CedarUserId updatedBy) {
+  protected static CypherParameters updateResourceById(CedarResourceId resourceId, Map<? extends CypherQueryParameter, String> updateFields, CedarUserId updatedBy) {
     Instant now = Instant.now();
     String nowString = CedarConstants.xsdDateTimeFormatter.format(now);
     long nowTS = now.getEpochSecond();
@@ -113,8 +113,7 @@ public abstract class AbstractCypherParamBuilder {
     return params;
   }
 
-  protected static CypherParameters getResourceByIdentityAndName(CedarFilesystemResourceId folderId,
-                                                                 String resourceName) {
+  protected static CypherParameters getResourceByIdentityAndName(CedarFilesystemResourceId folderId, String resourceName) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.ID, folderId);
     params.put(ParameterPlaceholder.NAME, resourceName);
@@ -149,8 +148,7 @@ public abstract class AbstractCypherParamBuilder {
     return params;
   }
 
-  public static CypherParameters matchArtifactIdAndParentFolderId(CedarArtifactId artifactId,
-                                                                  CedarFolderId parentFolderId) {
+  public static CypherParameters matchArtifactIdAndParentFolderId(CedarArtifactId artifactId, CedarFolderId parentFolderId) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.ARTIFACT_ID, artifactId);
     params.put(ParameterPlaceholder.PARENT_FOLDER_ID, parentFolderId);

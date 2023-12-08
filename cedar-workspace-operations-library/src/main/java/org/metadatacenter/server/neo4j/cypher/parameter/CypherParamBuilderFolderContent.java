@@ -10,8 +10,7 @@ import java.util.Collection;
 
 public class CypherParamBuilderFolderContent extends AbstractCypherParamBuilder {
 
-  public static CypherParameters getFolderContentsFilteredCountParameters(CedarFolderId folderId, Collection<CedarResourceType> resourceTypes,
-                                                                          ResourcePublicationStatusFilter publicationStatus) {
+  public static CypherParameters getFolderContentsFilteredCountParameters(CedarFolderId folderId, Collection<CedarResourceType> resourceTypes, ResourcePublicationStatusFilter publicationStatus) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.FOLDER_ID, folderId);
     params.addResourceTypes(resourceTypes);
@@ -21,8 +20,8 @@ public class CypherParamBuilderFolderContent extends AbstractCypherParamBuilder 
     return params;
   }
 
-  public static CypherParameters getFolderContentsFilteredLookupParameters(CedarFolderId folderId, Collection<CedarResourceType> resourceTypes,
-                                                                           ResourcePublicationStatusFilter publicationStatus, long limit, long offset) {
+  public static CypherParameters getFolderContentsFilteredLookupParameters(CedarFolderId folderId, Collection<CedarResourceType> resourceTypes, ResourcePublicationStatusFilter publicationStatus,
+                                                                           long limit, long offset) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.FOLDER_ID, folderId);
     params.addResourceTypes(resourceTypes);
