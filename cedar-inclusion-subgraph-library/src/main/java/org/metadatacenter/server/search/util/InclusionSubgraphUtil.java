@@ -5,8 +5,16 @@ import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.constant.JsonSchemaConstants;
 import org.metadatacenter.constant.LinkedData;
 import org.metadatacenter.exception.CedarProcessingException;
+import org.metadatacenter.id.CedarUntypedSchemaArtifactId;
 import org.metadatacenter.model.core.CedarConstants;
+import org.metadatacenter.model.folderserver.basic.FolderServerElement;
+import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
+import org.metadatacenter.model.request.InclusionSubgraphNodeOperation;
+import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphElement;
+import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphRequest;
+import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphResponse;
+import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphTemplate;
 import org.metadatacenter.proxy.ArtifactProxy;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.InclusionSubgraphServiceSession;
@@ -18,10 +26,7 @@ import org.slf4j.LoggerFactory;
 import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 public class InclusionSubgraphUtil {
 
@@ -81,5 +86,54 @@ public class InclusionSubgraphUtil {
       }
     }
     return linkIds;
+  }
+
+  public static InclusionSubgraphResponse buildAffectedTree(InclusionSubgraphRequest treeRequest, InclusionSubgraphServiceSession inclusionSubgraphSession) {
+    String rootId = treeRequest.getId();
+    InclusionSubgraphResponse response = new InclusionSubgraphResponse();
+    response.setId(rootId);
+    response.setElements(computeAffectedElements(rootId, treeRequest.getElements(), inclusionSubgraphSession));
+    response.setTemplates(computeAffectedTemplates(rootId, treeRequest.getTemplates(), inclusionSubgraphSession));
+
+    return response;
+  }
+
+  private static Map<String, InclusionSubgraphTemplate> computeAffectedTemplates(String id, Map<String, InclusionSubgraphTemplate> requestTemplates,
+                                                                                 InclusionSubgraphServiceSession inclusionSubgraphSession) {
+    Map<String, InclusionSubgraphTemplate> templates = new HashMap<>();
+    CedarUntypedSchemaArtifactId aid = CedarUntypedSchemaArtifactId.build(id);
+    List<FolderServerTemplate> includingTemplates = inclusionSubgraphSession.listIncludingTemplates(aid);
+    for (FolderServerTemplate template : includingTemplates) {
+      InclusionSubgraphTemplate t = InclusionSubgraphTemplate.fromFolderServerTemplate(template);
+      String templateId = t.getId();
+      templates.put(templateId, t);
+      if (requestTemplates != null && requestTemplates.containsKey(templateId)) {
+        InclusionSubgraphTemplate inclusionSubgraphTemplate = requestTemplates.get(templateId);
+        t.setOperation(inclusionSubgraphTemplate.getOperation());
+      }
+    }
+    return templates;
+  }
+
+  private static Map<String, InclusionSubgraphElement> computeAffectedElements(String id, Map<String, InclusionSubgraphElement> requestElements,
+                                                                               InclusionSubgraphServiceSession inclusionSubgraphSession) {
+    Map<String, InclusionSubgraphElement> elements = new HashMap<>();
+    CedarUntypedSchemaArtifactId aid = CedarUntypedSchemaArtifactId.build(id);
+    List<FolderServerElement> includingElements = inclusionSubgraphSession.listIncludingElements(aid);
+    for (FolderServerElement element : includingElements) {
+      InclusionSubgraphElement e = InclusionSubgraphElement.fromFolderServerElement(element);
+      String elementId = e.getId();
+      elements.put(elementId, e);
+      if (requestElements != null && requestElements.containsKey(elementId)) {
+        InclusionSubgraphElement inclusionSubgraphElement = requestElements.get(elementId);
+        e.setOperation(inclusionSubgraphElement.getOperation());
+        if (inclusionSubgraphElement.getOperation() == InclusionSubgraphNodeOperation.UPDATE) {
+          e.setElements(computeAffectedElements(elementId, inclusionSubgraphElement.getElements(), inclusionSubgraphSession));
+          e.setTemplates(computeAffectedTemplates(elementId, inclusionSubgraphElement.getTemplates(), inclusionSubgraphSession));
+
+        }
+      }
+    }
+    return elements;
   }
 }

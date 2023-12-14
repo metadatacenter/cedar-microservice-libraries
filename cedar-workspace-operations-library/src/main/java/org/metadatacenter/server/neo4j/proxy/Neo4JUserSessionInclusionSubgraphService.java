@@ -2,6 +2,8 @@ package org.metadatacenter.server.neo4j.proxy;
 
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarResourceId;
+import org.metadatacenter.model.folderserver.basic.FolderServerElement;
+import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
 import org.metadatacenter.server.InclusionSubgraphServiceSession;
 import org.metadatacenter.server.neo4j.AbstractNeo4JUserSession;
 import org.metadatacenter.server.security.model.user.CedarUser;
@@ -26,5 +28,15 @@ public class Neo4JUserSessionInclusionSubgraphService extends AbstractNeo4JUserS
       proxies.graph().updateInclusionArcsDelete(sourceId, includedIds);
       return proxies.graph().updateInclusionArcsCreate(sourceId, includedIds);
     }
+  }
+
+  @Override
+  public List<FolderServerTemplate> listIncludingTemplates(CedarResourceId id) {
+    return proxies.graph().listIncludingTemplates(id);
+  }
+
+  @Override
+  public List<FolderServerElement> listIncludingElements(CedarResourceId id) {
+    return proxies.graph().listIncludingElements(id);
   }
 }
