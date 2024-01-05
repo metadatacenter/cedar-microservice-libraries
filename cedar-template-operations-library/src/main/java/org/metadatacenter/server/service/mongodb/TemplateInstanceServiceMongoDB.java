@@ -1,7 +1,7 @@
 package org.metadatacenter.server.service.mongodb;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mongodb.MongoClient;
+import com.mongodb.client.MongoClient;
 import org.metadatacenter.exception.ArtifactServerResourceNotFoundException;
 import org.metadatacenter.server.dao.mongodb.TemplateInstanceDaoMongoDB;
 import org.metadatacenter.server.service.FieldNameInEx;
@@ -10,8 +10,7 @@ import org.metadatacenter.server.service.TemplateInstanceService;
 import java.io.IOException;
 import java.util.List;
 
-public class TemplateInstanceServiceMongoDB extends GenericTemplateServiceMongoDB<String, JsonNode> implements
-    TemplateInstanceService<String, JsonNode> {
+public class TemplateInstanceServiceMongoDB extends GenericTemplateServiceMongoDB<String, JsonNode> implements TemplateInstanceService<String, JsonNode> {
 
   private final TemplateInstanceDaoMongoDB templateInstanceDao;
 

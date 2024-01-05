@@ -49,4 +49,21 @@ public class CypherQueryBuilderGraph extends AbstractCypherQueryBuilder {
         """.formatted(relationLabel.getValue(), relationLabel.getValue());
   }
 
+  public static String getIncludingTemplates() {
+    return """
+        MATCH (source:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>} })
+        MATCH (including:<LABEL.FILESYSTEM_RESOURCE> {<PROP.RESOURCE_TYPE>:{<PH.RESOURCE_TYPE>}})
+        MATCH (including)-[:<REL.INCLUDES>]->(source)
+        RETURN including
+        """;
+  }
+
+  public static String getIncludingElements() {
+    return """
+        MATCH (source:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>} })
+        MATCH (including:<LABEL.FILESYSTEM_RESOURCE> {<PROP.RESOURCE_TYPE>:{<PH.RESOURCE_TYPE>}})
+        MATCH (including)-[:<REL.INCLUDES>]->(source)
+        RETURN including
+        """;
+  }
 }

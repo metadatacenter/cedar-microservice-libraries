@@ -3,9 +3,7 @@ package org.metadatacenter.server.neo4j.cypher.parameter;
 import org.apache.commons.lang.StringUtils;
 import org.metadatacenter.id.CedarFolderId;
 import org.metadatacenter.id.CedarUserId;
-import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
-import org.metadatacenter.server.jsonld.LinkedDataUtil;
 import org.metadatacenter.server.neo4j.PathUtil;
 import org.metadatacenter.server.neo4j.cypher.CypherQueryParameter;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
@@ -22,8 +20,7 @@ public class CypherParamBuilderFolder extends AbstractCypherParamBuilder {
     return params;
   }
 
-  public static CypherParameters updateFolderById(CedarFolderId folderId, Map<? extends CypherQueryParameter, String> updateFields,
-                                                  CedarUserId updatedBy) {
+  public static CypherParameters updateFolderById(CedarFolderId folderId, Map<? extends CypherQueryParameter, String> updateFields, CedarUserId updatedBy) {
     return updateResourceById(folderId, updateFields, updatedBy);
   }
 

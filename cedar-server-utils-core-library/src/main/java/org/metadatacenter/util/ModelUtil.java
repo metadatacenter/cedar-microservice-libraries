@@ -30,8 +30,7 @@ public class ModelUtil {
     return m.find();
   }
 
-  private static JsonPointerValuePair extractStringFromPointer(JsonNode jsonNode, String
-      pointer) {
+  private static JsonPointerValuePair extractStringFromPointer(JsonNode jsonNode, String pointer) {
     JsonPointerValuePair r = new JsonPointerValuePair();
     r.setPointer(pointer);
     JsonNode titleNode = jsonNode.at(r.getPointer());
@@ -47,6 +46,10 @@ public class ModelUtil {
 
   public static JsonPointerValuePair extractNameFromResource(CedarResourceType resourceType, JsonNode jsonNode) {
     return extractStringFromPointer(jsonNode, SCHEMA_NAME);
+  }
+
+  public static JsonPointerValuePair extractDOIFromResource(CedarResourceType resourceType, JsonNode jsonNode) {
+    return extractStringFromPointer(jsonNode, ANNOTATION_DOI_ID);
   }
 
   public static JsonPointerValuePair extractDescriptionFromResource(CedarResourceType resourceType, JsonNode jsonNode) {

@@ -14,8 +14,8 @@ import java.util.Map;
 
 public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
 
-  public static CypherParameters createCategory(CedarCategoryId parentCategoryId, CedarCategoryId newCategoryId, String categoryName,
-                                                String categoryDescription, String categoryIdentifier, CedarUserId userId) {
+  public static CypherParameters createCategory(CedarCategoryId parentCategoryId, CedarCategoryId newCategoryId, String categoryName, String categoryDescription, String categoryIdentifier,
+                                                CedarUserId userId) {
     Instant now = Instant.now();
     String nowString = CedarConstants.xsdDateTimeFormatter.format(now);
     long nowTS = now.getEpochSecond();

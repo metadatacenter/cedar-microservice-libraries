@@ -6,9 +6,15 @@ import org.metadatacenter.model.folderserver.datagroup.ResourceWithUsersAndUserN
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.model.folderserver.report.FolderServerArtifactReport;
 import org.metadatacenter.model.folderserver.report.FolderServerInstanceReport;
+import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphElement;
+import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphResponse;
+import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphTemplate;
 import org.metadatacenter.model.response.FolderServerCategoryListResponse;
 import org.metadatacenter.model.response.FolderServerNodeListResponse;
 import org.metadatacenter.server.security.model.user.CedarUserSummary;
+
+import java.util.Collection;
+import java.util.Map;
 
 public final class ProvenanceNameUtil {
 
@@ -83,4 +89,35 @@ public final class ProvenanceNameUtil {
       addProvenanceDisplayName(c);
     }
   }
+
+  public static void addProvenanceDisplayNames(InclusionSubgraphResponse treeResponse) {
+    Map<String, InclusionSubgraphElement> elements = treeResponse.getElements();
+    Map<String, InclusionSubgraphTemplate> templates = treeResponse.getTemplates();
+    addProvenanceDisplayNamesToElements(elements.values());
+    addProvenanceDisplayNamesToTemplates(templates.values());
+  }
+
+  private static void addProvenanceDisplayNamesToTemplates(Collection<InclusionSubgraphTemplate> templates) {
+    if (templates != null) {
+      for (InclusionSubgraphTemplate template : templates) {
+        addProvenanceDisplayName(template);
+      }
+    }
+  }
+
+  private static void addProvenanceDisplayNamesToElements(Collection<InclusionSubgraphElement> elements) {
+    if (elements != null) {
+      for (InclusionSubgraphElement element : elements) {
+        addProvenanceDisplayName(element);
+        if (element.getElements() != null) {
+          addProvenanceDisplayNamesToElements(element.getElements().values());
+        }
+        if (element.getTemplates() != null) {
+          addProvenanceDisplayNamesToTemplates(element.getTemplates().values());
+        }
+      }
+    }
+  }
+
+
 }

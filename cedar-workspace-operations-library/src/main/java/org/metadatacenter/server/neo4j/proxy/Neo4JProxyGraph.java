@@ -7,6 +7,7 @@ import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.RelationLabel;
 import org.metadatacenter.model.folderserver.FolderServerArc;
 import org.metadatacenter.model.folderserver.basic.*;
+import org.metadatacenter.model.request.ResourceType;
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.cypher.parameter.*;
@@ -87,5 +88,19 @@ public class Neo4JProxyGraph extends AbstractNeo4JProxy {
     CypherParameters params = AbstractCypherParamBuilder.matchSourceAndTargetIds(sourceId, includedIds);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeWrite(q, "creating new inclusion arcs");
+  }
+
+  public List<FolderServerTemplate> listIncludingTemplates(CedarResourceId sourceId) {
+    String cypher = CypherQueryBuilderGraph.getIncludingTemplates();
+    CypherParameters params = CypherParamBuilderGraph.matchIdAndResourceType(sourceId, ResourceType.TEMPLATE);
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeReadGetList(q, FolderServerTemplate.class);
+  }
+
+  public List<FolderServerElement> listIncludingElements(CedarResourceId sourceId) {
+    String cypher = CypherQueryBuilderGraph.getIncludingElements();
+    CypherParameters params = CypherParamBuilderGraph.matchIdAndResourceType(sourceId, ResourceType.ELEMENT);
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeReadGetList(q, FolderServerElement.class);
   }
 }
