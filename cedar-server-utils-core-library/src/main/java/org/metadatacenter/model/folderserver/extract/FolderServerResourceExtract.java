@@ -39,10 +39,13 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
 
   protected Boolean isOpenImplicitly;
 
+  protected DOIGroup doiDataGroup;
+
   protected FolderServerResourceExtract(CedarResourceType resourceType) {
     super();
     this.usersData = new UsersDataGroup();
     this.userNamesData = new UserNamesDataGroup();
+    this.doiDataGroup = new DOIGroup();
     this.setType(resourceType);
   }
 
@@ -158,6 +161,16 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
 
   public void setIsOpenImplicitly(Boolean openImplicitly) {
     isOpenImplicitly = openImplicitly;
+  }
+
+  @JsonProperty(NodeProperty.Label.DOI)
+  public String getDOI() {
+    return doiDataGroup.getDOI();
+  }
+
+  @JsonProperty(NodeProperty.Label.DOI)
+  public void setDOI(String doi) {
+    doiDataGroup.setDOI(doi);
   }
 
   public static FolderServerResourceExtract forType(CedarResourceType t) {

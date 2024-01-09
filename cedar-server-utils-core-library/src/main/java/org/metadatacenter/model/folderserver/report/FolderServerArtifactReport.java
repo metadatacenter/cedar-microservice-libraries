@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.currentuserpermissions.FolderServerArtifactCurrentUserReport;
+import org.metadatacenter.model.folderserver.datagroup.DOIGroup;
 import org.metadatacenter.model.folderserver.extract.FolderServerArtifactExtract;
 import org.metadatacenter.model.folderserver.extract.FolderServerCategoryExtract;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
@@ -32,10 +33,14 @@ public abstract class FolderServerArtifactReport extends FolderServerArtifactCur
   private List<List<FolderServerCategoryExtract>> categories;
   private String trustedBy;
 
+  private DOIGroup doiDataGroup;
+
+
   public FolderServerArtifactReport(CedarResourceType resourceType) {
     super(resourceType);
     this.versions = new ArrayList<>();
     this.categories = new ArrayList<>();
+    this.doiDataGroup = new DOIGroup();
   }
 
   public static FolderServerArtifactReport fromResource(FolderServerArtifact resource) {
@@ -88,4 +93,13 @@ public abstract class FolderServerArtifactReport extends FolderServerArtifactCur
     this.trustedBy = trustedBy;
   }
 
+  @JsonProperty(NodeProperty.Label.DOI)
+  public String getDOI() {
+    return doiDataGroup.getDOI();
+  }
+
+  @JsonProperty(NodeProperty.Label.DOI)
+  public void setDOI(String doi) {
+    doiDataGroup.setDOI(doi);
+  }
 }
