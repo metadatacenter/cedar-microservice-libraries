@@ -1,11 +1,14 @@
 package org.metadatacenter.util;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.metadatacenter.constant.CedarConstants;
+import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.server.jsonld.LinkedDataUtil;
 import org.metadatacenter.server.model.provenance.ProvenanceInfo;
+import org.metadatacenter.util.json.JsonMapper;
 import org.metadatacenter.util.provenance.ProvenanceUtil;
 
 import java.util.Iterator;
@@ -48,7 +51,7 @@ public class ModelUtil {
     return extractStringFromPointer(jsonNode, SCHEMA_NAME);
   }
 
-  public static JsonPointerValuePair extractDOIFromResource(CedarResourceType resourceType, JsonNode jsonNode) {
+  public static JsonPointerValuePair extractDOIFromResource(JsonNode jsonNode) {
     return extractStringFromPointer(jsonNode, ANNOTATION_DOI_ID);
   }
 
@@ -114,6 +117,19 @@ public class ModelUtil {
     return linkedDataUtil.buildNewLinkedDataId(CedarResourceType.FIELD);
   }
 
+  public static String extractDOIFromResourceContent(String content, CedarResourceType resourceType) throws CedarProcessingException {
+    String doiInRequest = null;
+    try {
+      JsonNode folderServerNodeRequest = JsonMapper.MAPPER.readTree(content);
+      if (resourceType.supportsDOI()) {
+        JsonPointerValuePair doiPair = ModelUtil.extractDOIFromResource(folderServerNodeRequest);
+        doiInRequest = doiPair.getValue();
+      }
+    } catch (JsonProcessingException e) {
+      throw new CedarProcessingException(e);
+    }
+    return doiInRequest;
+  }
 }
 
 
