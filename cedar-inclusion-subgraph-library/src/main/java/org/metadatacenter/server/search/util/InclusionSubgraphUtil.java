@@ -1,6 +1,7 @@
 package org.metadatacenter.server.search.util;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.constant.JsonSchemaConstants;
 import org.metadatacenter.constant.LinkedData;
@@ -11,10 +12,7 @@ import org.metadatacenter.model.folderserver.basic.FolderServerElement;
 import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.model.request.InclusionSubgraphNodeOperation;
-import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphElement;
-import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphRequest;
-import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphResponse;
-import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphTemplate;
+import org.metadatacenter.model.request.inclusionsubgraph.*;
 import org.metadatacenter.proxy.ArtifactProxy;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.InclusionSubgraphServiceSession;
@@ -135,5 +133,67 @@ public class InclusionSubgraphUtil {
       }
     }
     return elements;
+  }
+
+  public static InclusionSubgraphTodoList updateResources(InclusionSubgraphResponse treeResponse) {
+    InclusionSubgraphTodoList todoList = new InclusionSubgraphTodoList();
+    recursivelyUpdateElements(treeResponse.getId(), treeResponse.getElements(), todoList);
+    updateTemplates(treeResponse.getId(), treeResponse.getTemplates(), todoList);
+    return todoList;
+  }
+
+  private static void recursivelyUpdateElements(String sourceId, Map<String, InclusionSubgraphElement> elements, InclusionSubgraphTodoList todoList) {
+    for (InclusionSubgraphElement element : elements.values()) {
+      updateElement(sourceId, element, todoList);
+      recursivelyUpdateElements(element.getId(), element.getElements(), todoList);
+      updateTemplates(element.getId(), element.getTemplates(), todoList);
+    }
+  }
+
+  private static void updateTemplates(String sourceId, Map<String, InclusionSubgraphTemplate> templates, InclusionSubgraphTodoList todoList) {
+    for (InclusionSubgraphTemplate template : templates.values()) {
+      updateTemplate(sourceId, template, todoList);
+    }
+  }
+
+  private static void updateElement(String sourceId, InclusionSubgraphElement element, InclusionSubgraphTodoList todoList) {
+    InclusionSubgraphTodoElement todo = new InclusionSubgraphTodoElement();
+    todo.setSourceId(sourceId);
+    todo.setTargetId(element.getId());
+    todoList.addTodoElement(todo);
+  }
+
+  private static void updateTemplate(String sourceId, InclusionSubgraphTemplate template, InclusionSubgraphTodoList todoList) {
+    InclusionSubgraphTodoElement todo = new InclusionSubgraphTodoElement();
+    todo.setSourceId(sourceId);
+    todo.setTargetId(template.getId());
+    todoList.addTodoElement(todo);
+  }
+
+
+  public static boolean updateSubdocumentByAtId(JsonNode parentDocument, String idToBeReplaced, JsonNode newDocument) {
+    return findAndReplaceDocumentNode(null, null, parentDocument, idToBeReplaced, newDocument);
+  }
+
+  private static boolean findAndReplaceDocumentNode(String key, ObjectNode parent, JsonNode currentNode, String idToBeReplaced, JsonNode newDocument) {
+    if (currentNode.has(LinkedData.ID) && currentNode.get(LinkedData.ID).asText().equals(idToBeReplaced)) {
+      if (parent != null) {
+        parent.replace(key, newDocument);
+      }
+      return true;
+    }
+
+    Iterator<String> fieldNames = currentNode.fieldNames();
+    while (fieldNames.hasNext()) {
+      String childKey = fieldNames.next();
+      JsonNode child = currentNode.get(childKey);
+      if (child.isObject()) {
+        boolean found = findAndReplaceDocumentNode(childKey, (ObjectNode) currentNode, child, idToBeReplaced, newDocument);
+        if (found) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 }

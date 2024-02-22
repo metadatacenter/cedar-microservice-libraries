@@ -1,8 +1,12 @@
 package org.metadatacenter.util;
 
+import org.metadatacenter.id.CedarTypedSchemaArtifactId;
 import org.metadatacenter.model.CedarResourceType;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 public class CedarResourceTypeUtil {
 
@@ -45,5 +49,22 @@ public class CedarResourceTypeUtil {
 
   public static boolean isNotValidForRestCall(CedarResourceType resourceType) {
     return !validRestTypesSet.contains(resourceType);
+  }
+
+  public static CedarTypedSchemaArtifactId buildTypedArtifactId(String id) {
+    if (id != null) {
+      if (id.contains("/" + CedarResourceType.FIELD.getPrefix() + "/")) {
+        return CedarTypedSchemaArtifactId.build(CedarResourceType.FIELD, id);
+      } else if (id.contains("/" + CedarResourceType.ELEMENT.getPrefix() + "/")) {
+        return CedarTypedSchemaArtifactId.build(CedarResourceType.ELEMENT, id);
+      } else if (id.contains("/" + CedarResourceType.ELEMENT_INSTANCE.getPrefix() + "/")) {
+        return CedarTypedSchemaArtifactId.build(CedarResourceType.ELEMENT_INSTANCE, id);
+      } else if (id.contains("/" + CedarResourceType.TEMPLATE.getPrefix() + "/")) {
+        return CedarTypedSchemaArtifactId.build(CedarResourceType.TEMPLATE, id);
+      } else if (id.contains("/" + CedarResourceType.INSTANCE.getPrefix() + "/")) {
+        return CedarTypedSchemaArtifactId.build(CedarResourceType.INSTANCE, id);
+      }
+    }
+    return null;
   }
 }
