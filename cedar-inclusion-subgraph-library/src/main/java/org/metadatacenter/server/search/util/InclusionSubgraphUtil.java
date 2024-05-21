@@ -143,16 +143,20 @@ public class InclusionSubgraphUtil {
   }
 
   private static void recursivelyUpdateElements(String sourceId, Map<String, InclusionSubgraphElement> elements, InclusionSubgraphTodoList todoList) {
-    for (InclusionSubgraphElement element : elements.values()) {
-      updateElement(sourceId, element, todoList);
-      recursivelyUpdateElements(element.getId(), element.getElements(), todoList);
-      updateTemplates(element.getId(), element.getTemplates(), todoList);
+    if (elements != null) {
+      for (InclusionSubgraphElement element : elements.values()) {
+        updateElement(sourceId, element, todoList);
+        recursivelyUpdateElements(element.getId(), element.getElements(), todoList);
+        updateTemplates(element.getId(), element.getTemplates(), todoList);
+      }
     }
   }
 
   private static void updateTemplates(String sourceId, Map<String, InclusionSubgraphTemplate> templates, InclusionSubgraphTodoList todoList) {
-    for (InclusionSubgraphTemplate template : templates.values()) {
-      updateTemplate(sourceId, template, todoList);
+    if (templates != null) {
+      for (InclusionSubgraphTemplate template : templates.values()) {
+        updateTemplate(sourceId, template, todoList);
+      }
     }
   }
 
