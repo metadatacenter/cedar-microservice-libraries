@@ -161,17 +161,21 @@ public class InclusionSubgraphUtil {
   }
 
   private static void updateElement(String sourceId, InclusionSubgraphElement element, InclusionSubgraphTodoList todoList) {
-    InclusionSubgraphTodoElement todo = new InclusionSubgraphTodoElement();
-    todo.setSourceId(sourceId);
-    todo.setTargetId(element.getId());
-    todoList.addTodoElement(todo);
+    if (element.getOperation() == InclusionSubgraphNodeOperation.UPDATE) {
+      InclusionSubgraphTodoElement todo = new InclusionSubgraphTodoElement();
+      todo.setSourceId(sourceId);
+      todo.setTargetId(element.getId());
+      todoList.addTodoElement(todo);
+    }
   }
 
   private static void updateTemplate(String sourceId, InclusionSubgraphTemplate template, InclusionSubgraphTodoList todoList) {
-    InclusionSubgraphTodoElement todo = new InclusionSubgraphTodoElement();
-    todo.setSourceId(sourceId);
-    todo.setTargetId(template.getId());
-    todoList.addTodoElement(todo);
+    if (template.getOperation() == InclusionSubgraphNodeOperation.UPDATE) {
+      InclusionSubgraphTodoElement todo = new InclusionSubgraphTodoElement();
+      todo.setSourceId(sourceId);
+      todo.setTargetId(template.getId());
+      todoList.addTodoElement(todo);
+    }
   }
 
 
