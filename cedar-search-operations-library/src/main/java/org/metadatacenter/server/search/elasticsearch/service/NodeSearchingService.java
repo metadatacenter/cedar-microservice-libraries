@@ -230,4 +230,37 @@ public class NodeSearchingService extends AbstractSearchingService {
       throw new CedarProcessingException(e);
     }
   }
+
+  public long getTotalArtifactCount() throws CedarProcessingException {
+    try {
+      SearchResponse responseSearch =
+          client.prepareSearch(config.getIndexes().getSearchIndex().getName())
+              .setSize(0)
+              .setTrackTotalHits(true)
+              .execute().actionGet();
+
+      SearchHits hits = responseSearch.getHits();
+      TotalHits totalHits = hits.getTotalHits();
+      return totalHits.value;
+    } catch (Exception e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
+  public long getTotalRecommenderCount() throws CedarProcessingException {
+    try {
+      SearchResponse responseSearch =
+          client.prepareSearch(config.getIndexes().getRulesIndex().getName())
+              .setSize(0)
+              .setTrackTotalHits(true)
+              .execute().actionGet();
+
+      SearchHits hits = responseSearch.getHits();
+      TotalHits totalHits = hits.getTotalHits();
+      return totalHits.value;
+    } catch (Exception e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
 }
