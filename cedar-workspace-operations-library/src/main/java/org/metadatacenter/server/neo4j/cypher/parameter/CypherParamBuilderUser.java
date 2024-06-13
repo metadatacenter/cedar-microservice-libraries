@@ -35,6 +35,7 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
     CypherParameters params = new CypherParameters();
     params.put(NodeProperty.ID, user.getId());
     params.put(NodeProperty.NAME, displayName);
+    params.put(NodeProperty.NAME_LOWER, displayName.toLowerCase());
     params.put(NodeProperty.FIRST_NAME, user.getFirstName());
     params.put(NodeProperty.LAST_NAME, user.getLastName());
     params.put(NodeProperty.EMAIL, user.getEmail());
@@ -105,6 +106,7 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
     String displayName = CedarUserNameUtil.getDisplayName(cedarConfig, user);
 
     params.put(NodeProperty.NAME, displayName);
+    params.put(NodeProperty.NAME_LOWER, displayName.toLowerCase());
     params.put(NodeProperty.FIRST_NAME, user.getFirstName());
     params.put(NodeProperty.LAST_NAME, user.getLastName());
     params.put(NodeProperty.EMAIL, user.getEmail());

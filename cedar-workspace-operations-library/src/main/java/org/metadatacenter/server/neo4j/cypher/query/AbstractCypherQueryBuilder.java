@@ -72,6 +72,7 @@ public abstract class AbstractCypherQueryBuilder {
 
     sb.append(buildCreateAssignment(NodeProperty.ID)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.NAME)).append(",");
+    sb.append(buildCreateAssignment(NodeProperty.NAME_LOWER)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.DESCRIPTION)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.CREATED_BY)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.CREATED_ON)).append(",");

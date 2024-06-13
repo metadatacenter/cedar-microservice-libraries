@@ -25,6 +25,7 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
     sb.append(buildCreateAssignment(NodeProperty.LAST_UPDATED_ON_TS)).append(",");
     // NameDescriptionIdentifierGroup
     sb.append(buildCreateAssignment(NodeProperty.NAME)).append(",");
+    sb.append(buildCreateAssignment(NodeProperty.NAME_LOWER)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.DESCRIPTION)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.IDENTIFIER)).append(",");
     // UsersDataGroup
