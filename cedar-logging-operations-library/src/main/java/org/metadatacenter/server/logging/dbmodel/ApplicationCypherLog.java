@@ -64,7 +64,7 @@ public class ApplicationCypherLog {
   @Lob
   private String parameters;
 
-  @Column(length = 35)
+  @Column(length = 60)
   private String methodName;
 
   @Column(length = 85)
