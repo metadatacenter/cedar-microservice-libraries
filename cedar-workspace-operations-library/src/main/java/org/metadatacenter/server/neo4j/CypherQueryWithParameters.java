@@ -2,6 +2,7 @@ package org.metadatacenter.server.neo4j;
 
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -22,7 +23,10 @@ public class CypherQueryWithParameters extends AbstractCypherQuery {
     String q = this.runnableQuery;
     if (q != null) {
       Map<String, Object> pMap = parameters.asMap();
-      for (String parameter : pMap.keySet()) {
+      // Sort the parameters by length in descending order
+      List<String> keys = new ArrayList<>(pMap.keySet());
+      keys.sort((a, b) -> Integer.compare(b.length(), a.length()));
+      for (String parameter : keys) {
         Object o = pMap.get(parameter);
         String v = getVariableRepresentation(o);
         q = q.replace("$" + parameter, v);

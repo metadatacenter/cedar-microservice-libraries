@@ -74,7 +74,7 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (category:<LABEL.CATEGORY>)" +
         " RETURN category" +
-        " ORDER BY toLower(category.<PROP.NAME>)" +
+        " ORDER BY category.<PROP.NAME_LOWER>" +
         " SKIP $offset" +
         " LIMIT $limit";
   }

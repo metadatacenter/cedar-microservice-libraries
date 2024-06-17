@@ -62,7 +62,7 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (group:<LABEL.GROUP>)" +
         " RETURN group" +
-        " ORDER BY toLower(group.<PROP.NAME>)";
+        " ORDER BY group.<PROP.NAME_LOWER>";
   }
 
   public static String updateGroupById(Map<NodeProperty, String> updateFields) {

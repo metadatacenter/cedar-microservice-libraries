@@ -51,7 +51,7 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (user:<LABEL.USER>)" +
         " RETURN user" +
-        " ORDER BY toLower(user.<PROP.NAME>)";
+        " ORDER BY user.<PROP.NAME_LOWER>";
   }
 
   public static String getUserById() {
