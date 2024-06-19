@@ -17,6 +17,7 @@ public class CypherParamBuilderGraph extends AbstractCypherParamBuilder {
     params.put(NodeProperty.LAST_UPDATED_BY, node.at(OSLC_MODIFIED_BY).textValue());
     params.put(NodeProperty.LAST_UPDATED_ON, node.at(PAV_LAST_UPDATED_ON).textValue());
     params.put(NodeProperty.NAME, node.at(SCHEMA_NAME).textValue());
+    params.put(NodeProperty.NAME_LOWER, node.at(SCHEMA_NAME).textValue().toLowerCase());
     params.put(NodeProperty.DESCRIPTION, node.at(SCHEMA_DESCRIPTION).textValue());
     params.put(NodeProperty.ID, node.at(AT_ID).textValue());
   }

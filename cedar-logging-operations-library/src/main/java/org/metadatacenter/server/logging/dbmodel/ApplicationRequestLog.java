@@ -81,7 +81,7 @@ public class ApplicationRequestLog {
 
   private long preHandlerDuration;
 
-  @Column(length = 35)
+  @Column(length = 60)
   private String methodName;
 
   @Column(length = 85)

@@ -24,6 +24,7 @@ public class CypherParamBuilderGroup extends AbstractCypherParamBuilder {
     CypherParameters params = new CypherParameters();
     params.put(NodeProperty.ID, groupURL);
     params.put(NodeProperty.NAME, name);
+    params.put(NodeProperty.NAME_LOWER, name.toLowerCase());
     params.put(NodeProperty.DESCRIPTION, description);
     params.put(NodeProperty.CREATED_BY, ownerId);
     params.put(NodeProperty.CREATED_ON, nowString);

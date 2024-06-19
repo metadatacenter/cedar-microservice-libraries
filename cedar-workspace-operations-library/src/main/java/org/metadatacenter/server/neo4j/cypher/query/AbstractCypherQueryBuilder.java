@@ -14,6 +14,8 @@ import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
 import java.util.List;
 
+import static org.metadatacenter.server.neo4j.cypher.sort.QuerySortOptions.DEFAULT_SORT_FIELD;
+
 public abstract class AbstractCypherQueryBuilder {
 
   protected static final int ORDER_FOLDER = 1;
@@ -72,6 +74,7 @@ public abstract class AbstractCypherQueryBuilder {
 
     sb.append(buildCreateAssignment(NodeProperty.ID)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.NAME)).append(",");
+    sb.append(buildCreateAssignment(NodeProperty.NAME_LOWER)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.DESCRIPTION)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.CREATED_BY)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.CREATED_ON)).append(",");
@@ -172,11 +175,17 @@ public abstract class AbstractCypherQueryBuilder {
 
   private static String getCaseInsensitiveSortExpression(String nodeAlias, String fieldName) {
     StringBuilder sb = new StringBuilder();
+    System.out.println("SORT HERE  BY:" + fieldName);
     if (QuerySortOptions.isTextual(fieldName)) {
-      sb.append(" toLower(").append(nodeAlias).append(".").append(QuerySortOptions.getFieldName(fieldName)).append(")");
+      if (DEFAULT_SORT_FIELD.getName().equals(fieldName)) {
+        sb.append(nodeAlias).append(".").append(QuerySortOptions.getFieldName(fieldName));
+      } else {
+        sb.append(" toLower(").append(nodeAlias).append(".").append(QuerySortOptions.getFieldName(fieldName)).append(")");
+      }
     } else {
       sb.append(nodeAlias).append(".").append(QuerySortOptions.getFieldName(fieldName));
     }
+    System.out.println("SORT STRING:" + sb);
     return sb.toString();
   }
 

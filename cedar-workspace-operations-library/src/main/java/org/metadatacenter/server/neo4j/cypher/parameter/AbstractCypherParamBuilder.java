@@ -32,6 +32,7 @@ public abstract class AbstractCypherParamBuilder {
 
     params.put(NodeProperty.ID, newResource.getId());
     params.put(NodeProperty.NAME, newResource.getName());
+    params.put(NodeProperty.NAME_LOWER, newResource.getName().toLowerCase());
     params.put(NodeProperty.DESCRIPTION, newResource.getDescription());
     params.put(NodeProperty.IDENTIFIER, newResource.getIdentifier());
     params.put(NodeProperty.CREATED_BY, newResource.getCreatedBy());

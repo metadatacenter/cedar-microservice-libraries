@@ -88,7 +88,7 @@ public class ValuerecommenderReindexExecutorService {
           log.error("Error while sleeping", e);
         }
       } else {
-        log.debug("Will start reindexing templateId:" + templateId);
+        log.debug("Will start reindexing templateId:" + templateId.getId());
         launchReindex(templateId);
       }
       iterator.remove();
