@@ -1,14 +1,12 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.elasticsearch.client.Client;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.server.search.IndexedDocumentId;
 import org.metadatacenter.server.search.elasticsearch.worker.ElasticsearchIndexingWorker;
+import org.opensearch.client.RestHighLevelClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Iterator;
 
 import static org.metadatacenter.constant.ElasticsearchConstants.TEMPLATE_ID;
 
@@ -18,7 +16,7 @@ public class RulesIndexingService extends AbstractIndexingService {
 
   private final ElasticsearchIndexingWorker indexWorker;
 
-  RulesIndexingService(String indexName, Client client) {
+  RulesIndexingService(String indexName, RestHighLevelClient client) {
     indexWorker = new ElasticsearchIndexingWorker(indexName, client);
   }
 

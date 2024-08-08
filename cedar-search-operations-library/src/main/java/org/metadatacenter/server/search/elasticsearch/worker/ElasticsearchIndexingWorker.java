@@ -2,31 +2,29 @@ package org.metadatacenter.server.search.elasticsearch.worker;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.elasticsearch.action.bulk.BulkRequestBuilder;
-import org.elasticsearch.action.bulk.BulkResponse;
-import org.elasticsearch.action.delete.DeleteRequestBuilder;
-import org.elasticsearch.action.delete.DeleteResponse;
-import org.elasticsearch.action.index.IndexRequestBuilder;
-import org.elasticsearch.action.index.IndexResponse;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.client.transport.NoNodeAvailableException;
-import org.elasticsearch.index.reindex.DeleteByQueryRequestBuilder;
-import org.elasticsearch.xcontent.XContentType;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.index.reindex.BulkByScrollResponse;
-import org.elasticsearch.index.reindex.DeleteByQueryAction;
-import org.elasticsearch.rest.RestStatus;
-import org.elasticsearch.search.SearchHit;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.search.IndexedDocumentType;
 import org.metadatacenter.search.IndexingDocumentDocument;
 import org.metadatacenter.server.search.IndexedDocumentId;
 import org.metadatacenter.util.json.JsonMapper;
+import org.opensearch.action.bulk.BulkRequest;
+import org.opensearch.action.bulk.BulkResponse;
+import org.opensearch.action.delete.DeleteRequest;
+import org.opensearch.action.delete.DeleteResponse;
+import org.opensearch.action.index.IndexRequest;
+import org.opensearch.action.index.IndexResponse;
+import org.opensearch.client.RequestOptions;
+import org.opensearch.client.RestHighLevelClient;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.reindex.BulkByScrollResponse;
+import org.opensearch.index.reindex.DeleteByQueryRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.List;
 
 import static org.metadatacenter.constant.ElasticsearchConstants.DOCUMENT_CEDAR_ID;
@@ -35,11 +33,11 @@ public class ElasticsearchIndexingWorker {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchIndexingWorker.class);
 
-  private final Client client;
+  private final RestHighLevelClient client;
   private final String indexName;
   private final String documentType;
 
-  public ElasticsearchIndexingWorker(String indexName, Client client) {
+  public ElasticsearchIndexingWorker(String indexName, RestHighLevelClient client) {
     this.client = client;
     this.indexName = indexName;
     this.documentType = IndexedDocumentType.DOC.getValue();
@@ -53,9 +51,9 @@ public class ElasticsearchIndexingWorker {
       int count = 0;
       while (again) {
         try {
-          IndexRequestBuilder indexRequestBuilder = client.prepareIndex(indexName, documentType)
-              .setSource(JsonMapper.MAPPER.writeValueAsString(json), XContentType.JSON);
-          IndexResponse response = indexRequestBuilder.get();
+          IndexRequest indexRequest = new IndexRequest(indexName)
+              .source(JsonMapper.MAPPER.writeValueAsString(json), XContentType.JSON);
+          IndexResponse response = client.index(indexRequest, RequestOptions.DEFAULT);
           if (response.status() == RestStatus.CREATED) {
             log.debug("The " + documentType + " has been indexed");
             again = false;
@@ -63,10 +61,11 @@ public class ElasticsearchIndexingWorker {
           } else {
             throw new CedarProcessingException("Failed to index " + documentType);
           }
-        } catch (NoNodeAvailableException e) {
-          if (count++ > maxAttempts) {
-            throw e;
+        } catch (IOException e) {
+          if (++count > maxAttempts) {
+            throw new CedarProcessingException("Max attempts reached while indexing " + documentType, e);
           }
+          log.warn("NoNodeAvailableException occurred, retrying... Attempt: " + count, e);
         }
       }
     } catch (Exception e) {
@@ -83,31 +82,23 @@ public class ElasticsearchIndexingWorker {
    * @throws CedarProcessingException
    */
   public long removeAllFromIndex(CedarFilesystemResourceId resourceId) throws CedarProcessingException {
-    log.debug("Removing " + documentType + " cid:" + resourceId + " from the " + indexName + " index");
+    log.debug("Removing " + documentType + " cid:" + resourceId.getId() + " from the " + indexName + " index");
     try {
-      // Get resources by artifact id
-      // TODO: note that this search query will retrieve only 10 results by default, so the maximum number
-      // of documents that will be removed will be 10. Consider using the "delete by query" API
-      SearchResponse responseSearch = client.prepareSearch(indexName)
-          .setQuery(QueryBuilders.matchQuery(DOCUMENT_CEDAR_ID, resourceId.getId()))
-          .execute().actionGet();
+      // Create the delete by query request
+      DeleteByQueryRequest request = new DeleteByQueryRequest(indexName);
+      request.setQuery(QueryBuilders.matchQuery(DOCUMENT_CEDAR_ID, resourceId.getId()));
 
-      long removedCount = 0;
-      // Delete by Elasticsearch id
-      for (SearchHit hit : responseSearch.getHits()) {
-        removeFromIndex(hit.getId());
-        removedCount++;
-      }
+      // Execute the delete by query request
+      BulkByScrollResponse response = client.deleteByQuery(request, RequestOptions.DEFAULT);
+
+      long removedCount = response.getDeleted();
       if (removedCount == 0) {
-        log.error("The " + documentType + " cid:" + resourceId.getId() + " was not removed from the " + indexName +
-            " index");
+        log.error("The " + documentType + " cid:" + resourceId.getId() + " was not removed from the " + indexName + " index");
       } else {
-        log.debug("Removed " + removedCount + " documents of type " + documentType + " cid:" + resourceId.getId() +
-            " from the " + indexName + " " +
-            "index");
+        log.debug("Removed " + removedCount + " documents of type " + documentType + " cid:" + resourceId.getId() + " from the " + indexName + " index");
       }
       return removedCount;
-    } catch (Exception e) {
+    } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }
@@ -123,10 +114,13 @@ public class ElasticsearchIndexingWorker {
   public long removeAllFromIndex(String fieldName, String fieldValue) throws CedarProcessingException {
     log.debug("Removing from the " + indexName + " index the documents with " + fieldName + "=" + fieldValue);
     try {
-      // Use "delete by query" to delete all documents with fieldName = fieldValue
-      BulkByScrollResponse response = new DeleteByQueryRequestBuilder(client, DeleteByQueryAction.INSTANCE)
-          .filter(QueryBuilders.matchQuery(fieldName, fieldValue)).source(indexName)
-          .get();
+      // Create the delete by query request
+      DeleteByQueryRequest request = new DeleteByQueryRequest(indexName);
+      request.setQuery(QueryBuilders.matchQuery(fieldName, fieldValue));
+
+      // Execute the delete by query request
+      BulkByScrollResponse response = client.deleteByQuery(request, RequestOptions.DEFAULT);
+
       long removedCount = response.getDeleted();
       if (removedCount == 0) {
         log.error("No documents have been removed from the " + indexName + " index");
@@ -134,42 +128,50 @@ public class ElasticsearchIndexingWorker {
         log.debug("Removed " + removedCount + " documents from the " + indexName + " index");
       }
       return removedCount;
-    } catch (Exception e) {
+    } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }
 
   public void removeFromIndex(String documentId) throws CedarProcessingException {
-    DeleteRequestBuilder deleteRequestBuilder = client.prepareDelete(indexName, documentType, documentId);
-    DeleteResponse responseDelete = deleteRequestBuilder.execute().actionGet();
-    if (responseDelete.status() != RestStatus.OK) {
-      throw new CedarProcessingException("Failed to remove " + documentType
-          + " _id:" + documentId + " from the " + indexName + " index");
-    } else {
-      log.debug("The " + documentType + " " + documentId + " has been removed from the " + indexName + " index");
+    try {
+      DeleteRequest deleteRequest = new DeleteRequest(indexName, documentId);
+      DeleteResponse deleteResponse = client.delete(deleteRequest, RequestOptions.DEFAULT);
+      if (deleteResponse.status() != RestStatus.OK) {
+        throw new CedarProcessingException("Failed to remove " + documentType + " _id:" + documentId + " from the " + indexName + " index");
+      } else {
+        log.debug("The " + documentType + " " + documentId + " has been removed from the " + indexName + " index");
+      }
+    } catch (IOException e) {
+      throw new CedarProcessingException("Error removing " + documentType + " _id:" + documentId + " from the " + indexName + " index", e);
     }
   }
 
   public void addBatch(List<IndexingDocumentDocument> currentBatch) {
     if (currentBatch != null) {
-      BulkRequestBuilder bulkRequest = client.prepareBulk();
+      BulkRequest bulkRequest = new BulkRequest();
 
       for (IndexingDocumentDocument ir : currentBatch) {
         JsonNode jsonResource = JsonMapper.MAPPER.convertValue(ir, JsonNode.class);
 
         try {
-          bulkRequest.add(client.prepareIndex(indexName, documentType)
-              .setSource(JsonMapper.MAPPER.writeValueAsString(jsonResource), XContentType.JSON));
+          IndexRequest indexRequest = new IndexRequest(indexName)
+              .source(JsonMapper.MAPPER.writeValueAsString(jsonResource), XContentType.JSON);
+          bulkRequest.add(indexRequest);
         } catch (JsonProcessingException e) {
           log.error("Error while serializing indexing document", e);
         }
       }
 
-      BulkResponse bulkResponse = bulkRequest.get();
-      if (bulkResponse.hasFailures()) {
-        // process failures by iterating through each bulk response item
-        log.error("Failure when processing bulk request:");
-        log.error(bulkResponse.buildFailureMessage());
+      try {
+        BulkResponse bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT);
+        if (bulkResponse.hasFailures()) {
+          // process failures by iterating through each bulk response item
+          log.error("Failure when processing bulk request:");
+          log.error(bulkResponse.buildFailureMessage());
+        }
+      } catch (IOException e) {
+        log.error("Error executing bulk request", e);
       }
     }
   }

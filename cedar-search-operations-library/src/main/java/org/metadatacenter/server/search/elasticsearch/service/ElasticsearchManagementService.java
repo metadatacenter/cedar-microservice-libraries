@@ -1,25 +1,28 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
-import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
-import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
-import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.elasticsearch.action.support.master.AcknowledgedResponse;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.metadata.IndexMetadata;
-import org.elasticsearch.common.collect.ImmutableOpenMap;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.transport.TransportAddress;
-import org.elasticsearch.transport.client.PreBuiltTransportClient;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.HttpHost;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.config.OpensearchMappingsConfig;
 import org.metadatacenter.exception.CedarProcessingException;
-import org.metadatacenter.search.IndexedDocumentType;
+import org.metadatacenter.util.json.JsonMapper;
+import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;
+import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
+import org.opensearch.action.support.master.AcknowledgedResponse;
+import org.opensearch.client.*;
+import org.opensearch.client.indices.CreateIndexRequest;
+import org.opensearch.client.indices.CreateIndexResponse;
+import org.opensearch.client.indices.GetIndexRequest;
+import org.opensearch.client.indices.GetIndexResponse;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.InetAddress;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -33,7 +36,7 @@ public class ElasticsearchManagementService {
   private final Map<String, Object> rulesIndexSettings;
   private final OpensearchMappingsConfig searchIndexMappings;
   private final OpensearchMappingsConfig rulesIndexMappings;
-  private Client elasticClient = null;
+  private RestHighLevelClient elasticClient = null;
 
   public ElasticsearchManagementService(OpensearchConfig config, CedarConfig cedarConfig) {
     System.setProperty("es.set.netty.runtime.available.processors", "false");
@@ -45,22 +48,30 @@ public class ElasticsearchManagementService {
     this.settings = Settings.builder().put("cluster.name", config.getClusterName()).build();
   }
 
-  Client getClient() {
+  RestHighLevelClient getClient() {
     try {
       if (elasticClient == null) {
-        elasticClient = new PreBuiltTransportClient(settings)
-            .addTransportAddress(new TransportAddress(InetAddress.getByName(config.getHost()),
-                config.getTransportPort()));
+        RestClientBuilder builder = RestClient.builder(
+            new HttpHost(config.getHost(), config.getRestPort(), "http"));
+        elasticClient = new RestHighLevelClient(builder);
       }
       return elasticClient;
     } catch (Exception e) {
-      log.error("There was an error creating the elasticsearch client", e);
+      log.error("There was an error creating the OpenSearch client", e);
       return null;
     }
   }
 
   public void closeClient() {
-    elasticClient.close();
+    if (elasticClient != null) {
+      try {
+        elasticClient.close();
+      } catch (IOException e) {
+        log.error("Error closing the OpenSearch client", e);
+      } finally {
+        elasticClient = null;
+      }
+    }
   }
 
   public void createSearchIndex(String indexName) throws CedarProcessingException {
@@ -72,79 +83,113 @@ public class ElasticsearchManagementService {
   }
 
   private void createIndex(String indexName, Map<String, Object> indexSettings,
-                           OpensearchMappingsConfig indexMappings)
-      throws CedarProcessingException {
+                           OpensearchMappingsConfig indexMappings) throws CedarProcessingException {
 
-    Client client = getClient();
-    CreateIndexRequestBuilder createIndexRequestBuilder = client.admin().indices().prepareCreate(indexName);
+    RestHighLevelClient client = getClient();
+    CreateIndexRequest createIndexRequest = new CreateIndexRequest(indexName);
+
     // Set settings
     if (indexSettings != null) {
-      createIndexRequestBuilder.setSettings(indexSettings);
+      createIndexRequest.settings(Settings.builder().loadFromMap(indexSettings));
     }
+
     // Put mappings
     if (indexMappings.getDoc() != null) {
-      createIndexRequestBuilder.addMapping(IndexedDocumentType.DOC.getValue(), indexMappings.getDoc());
+      try {
+        String mappingsJson = JsonMapper.MAPPER.writeValueAsString(indexMappings.getDoc());
+        createIndexRequest.mapping(mappingsJson, XContentType.JSON);
+      } catch (IOException e) {
+        throw new CedarProcessingException("Error converting mappings to JSON", e);
+      }
     }
-    // Create index
-    CreateIndexResponse response = createIndexRequestBuilder.execute().actionGet();
-    if (!response.isAcknowledged()) {
-      throw new CedarProcessingException("Failed to create the index " + indexName);
-    } else {
-      log.info("The index " + indexName + " has been created");
+
+    try {
+      IndicesClient indicesClient = client.indices();
+      CreateIndexResponse createIndexResponse = indicesClient.create(createIndexRequest, RequestOptions.DEFAULT);
+
+      if (!createIndexResponse.isAcknowledged()) {
+        throw new CedarProcessingException("Failed to create the index " + indexName);
+      } else {
+        log.info("The index " + indexName + " has been created");
+      }
+    } catch (IOException e) {
+      throw new CedarProcessingException("Error creating the index " + indexName, e);
     }
   }
 
   public boolean indexExists(String indexName) {
-    return getClient().admin().indices().prepareExists(indexName).execute().actionGet().isExists();
+    GetIndexRequest request = new GetIndexRequest(indexName);
+    try {
+      return getClient().indices().exists(request, RequestOptions.DEFAULT);
+    } catch (IOException e) {
+      log.error("Error checking if index exists: " + indexName, e);
+      return false;
+    }
   }
 
   public boolean deleteIndex(String indexName) throws CedarProcessingException {
-    AcknowledgedResponse deleteIndexResponse =
-        getClient().admin().indices().delete(new DeleteIndexRequest(indexName)).actionGet();
-    if (!deleteIndexResponse.isAcknowledged()) {
-      throw new CedarProcessingException("Failed to delete index '" + indexName + "'");
-    } else {
-      log.info("The index '" + indexName + "' has been deleted");
-      return true;
+    DeleteIndexRequest request = new DeleteIndexRequest(indexName);
+    try {
+      AcknowledgedResponse deleteIndexResponse = getClient().indices().delete(request, RequestOptions.DEFAULT);
+      if (!deleteIndexResponse.isAcknowledged()) {
+        throw new CedarProcessingException("Failed to delete index '" + indexName + "'");
+      } else {
+        log.info("The index '" + indexName + "' has been deleted");
+        return true;
+      }
+    } catch (IOException e) {
+      throw new CedarProcessingException("Error deleting index '" + indexName + "'", e);
     }
   }
 
   public boolean addAlias(String indexName, String aliasName) throws CedarProcessingException {
-    AcknowledgedResponse response = getClient().admin().indices().prepareAliases()
-        .addAlias(indexName, aliasName)
-        .execute().actionGet();
-    if (!response.isAcknowledged()) {
-      throw new CedarProcessingException("Failed to add alias '" + aliasName + "' to index '" + indexName + "'");
-    } else {
-      log.info("The alias '" + aliasName + "' has been added to index '" + indexName + "'");
-      return true;
+    IndicesAliasesRequest request = new IndicesAliasesRequest();
+    IndicesAliasesRequest.AliasActions aliasAction = new IndicesAliasesRequest.AliasActions(IndicesAliasesRequest.AliasActions.Type.ADD)
+        .index(indexName)
+        .alias(aliasName);
+    request.addAliasAction(aliasAction);
+
+    try {
+      AcknowledgedResponse response = getClient().indices().updateAliases(request, RequestOptions.DEFAULT);
+      if (!response.isAcknowledged()) {
+        throw new CedarProcessingException("Failed to add alias '" + aliasName + "' to index '" + indexName + "'");
+      } else {
+        log.info("The alias '" + aliasName + "' has been added to index '" + indexName + "'");
+        return true;
+      }
+    } catch (IOException e) {
+      throw new CedarProcessingException("Error adding alias '" + aliasName + "' to index '" + indexName + "'", e);
     }
   }
 
   public boolean deleteAlias(String indexName, String aliasName) throws CedarProcessingException {
-    AcknowledgedResponse response = getClient().admin().indices().prepareAliases()
-        .removeAlias(indexName, aliasName)
-        .execute().actionGet();
-    if (!response.isAcknowledged()) {
-      throw new CedarProcessingException("Failed to remove alias '" + aliasName + "' from index '" + indexName + "'");
-    } else {
-      log.info("The alias '" + aliasName + "' has been removed from the index '" + indexName + "'");
-      return true;
+    IndicesAliasesRequest request = new IndicesAliasesRequest();
+    IndicesAliasesRequest.AliasActions aliasAction = new IndicesAliasesRequest.AliasActions(IndicesAliasesRequest.AliasActions.Type.REMOVE)
+        .index(indexName)
+        .alias(aliasName);
+    request.addAliasAction(aliasAction);
+
+    try {
+      AcknowledgedResponse response = getClient().indices().updateAliases(request, RequestOptions.DEFAULT);
+      if (!response.isAcknowledged()) {
+        throw new CedarProcessingException("Failed to remove alias '" + aliasName + "' from index '" + indexName + "'");
+      } else {
+        log.info("The alias '" + aliasName + "' has been removed from the index '" + indexName + "'");
+        return true;
+      }
+    } catch (IOException e) {
+      throw new CedarProcessingException("Error removing alias '" + aliasName + "' from index '" + indexName + "'", e);
     }
   }
 
   public List<String> getAllIndices() {
     List<String> indexNames = new ArrayList<>();
     try {
-      ImmutableOpenMap<String, IndexMetadata> indices = getClient().admin().cluster()
-              .prepareState().execute()
-              .actionGet().getState()
-              .getMetadata().getIndices();
-      for (IndexMetadata value : indices.values()) {
-        indexNames.add(value.getIndex().getName());
-      }
-    } catch (Exception e) {
-      log.error("There was an error retrieving existing indices");
+      GetIndexRequest request = new GetIndexRequest("*");
+      GetIndexResponse response = getClient().indices().get(request, RequestOptions.DEFAULT);
+      indexNames.addAll(Arrays.asList(response.getIndices()));
+    } catch (IOException e) {
+      log.error("There was an error retrieving existing indices", e);
     }
     return indexNames;
   }
