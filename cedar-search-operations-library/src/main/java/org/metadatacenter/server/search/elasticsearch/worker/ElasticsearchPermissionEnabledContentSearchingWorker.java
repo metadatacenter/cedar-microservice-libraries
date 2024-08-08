@@ -6,16 +6,6 @@ import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.join.ScoreMode;
-import org.elasticsearch.action.search.SearchRequestBuilder;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.core.TimeValue;
-import org.elasticsearch.index.query.BoolQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.index.query.QueryStringQueryBuilder;
-import org.elasticsearch.search.SearchHit;
-import org.elasticsearch.search.sort.SortOrder;
 import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
@@ -26,9 +16,24 @@ import org.metadatacenter.server.security.model.permission.resource.FilesystemRe
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
+import org.opensearch.action.search.SearchRequest;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.action.search.SearchScrollRequest;
+import org.opensearch.client.RequestOptions;
+import org.opensearch.client.RestHighLevelClient;
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.QueryStringQueryBuilder;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
+import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.sort.SortOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -42,10 +47,10 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchPermissionEnabledContentSearchingWorker.class);
 
-  private final Client client;
+  private final RestHighLevelClient client;
   private final String indexName;
 
-  public ElasticsearchPermissionEnabledContentSearchingWorker(OpensearchConfig config, Client client) {
+  public ElasticsearchPermissionEnabledContentSearchingWorker(OpensearchConfig config, RestHighLevelClient client) {
     this.client = client;
     this.indexName = config.getIndexes().getSearchIndex().getName();
   }
@@ -54,24 +59,29 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                      ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                      int offset) throws CedarProcessingException {
 
-    SearchRequestBuilder searchRequest = getSearchRequestBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
+    try {
+      SearchRequest searchRequest = getSearchRequestBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
 
-    searchRequest.setFrom(offset);
-    searchRequest.setSize(limit);
-    searchRequest.setTrackTotalHits(true);
+      // Set pagination parameters
+      SearchSourceBuilder searchSourceBuilder = searchRequest.source();
+      searchSourceBuilder.from(offset);
+      searchSourceBuilder.size(limit);
+      searchSourceBuilder.trackTotalHits(true);
 
-    // Execute request
-    SearchResponse response = searchRequest.execute().actionGet();
+      // Execute request
+      SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT);
 
-    SearchResponseResult result = new SearchResponseResult();
-    TotalHits totalHits = response.getHits().getTotalHits();
-    result.setTotalCount(totalHits == null ? 0 : totalHits.value);
+      SearchResponseResult result = new SearchResponseResult();
+      result.setTotalCount(response.getHits().getTotalHits().value);
 
-    for (SearchHit hit : response.getHits()) {
-      result.add(hit);
+      for (SearchHit hit : response.getHits().getHits()) {
+        result.add(hit);
+      }
+
+      return result;
+    } catch (IOException e) {
+      throw new CedarProcessingException(e);
     }
-
-    return result;
   }
 
   // It uses the scroll API. It retrieves all results. No pagination and therefore no offset. Scrolling is not
@@ -80,51 +90,56 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
                                          ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                          int offset) throws CedarProcessingException {
+    try {
+      SearchRequest searchRequest = getSearchRequestBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
 
-    SearchRequestBuilder searchRequest = getSearchRequestBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
+      // Set scroll and scroll size
+      TimeValue timeout = TimeValue.timeValueMinutes(2);
+      searchRequest.scroll(timeout);
+      searchRequest.source().size(offset + limit);
+      searchRequest.source().trackTotalHits(true);
 
-    // Set scroll and scroll size
-    TimeValue timeout = TimeValue.timeValueMinutes(2);
-    searchRequest.setScroll(timeout);
-    searchRequest.setSize(offset + limit);
-    searchRequest.setTrackTotalHits(true);
+      // Execute request
+      SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT);
 
-    //log.debug("Search query in Query DSL: " + searchRequest);
+      SearchResponseResult result = new SearchResponseResult();
+      result.setTotalCount(response.getHits().getTotalHits().value);
 
-    // Execute request
-    SearchResponse response = searchRequest.execute().actionGet();
-
-    SearchResponseResult result = new SearchResponseResult();
-    TotalHits totalHits = response.getHits().getTotalHits();
-    result.setTotalCount(totalHits == null ? 0 : totalHits.value);
-
-    int counter = 0;
-    while (response.getHits().getHits().length != 0) {
-      for (SearchHit hit : response.getHits().getHits()) {
-        if (counter >= offset && counter < offset + limit) {
-          result.add(hit);
+      int counter = 0;
+      while (response.getHits().getHits().length != 0) {
+        for (SearchHit hit : response.getHits().getHits()) {
+          if (counter >= offset && counter < offset + limit) {
+            result.add(hit);
+          }
+          counter++;
         }
-        counter++;
+        //next scroll
+        if (response.getHits().getHits().length > 0) {
+          SearchScrollRequest scrollRequest = new SearchScrollRequest(response.getScrollId());
+          scrollRequest.scroll(timeout);
+          response = client.scroll(scrollRequest, RequestOptions.DEFAULT);
+        } else {
+          break;
+        }
       }
-      //next scroll
-      response = client.prepareSearchScroll(response.getScrollId()).setScroll(timeout).execute().actionGet();
+      return result;
+    } catch (IOException e) {
+      throw new CedarProcessingException(e);
     }
-    return result;
   }
 
-  private SearchRequestBuilder getSearchRequestBuilder(CedarRequestContext rctx, String query,
-                                                       List<String> resourceTypes,
-                                                       ResourceVersionFilter version,
-                                                       ResourcePublicationStatusFilter publicationStatus,
-                                                       String categoryId, List<String> sortList) throws CedarProcessingException {
+  private SearchRequest getSearchRequestBuilder(CedarRequestContext rctx, String query,
+                                                List<String> resourceTypes,
+                                                ResourceVersionFilter version,
+                                                ResourcePublicationStatusFilter publicationStatus,
+                                                String categoryId, List<String> sortList) throws CedarProcessingException {
 
-    SearchRequestBuilder searchRequestBuilder =
-        client.prepareSearch(indexName);
+    SearchRequest searchRequest = new SearchRequest(indexName);
+    SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
 
     BoolQueryBuilder mainQuery = QueryBuilders.boolQuery();
 
-    if (query != null && query.length() > 0) {
-
+    if (query != null && !query.isEmpty()) {
       query = preprocessQuery(query);
 
       // Parse the query and rewrite it to query the right index fields. The whitespace analyzer divides text into
@@ -157,7 +172,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     }
 
     // Filter by resource type
-    if (resourceTypes != null && resourceTypes.size() > 0) {
+    if (resourceTypes != null && !resourceTypes.isEmpty()) {
       QueryBuilder resourceTypesQuery = QueryBuilders.termsQuery(RESOURCE_TYPE, resourceTypes);
       mainQuery.must(resourceTypesQuery);
     }
@@ -203,18 +218,17 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     }
 
     // Filter by category id
-    if (categoryId != null && categoryId.length() > 0) {
+    if (categoryId != null && !categoryId.isEmpty()) {
       QueryBuilder categoryIdQuery = QueryBuilders.termsQuery(CATEGORIES, categoryId);
       mainQuery.must(categoryIdQuery);
     }
 
     // Set main query
-    searchRequestBuilder.setQuery(mainQuery);
-    //log.info("Search query in Query DSL:\n" + mainQuery);
+    searchSourceBuilder.query(mainQuery);
+    searchRequest.source(searchSourceBuilder);
 
     // Sort by field
-    // The name is stored on the resource, so we can sort by that
-    if (sortList != null && sortList.size() > 0) {
+    if (sortList != null && !sortList.isEmpty()) {
       for (String s : sortList) {
         SortOrder sortOrder = SortOrder.ASC;
         if (s.startsWith(ES_SORT_DESC_PREFIX)) {
@@ -222,13 +236,13 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
           s = s.substring(1);
         }
         switch (s) {
-          case SORT_BY_NAME -> searchRequestBuilder.addSort(INFO_SCHEMA_NAME, sortOrder);
-          case SORT_LAST_UPDATED_ON_FIELD -> searchRequestBuilder.addSort(INFO_PAV_LAST_UPDATED_ON, sortOrder);
-          case SORT_CREATED_ON_FIELD -> searchRequestBuilder.addSort(INFO_PAV_CREATED_ON, sortOrder);
+          case SORT_BY_NAME -> searchSourceBuilder.sort(INFO_SCHEMA_NAME, sortOrder);
+          case SORT_LAST_UPDATED_ON_FIELD -> searchSourceBuilder.sort(INFO_PAV_LAST_UPDATED_ON, sortOrder);
+          case SORT_CREATED_ON_FIELD -> searchSourceBuilder.sort(INFO_PAV_CREATED_ON, sortOrder);
         }
       }
     }
-    return searchRequestBuilder;
+    return searchRequest;
   }
 
   private boolean enclosedByQuotes(String keyword) {
@@ -309,7 +323,6 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   }
 
   /**
-   *
    * @param fieldName
    * @param fieldValue
    * @param withPrefix Indicates if it is a prefix query. A PrefixQuery is built by QueryParser for inputs like app*.
@@ -498,12 +511,12 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
    * Preprocess possible values queries
    *
    * Syntax used for possible values queries:
-   *    Partial match syntax
-   *      [pv]term
-   *      [pv]"term1 term2"
-   *    Exact match syntax (full match between the query and the value in the index, ignoring case):
-   *      [pv]=term, [pv]="term"
-   *      [pv]="term1 term2"
+   * Partial match syntax
+   * [pv]term
+   * [pv]"term1 term2"
+   * Exact match syntax (full match between the query and the value in the index, ignoring case):
+   * [pv]=term, [pv]="term"
+   * [pv]="term1 term2"
    *
    * @param query
    * @return
@@ -542,37 +555,43 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   }
 
   public long searchAccessibleResourceCountByUser(List<String> resourceTypes, FilesystemResourcePermission permission, CedarUser user) {
+    try {
+      SearchRequest searchRequest = new SearchRequest(indexName);
 
-    SearchRequestBuilder searchRequest = client.prepareSearch(indexName);
+      BoolQueryBuilder mainQuery = QueryBuilders.boolQuery();
 
-    BoolQueryBuilder mainQuery = QueryBuilders.boolQuery();
+      if (!user.has(CedarPermission.READ_NOT_READABLE_NODE)) {
+        // Filter by user
+        QueryBuilder userIdQuery = QueryBuilders.termQuery(USERS, CedarNodeMaterializedPermissions.getKey(user.getId(), permission));
+        BoolQueryBuilder permissionQuery = QueryBuilders.boolQuery();
 
-    if (!user.has(CedarPermission.READ_NOT_READABLE_NODE)) {
-      // Filter by user
-      QueryBuilder userIdQuery = QueryBuilders.termQuery(USERS, CedarNodeMaterializedPermissions.getKey(user.getId(), permission));
-      BoolQueryBuilder permissionQuery = QueryBuilders.boolQuery();
+        QueryBuilder everybodyReadQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION, NodeSharePermission.READ.getValue());
+        QueryBuilder everybodyWriteQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION, NodeSharePermission.WRITE.getValue());
 
-      QueryBuilder everybodyReadQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION, NodeSharePermission.READ.getValue());
-      QueryBuilder everybodyWriteQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION, NodeSharePermission.WRITE.getValue());
+        permissionQuery.should(userIdQuery);
+        permissionQuery.should(everybodyReadQuery);
+        permissionQuery.should(everybodyWriteQuery);
+        mainQuery.must(permissionQuery);
+      }
 
-      permissionQuery.should(userIdQuery);
-      permissionQuery.should(everybodyReadQuery);
-      permissionQuery.should(everybodyWriteQuery);
-      mainQuery.must(permissionQuery);
+      // Filter by resource type
+      QueryBuilder resourceTypesQuery = QueryBuilders.termsQuery(RESOURCE_TYPE, resourceTypes);
+      mainQuery.must(resourceTypesQuery);
+
+      // Set main query
+      SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+      searchSourceBuilder.query(mainQuery);
+      searchSourceBuilder.trackTotalHits(true);
+      searchRequest.source(searchSourceBuilder);
+
+      // Execute request
+      SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT);
+
+      SearchHits hits = response.getHits();
+      return hits.getTotalHits().value;
+    } catch (IOException e) {
+      log.error("Error while searching accessible documents", e);
+      return 0;
     }
-
-    // Filter by resource type
-    QueryBuilder resourceTypesQuery = QueryBuilders.termsQuery(RESOURCE_TYPE, resourceTypes);
-    mainQuery.must(resourceTypesQuery);
-
-    // Set main query
-    searchRequest.setQuery(mainQuery);
-    searchRequest.setTrackTotalHits(true);
-
-    // Execute request
-    SearchResponse response = searchRequest.execute().actionGet();
-
-    TotalHits totalHits = response.getHits().getTotalHits();
-    return totalHits == null ? 0 : totalHits.value;
   }
 }

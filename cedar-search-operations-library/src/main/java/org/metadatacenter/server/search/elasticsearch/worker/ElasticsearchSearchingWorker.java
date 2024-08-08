@@ -1,17 +1,22 @@
 package org.metadatacenter.server.search.elasticsearch.worker;
 
-import org.elasticsearch.action.search.SearchRequestBuilder;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.core.TimeValue;
-import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.SearchHit;
 import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.exception.CedarProcessingException;
+import org.opensearch.action.search.SearchRequest;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.action.search.SearchScrollRequest;
+import org.opensearch.client.RequestOptions;
+import org.opensearch.client.RestHighLevelClient;
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -20,12 +25,12 @@ public class ElasticsearchSearchingWorker {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSearchingWorker.class);
 
-  private final Client client;
+  private final RestHighLevelClient client;
   private final String indexName;
   private final OpensearchConfig config;
   private final TimeValue keepAlive;
 
-  public ElasticsearchSearchingWorker(OpensearchConfig config, Client client) {
+  public ElasticsearchSearchingWorker(OpensearchConfig config, RestHighLevelClient client) {
     this.config = config;
     this.client = client;
     this.indexName = config.getIndexes().getSearchIndex().getName();
@@ -40,25 +45,38 @@ public class ElasticsearchSearchingWorker {
 
   public List<String> findAllValuesForField(String fieldName, QueryBuilder queryBuilder) {
     List<String> fieldValues = new ArrayList<>();
-    SearchRequestBuilder searchRequest = client.prepareSearch(indexName)
-        .setFetchSource(new String[]{fieldName}, null)
-        .setScroll(keepAlive).setQuery(queryBuilder).setSize(config.getSize());
-    SearchResponse response = searchRequest.execute().actionGet();
-    // Scroll until no hits are returned
-    do {
-      for (SearchHit hit : response.getHits().getHits()) {
-        Map<String, Object> f = hit.getSourceAsMap();
-        String[] pathFragments = fieldName.split("\\.");
-        for (int i = 0; i < pathFragments.length - 1; i++) {
-          f = (Map<String, Object>) f.get(pathFragments[0]);
+
+    SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder()
+        .fetchSource(new FetchSourceContext(true, new String[]{fieldName}, null))
+        .query(queryBuilder)
+        .size(config.getSize());
+
+    SearchRequest searchRequest = new SearchRequest(indexName)
+        .source(searchSourceBuilder)
+        .scroll(keepAlive);
+
+    try {
+      SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT);
+
+      do {
+        for (SearchHit hit : response.getHits().getHits()) {
+          Map<String, Object> f = hit.getSourceAsMap();
+          String[] pathFragments = fieldName.split("\\.");
+          for (int i = 0; i < pathFragments.length - 1; i++) {
+            f = (Map<String, Object>) f.get(pathFragments[0]);
+          }
+          String fieldValue = (String) f.get(pathFragments[pathFragments.length - 1]);
+          fieldValues.add(fieldValue);
         }
-        String fieldValue = (String) f.get(pathFragments[pathFragments.length - 1]);
-        fieldValues.add(fieldValue);
-      }
-      response = client.prepareSearchScroll(response.getScrollId()).setScroll(keepAlive)
-          .execute().actionGet();
-      // Break condition: No hits are returned
-    } while (response.getHits().getHits().length != 0);
+
+        String scrollId = response.getScrollId();
+        SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId).scroll(keepAlive);
+        response = client.scroll(scrollRequest, RequestOptions.DEFAULT);
+      } while (response.getHits().getHits().length != 0);
+    } catch (IOException e) {
+      log.error("Error while searching all values", e);
+    }
+
     return fieldValues;
   }
 }

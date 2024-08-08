@@ -30,6 +30,7 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
     params.put(NodeProperty.LAST_UPDATED_ON_TS, nowTS);
     // NameDescriptionIdentifierGroup
     params.put(NodeProperty.NAME, categoryName);
+    params.put(NodeProperty.NAME_LOWER, categoryName.toLowerCase());
     params.put(NodeProperty.DESCRIPTION, categoryDescription);
     params.put(NodeProperty.IDENTIFIER, categoryIdentifier);
     // UsersDataGroup

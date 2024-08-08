@@ -1,7 +1,6 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.elasticsearch.client.Client;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.bridge.PathInfoBuilder;
 import org.metadatacenter.config.CedarConfig;
@@ -31,6 +30,7 @@ import org.metadatacenter.server.search.extraction.ValueSetsExtractor;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedCategories;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
 import org.metadatacenter.util.json.JsonMapper;
+import org.opensearch.client.RestHighLevelClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +45,7 @@ public class NodeIndexingService extends AbstractIndexingService {
   public final TemplateInstanceContentExtractor instanceContentExtractor;
   private final String nciCADSRValueSetsOntologyFilePath;
 
-  NodeIndexingService(CedarConfig cedarConfig, String indexName, Client client) {
+  NodeIndexingService(CedarConfig cedarConfig, String indexName, RestHighLevelClient client) {
     Map<String, String> environment = CedarEnvironmentVariableProvider.getFor(SystemComponent.SERVER_RESOURCE);
 
     nciCADSRValueSetsOntologyFilePath = environment.get(CedarEnvironmentVariable.CEDAR_CADSR_ONTOLOGIES_FOLDER.getName())

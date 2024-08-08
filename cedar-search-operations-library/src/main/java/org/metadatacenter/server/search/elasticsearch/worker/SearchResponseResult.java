@@ -1,6 +1,6 @@
 package org.metadatacenter.server.search.elasticsearch.worker;
 
-import org.elasticsearch.search.SearchHit;
+import org.opensearch.search.SearchHit;
 
 import java.util.ArrayList;
 import java.util.List;

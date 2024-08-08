@@ -98,8 +98,7 @@ public abstract class AbstractCypherQueryBuilder {
         sb.append(buildCreateAssignment(NodeProperty.HOME_OF)).append(",");
       }
     }
-    if (newNode instanceof FolderServerArtifact) {
-      FolderServerArtifact newResource = (FolderServerArtifact) newNode;
+    if (newNode instanceof FolderServerArtifact newResource) {
       if (newResource.getIdentifier() != null) {
         sb.append(buildCreateAssignment(NodeProperty.IDENTIFIER)).append(",");
       }
@@ -107,8 +106,7 @@ public abstract class AbstractCypherQueryBuilder {
         sb.append(buildCreateAssignment(NodeProperty.SOURCE_HASH)).append(",");
       }
     }
-    if (newNode instanceof FolderServerSchemaArtifact) {
-      FolderServerSchemaArtifact newResource = (FolderServerSchemaArtifact) newNode;
+    if (newNode instanceof FolderServerSchemaArtifact newResource) {
       if (newResource.getVersion() != null) {
         sb.append(buildCreateAssignment(NodeProperty.VERSION)).append(",");
       }
@@ -175,7 +173,6 @@ public abstract class AbstractCypherQueryBuilder {
 
   private static String getCaseInsensitiveSortExpression(String nodeAlias, String fieldName) {
     StringBuilder sb = new StringBuilder();
-    System.out.println("SORT HERE  BY:" + fieldName);
     if (QuerySortOptions.isTextual(fieldName)) {
       if (DEFAULT_SORT_FIELD.getName().equals(fieldName)) {
         sb.append(nodeAlias).append(".").append(QuerySortOptions.getFieldName(fieldName));
@@ -185,7 +182,6 @@ public abstract class AbstractCypherQueryBuilder {
     } else {
       sb.append(nodeAlias).append(".").append(QuerySortOptions.getFieldName(fieldName));
     }
-    System.out.println("SORT STRING:" + sb);
     return sb.toString();
   }
 
@@ -210,8 +206,7 @@ public abstract class AbstractCypherQueryBuilder {
     StringBuilder sb = new StringBuilder();
     sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
     sb.append(" MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:$parentId})");
-    if (newResource instanceof FolderServerSchemaArtifact) {
-      FolderServerSchemaArtifact schemaArtifact = (FolderServerSchemaArtifact) newResource;
+    if (newResource instanceof FolderServerSchemaArtifact schemaArtifact) {
       if (schemaArtifact.getPreviousVersion() != null) {
         sb.append(" MATCH (pvNode:<LABEL.RESOURCE> {<PROP.ID>:{<PH.PREVIOUS_VERSION>}})");
       }
@@ -219,8 +214,7 @@ public abstract class AbstractCypherQueryBuilder {
     sb.append(createFSResource("child", newResource));
     sb.append(" MERGE (user)-[:<REL.OWNS>]->(child)");
     sb.append(" MERGE (parent)-[:<REL.CONTAINS>]->(child)");
-    if (newResource instanceof FolderServerSchemaArtifact) {
-      FolderServerSchemaArtifact schemaArtifact = (FolderServerSchemaArtifact) newResource;
+    if (newResource instanceof FolderServerSchemaArtifact schemaArtifact) {
       if (schemaArtifact.getPreviousVersion() != null) {
         sb.append("MERGE (child)-[:<REL.PREVIOUSVERSION>]->(pvNode)");
       }

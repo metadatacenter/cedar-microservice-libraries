@@ -1,13 +1,5 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
-import org.apache.lucene.search.TotalHits;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.index.query.BoolQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.SearchHit;
-import org.elasticsearch.search.SearchHits;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.OpensearchConfig;
@@ -39,6 +31,16 @@ import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 import org.metadatacenter.util.TrustedByUtil;
 import org.metadatacenter.util.http.LinkHeaderUtil;
 import org.metadatacenter.util.json.JsonMapper;
+import org.opensearch.action.search.SearchRequest;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.client.RequestOptions;
+import org.opensearch.client.RestHighLevelClient;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,13 +55,13 @@ public class NodeSearchingService extends AbstractSearchingService {
 
   private static final Logger log = LoggerFactory.getLogger(NodeSearchingService.class);
 
-  private final Client client;
+  private final RestHighLevelClient client;
   private final OpensearchConfig config;
   private final TrustedFoldersConfig trustedFoldersConfig;
   private final ElasticsearchPermissionEnabledContentSearchingWorker permissionEnabledSearchWorker;
   private final ElasticsearchSearchingWorker searchWorker;
 
-  NodeSearchingService(CedarConfig cedarConfig, Client client) {
+  NodeSearchingService(CedarConfig cedarConfig, RestHighLevelClient client) {
     this.client = client;
     this.config = cedarConfig.getElasticsearchConfig();
     this.trustedFoldersConfig = cedarConfig.getTrustedFolders();
@@ -73,17 +75,22 @@ public class NodeSearchingService extends AbstractSearchingService {
 
   public Map<String, Object> getDocumentByCedarId(CedarResourceId resourceId) throws CedarProcessingException {
     try {
-      // Get resources by artifact id
-      SearchResponse responseSearch =
-          client.prepareSearch(config.getIndexes().getSearchIndex().getName())
-              .setQuery(QueryBuilders.matchQuery(DOCUMENT_CEDAR_ID, resourceId.getId()))
-              .execute().actionGet();
-      for (SearchHit hit : responseSearch.getHits()) {
+      // Create the search request
+      SearchRequest searchRequest = new SearchRequest(config.getIndexes().getSearchIndex().getName());
+      SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+      searchSourceBuilder.query(QueryBuilders.matchQuery(DOCUMENT_CEDAR_ID, resourceId.getId()));
+      searchRequest.source(searchSourceBuilder);
+
+      // Execute the search request
+      SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+
+      // Process the search hits
+      for (SearchHit hit : searchResponse.getHits().getHits()) {
         if (hit != null) {
           return hit.getSourceAsMap();
         }
       }
-    } catch (Exception e) {
+    } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
     return null;
@@ -124,8 +131,8 @@ public class NodeSearchingService extends AbstractSearchingService {
   }
 
   public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes,
-                                             ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
-                                             List<String> sortList, int limit, int offset) throws CedarProcessingException {
+                                     ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
+                                     List<String> sortList, int limit, int offset) throws CedarProcessingException {
     try {
       return permissionEnabledSearchWorker.search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset);
     } catch (Exception e) {
@@ -216,49 +223,61 @@ public class NodeSearchingService extends AbstractSearchingService {
 
   public long getTotalCount(CedarResourceType resourceType) throws CedarProcessingException {
     try {
-      SearchResponse responseSearch =
-          client.prepareSearch(config.getIndexes().getSearchIndex().getName())
-              .setQuery(QueryBuilders.matchQuery(RESOURCE_TYPE, resourceType.getValue()))
-              .setSize(0)
-              .setTrackTotalHits(true)
-              .execute().actionGet();
+      // Create the search request
+      SearchRequest searchRequest = new SearchRequest(config.getIndexes().getSearchIndex().getName());
+      SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+      searchSourceBuilder.query(QueryBuilders.matchQuery(RESOURCE_TYPE, resourceType.getValue()));
+      searchSourceBuilder.size(0); // We only need the count, no hits
+      searchSourceBuilder.trackTotalHits(true); // Ensure total hits are tracked
+      searchRequest.source(searchSourceBuilder);
 
-      SearchHits hits = responseSearch.getHits();
-      TotalHits totalHits = hits.getTotalHits();
-      return totalHits.value;
-    } catch (Exception e) {
+      // Execute the search request
+      SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+
+      // Process the search hits
+      SearchHits hits = searchResponse.getHits();
+      return hits.getTotalHits().value;
+    } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }
 
   public long getTotalArtifactCount() throws CedarProcessingException {
     try {
-      SearchResponse responseSearch =
-          client.prepareSearch(config.getIndexes().getSearchIndex().getName())
-              .setSize(0)
-              .setTrackTotalHits(true)
-              .execute().actionGet();
+      // Create the search request
+      SearchRequest searchRequest = new SearchRequest(config.getIndexes().getSearchIndex().getName());
+      SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+      searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+      searchSourceBuilder.size(0); // We only need the count, no hits
+      searchSourceBuilder.trackTotalHits(true); // Ensure total hits are tracked
+      searchRequest.source(searchSourceBuilder);
 
-      SearchHits hits = responseSearch.getHits();
-      TotalHits totalHits = hits.getTotalHits();
-      return totalHits.value;
-    } catch (Exception e) {
+      // Execute the search request
+      SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+
+      // Process the search hits
+      SearchHits hits = searchResponse.getHits();
+      return hits.getTotalHits().value;
+    } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }
 
   public long getTotalRecommenderCount() throws CedarProcessingException {
     try {
-      SearchResponse responseSearch =
-          client.prepareSearch(config.getIndexes().getRulesIndex().getName())
-              .setSize(0)
-              .setTrackTotalHits(true)
-              .execute().actionGet();
+      // Create the search request
+      SearchRequest searchRequest = new SearchRequest(config.getIndexes().getRulesIndex().getName());
+      SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+      searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+      searchSourceBuilder.size(0); // We only need the count, no hits
+      searchRequest.source(searchSourceBuilder);
 
-      SearchHits hits = responseSearch.getHits();
-      TotalHits totalHits = hits.getTotalHits();
-      return totalHits.value;
-    } catch (Exception e) {
+      // Execute the search request
+      SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+
+      // Process the search hits
+      return searchResponse.getHits().getTotalHits().value;
+    } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }

@@ -48,42 +48,48 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
   }
 
   public static String findUsers() {
-    return "" +
-        " MATCH (user:<LABEL.USER>)" +
-        " RETURN user" +
-        " ORDER BY user.<PROP.NAME_LOWER>";
+    return """
+        MATCH (user:<LABEL.USER>)
+        RETURN user
+        ORDER BY user.<PROP.NAME_LOWER>
+        """;
   }
 
   public static String getUserById() {
-    return "" +
-        " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})" +
-        " RETURN user";
+    return """
+        MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})
+        RETURN user
+        """;
   }
 
   public static String addUserToGroup() {
-    return "" +
-        " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +
-        " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.GROUP_ID>}})" +
-        " MERGE (user)-[:<REL.MEMBEROF>]->(group)" +
-        " RETURN user";
+    return """
+        MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
+        MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.GROUP_ID>}})
+        MERGE (user)-[:<REL.MEMBEROF>]->(group)
+        RETURN user
+        """;
   }
 
   public static String getUserByApiKey() {
-    return "" +
-        " MATCH (user:<LABEL.USER>)" +
-        " WHERE {<PH.API_KEY>} IN user.<PROP.API_KEYS>" +
-        " RETURN user";
+    return """
+        MATCH (user:<LABEL.USER>)
+        WHERE {<PH.API_KEY>} IN user.<PROP.API_KEYS>
+        RETURN user
+        """;
   }
 
   public static String userExists() {
-    return "" +
-        " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})" +
-        " RETURN COUNT(user) = 1";
+    return """
+        MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})
+        RETURN COUNT(user) = 1
+        """;
   }
 
   public static String getTotalCount() {
-    return "" +
-        " MATCH (user:<LABEL.USER>)" +
-        " RETURN count(user)";
+    return """
+        MATCH (user:<LABEL.USER>)
+        RETURN count(user)
+        """;
   }
 }
