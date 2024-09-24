@@ -12,6 +12,7 @@ import org.apache.http.util.EntityUtils;
 import org.metadatacenter.constant.CedarHeaderParameters;
 import org.metadatacenter.constant.CustomHttpConstants;
 import org.metadatacenter.constant.HttpConnectionConstants;
+import org.metadatacenter.constant.HttpConstants;
 import org.metadatacenter.exception.CedarBadRequestException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
@@ -30,7 +31,7 @@ public class ProxyUtil {
       HttpHeaders.CONTENT_TYPE,
       CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS,
       CustomHttpConstants.HEADER_CEDAR_VALIDATION_REPORT,
-      CustomHttpConstants.HEADER_ACCESS_CONTROL_EXPOSE_HEADERS);
+      HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS);
 
   public static HttpResponse proxyGet(String url, CedarRequestContext context) throws CedarProcessingException {
     Request proxyRequest = Request.Get(url)

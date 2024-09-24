@@ -10,5 +10,4 @@ public final class CustomHttpConstants {
 
   public static final String HEADER_CEDAR_VALIDATION_STATUS = "CEDAR-Validation-Status";
   public static final String HEADER_CEDAR_VALIDATION_REPORT = "CEDAR-Validation-Report";
-  public static final String HEADER_ACCESS_CONTROL_EXPOSE_HEADERS = "Access-Control-Expose-Headers";
 }
