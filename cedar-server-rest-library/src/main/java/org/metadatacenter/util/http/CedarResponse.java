@@ -2,6 +2,7 @@ package org.metadatacenter.util.http;
 
 import com.google.common.collect.Maps;
 import org.metadatacenter.constant.CustomHttpConstants;
+import org.metadatacenter.constant.HttpConstants;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.error.CedarErrorPack;
 import org.metadatacenter.error.CedarErrorReasonKey;
@@ -46,6 +47,8 @@ public abstract class CedarResponse {
     private Object entity;
     private URI createdResourceUri;
     private CedarOperationDescriptor operation;
+    private String type;
+    private String fileName;
     private Map<String, Object> headers = Maps.newHashMap();
 
     protected CedarResponseBuilder() {
@@ -73,8 +76,8 @@ public abstract class CedarResponse {
           responseBuilder.header(property, headers.get(property));
         }
       }
-      responseBuilder.header(CustomHttpConstants.HEADER_ACCESS_CONTROL_EXPOSE_HEADERS,
-          CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS);
+      responseBuilder.header(HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS,
+          CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS + "," + HttpConstants.HTTP_HEADER_CONTENT_DISPOSITION);
       if (createdResourceUri != null) {
         responseBuilder.status(CedarResponseStatus.CREATED.getStatusCode()).location(createdResourceUri);
       }
@@ -100,6 +103,12 @@ public abstract class CedarResponse {
         if (!r.isEmpty()) {
           responseBuilder.entity(r);
         }
+      }
+      if (type != null) {
+        responseBuilder.type(type);
+      }
+      if (fileName != null) {
+        responseBuilder.header(HttpConstants.HTTP_HEADER_CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"");
       }
       return responseBuilder.build();
     }
@@ -163,6 +172,15 @@ public abstract class CedarResponse {
       return this;
     }
 
+    public CedarResponseBuilder type(String type) {
+      this.type = type;
+      return this;
+    }
+
+    public CedarResponseBuilder contentDispositionAttachment(String fileName) {
+      this.fileName = fileName;
+      return this;
+    }
   }
 
   public static CedarResponseBuilder ok() {
