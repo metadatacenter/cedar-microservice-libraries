@@ -7,6 +7,7 @@ import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.config.OpensearchMappingsConfig;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.util.json.JsonMapper;
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;
 import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.opensearch.action.support.master.AcknowledgedResponse;
@@ -17,6 +18,7 @@ import org.opensearch.client.indices.GetIndexRequest;
 import org.opensearch.client.indices.GetIndexResponse;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.rest.RestStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -188,6 +190,10 @@ public class ElasticsearchManagementService {
       GetIndexRequest request = new GetIndexRequest("*");
       GetIndexResponse response = getClient().indices().get(request, RequestOptions.DEFAULT);
       indexNames.addAll(Arrays.asList(response.getIndices()));
+    } catch (OpenSearchStatusException e) {
+      if (e.status() == RestStatus.NOT_FOUND) {
+        log.error("There were no indices found", e);
+      }
     } catch (IOException e) {
       log.error("There was an error retrieving existing indices", e);
     }
