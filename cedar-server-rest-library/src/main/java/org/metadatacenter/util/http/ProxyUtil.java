@@ -103,6 +103,19 @@ public class ProxyUtil {
     }
   }
 
+  public static HttpResponse proxyPost(String url, Map<String, String> additionalHeaders, String content) throws CedarProcessingException {
+    Request proxyRequest = Request.Post(url)
+        .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
+        .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT)
+        .bodyString(content, ContentType.APPLICATION_FORM_URLENCODED);
+    copyHeaders(proxyRequest, additionalHeaders);
+    try {
+      return proxyRequest.execute().returnResponse();
+    } catch (IOException e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
   public static HttpResponse proxyPut(String url, CedarRequestContext context) throws CedarProcessingException,
       CedarBadRequestException {
     return proxyPut(url, context, context.request().getRequestBody().asJsonString());
