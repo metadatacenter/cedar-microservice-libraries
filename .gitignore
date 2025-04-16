@@ -15,5 +15,6 @@ dist
 pom.xml.releaseBackup
 release.properties
 pom.xml.versionsBackup
+.DS_Store
 
 cedar-auth-operations-noauth/

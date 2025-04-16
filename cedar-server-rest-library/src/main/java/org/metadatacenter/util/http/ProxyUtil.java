@@ -22,6 +22,7 @@ import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.core.HttpHeaders;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 public class ProxyUtil {
 
@@ -45,6 +46,31 @@ public class ProxyUtil {
     }
   }
 
+  public static HttpResponse proxyGet(String url, CedarRequestContext context, Map<String, String> additionalHeaders) throws CedarProcessingException {
+    Request proxyRequest = Request.Get(url)
+        .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
+        .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT);
+    copyHeaders(proxyRequest, context);
+    copyHeaders(proxyRequest, additionalHeaders);
+    try {
+      return proxyRequest.execute().returnResponse();
+    } catch (IOException e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
+  public static HttpResponse proxyGet(String url, Map<String, String> additionalHeaders) throws CedarProcessingException {
+    Request proxyRequest = Request.Get(url)
+        .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
+        .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT);
+    copyHeaders(proxyRequest, additionalHeaders);
+    try {
+      return proxyRequest.execute().returnResponse();
+    } catch (IOException e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
   public static HttpResponse proxyDelete(String url, CedarRequestContext context) throws CedarProcessingException {
     Request proxyRequest = Request.Delete(url)
         .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
@@ -59,7 +85,8 @@ public class ProxyUtil {
     }
   }
 
-  public static HttpResponse proxyPost(String url, CedarRequestContext context) throws CedarProcessingException, CedarBadRequestException {
+  public static HttpResponse proxyPost(String url, CedarRequestContext context) throws CedarProcessingException,
+      CedarBadRequestException {
     return proxyPost(url, context, context.request().getRequestBody().asJsonString());
   }
 
@@ -76,7 +103,21 @@ public class ProxyUtil {
     }
   }
 
-  public static HttpResponse proxyPut(String url, CedarRequestContext context) throws CedarProcessingException, CedarBadRequestException {
+  public static HttpResponse proxyPost(String url, Map<String, String> additionalHeaders, String content) throws CedarProcessingException {
+    Request proxyRequest = Request.Post(url)
+        .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
+        .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT)
+        .bodyString(content, ContentType.APPLICATION_FORM_URLENCODED);
+    copyHeaders(proxyRequest, additionalHeaders);
+    try {
+      return proxyRequest.execute().returnResponse();
+    } catch (IOException e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
+  public static HttpResponse proxyPut(String url, CedarRequestContext context) throws CedarProcessingException,
+      CedarBadRequestException {
     return proxyPut(url, context, context.request().getRequestBody().asJsonString());
   }
 
@@ -107,6 +148,12 @@ public class ProxyUtil {
     copyHeader(proxyRequest, CedarHeaderParameters.CLIENT_SESSION_ID, context.getClientSessionIdHeader());
     copyHeader(proxyRequest, CedarHeaderParameters.GLOBAL_REQUEST_ID_KEY, context.getGlobalRequestIdHeader());
     copyHeader(proxyRequest, CedarHeaderParameters.LOCAL_REQUEST_ID_KEY, context.getLocalRequestIdHeader());
+  }
+
+  private static void copyHeaders(Request proxyRequest, Map<String, String> additionalHeader) {
+    for (String key : additionalHeader.keySet()) {
+      proxyRequest.addHeader(key, additionalHeader.get(key));
+    }
   }
 
   private static void copyHeader(Request proxyRequest, String headerKey, String value) {
