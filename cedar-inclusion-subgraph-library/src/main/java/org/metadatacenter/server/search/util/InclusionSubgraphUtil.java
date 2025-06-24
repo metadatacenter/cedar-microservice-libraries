@@ -180,13 +180,14 @@ public class InclusionSubgraphUtil {
 
 
   public static boolean updateSubdocumentByAtId(JsonNode parentDocument, String idToBeReplaced, JsonNode newDocument) {
-    return findAndReplaceDocumentNode(null, null, parentDocument, idToBeReplaced, newDocument);
+    return findAndReplaceDocumentNode(null, null, parentDocument, idToBeReplaced, newDocument, (ObjectNode) parentDocument);
   }
 
-  private static boolean findAndReplaceDocumentNode(String key, ObjectNode parent, JsonNode currentNode, String idToBeReplaced, JsonNode newDocument) {
+  private static boolean findAndReplaceDocumentNode(String key, ObjectNode parent, JsonNode currentNode, String idToBeReplaced, JsonNode newDocument, ObjectNode root) {
     if (currentNode.has(LinkedData.ID) && currentNode.get(LinkedData.ID).asText().equals(idToBeReplaced)) {
       if (parent != null) {
         parent.replace(key, newDocument);
+        updateUiMetadata(root, newDocument, key);
       }
       return true;
     }
@@ -196,7 +197,7 @@ public class InclusionSubgraphUtil {
       String childKey = fieldNames.next();
       JsonNode child = currentNode.get(childKey);
       if (child.isObject()) {
-        boolean found = findAndReplaceDocumentNode(childKey, (ObjectNode) currentNode, child, idToBeReplaced, newDocument);
+        boolean found = findAndReplaceDocumentNode(childKey, (ObjectNode) currentNode, child, idToBeReplaced, newDocument, root);
         if (found) {
           return true;
         }
@@ -204,4 +205,25 @@ public class InclusionSubgraphUtil {
     }
     return false;
   }
+
+  private static void updateUiMetadata(ObjectNode root, JsonNode newDocument, String nameRoBeReplaced) {
+    if (!newDocument.has("schema:name") || !newDocument.has("schema:description")) return;
+    if (!root.has("_ui")) return;
+
+    String fieldName = newDocument.get("schema:name").asText();
+    String description = newDocument.get("schema:description").asText();
+
+    ObjectNode uiNode = (ObjectNode) root.get("_ui");
+
+    ObjectNode labels = uiNode.has("propertyLabels") && uiNode.get("propertyLabels").isObject()
+        ? (ObjectNode) uiNode.get("propertyLabels")
+        : uiNode.putObject("propertyLabels");
+    labels.put(nameRoBeReplaced, fieldName);
+
+    ObjectNode descriptions = uiNode.has("propertyDescriptions") && uiNode.get("propertyDescriptions").isObject()
+        ? (ObjectNode) uiNode.get("propertyDescriptions")
+        : uiNode.putObject("propertyDescriptions");
+    descriptions.put(nameRoBeReplaced, description);
+  }
+
 }
