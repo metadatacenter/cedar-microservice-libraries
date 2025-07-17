@@ -108,6 +108,8 @@ public interface FolderServiceSession {
 
   FolderServerFolder findHomeFolderOf();
 
+  FolderServerFolder findHomeFolderOfUser(CedarUserId userId);
+
   FolderServerFolder createUserHomeFolder();
 
   boolean setDerivedFrom(CedarArtifactId newId, CedarArtifactId oldId);
