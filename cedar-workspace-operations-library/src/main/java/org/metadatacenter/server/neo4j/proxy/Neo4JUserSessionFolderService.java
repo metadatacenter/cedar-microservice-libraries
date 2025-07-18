@@ -39,7 +39,12 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   @Override
   public FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource,
                                                         CedarFolderId parentFolderId) {
-    newResource.setCreatedByTotal(cu.getResourceId());
+    return createResourceAsChildOfId(newResource, parentFolderId, cu.getResourceId());
+  }
+
+  public FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource,
+                                                        CedarFolderId parentFolderId, CedarUserId userId) {
+    newResource.setCreatedByTotal(userId);
     return proxies.artifact().createResourceAsChildOfId(newResource, parentFolderId);
   }
 
@@ -206,7 +211,12 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   @Override
   public FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId,
                                                     CedarFolderId newFolderId) {
-    newFolder.setCreatedByTotal(cu.getResourceId());
+    return createFolderAsChildOfId(newFolder, parentFolderId, newFolderId, cu.getResourceId());
+  }
+
+  public FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId,
+                                                    CedarFolderId newFolderId, CedarUserId userId) {
+    newFolder.setCreatedByTotal(userId);
     return proxies.folder().createFolderAsChildOfId(newFolder, parentFolderId, newFolderId);
   }
 

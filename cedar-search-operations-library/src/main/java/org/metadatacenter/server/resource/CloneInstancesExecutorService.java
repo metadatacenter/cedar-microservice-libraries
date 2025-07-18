@@ -19,14 +19,12 @@ import org.metadatacenter.model.BiboStatus;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.GraphDbObjectBuilder;
 import org.metadatacenter.model.ResourceVersion;
-import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
-import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
-import org.metadatacenter.model.folderserver.basic.FolderServerInstance;
-import org.metadatacenter.model.folderserver.basic.FolderServerSchemaArtifact;
+import org.metadatacenter.model.folderserver.basic.*;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.FolderServiceSession;
+import org.metadatacenter.server.jsonld.LinkedDataUtil;
 import org.metadatacenter.server.neo4j.cypher.sort.QuerySortOptions;
 import org.metadatacenter.server.search.elasticsearch.service.NodeIndexingService;
 import org.metadatacenter.server.service.UserService;
@@ -50,7 +48,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.metadatacenter.model.ModelNodeNames.*;
+import static org.metadatacenter.model.ModelNodeNames.SCHEMA_IS_BASED_ON;
+import static org.metadatacenter.model.ModelNodeNames.SCHEMA_ORG_IDENTIFIER;
 
 public class CloneInstancesExecutorService {
 
@@ -59,6 +58,7 @@ public class CloneInstancesExecutorService {
   private final FolderServiceSession folderSession;
   private final CedarRequestContext cedarRequestContext;
   protected final MicroserviceUrlUtil microserviceUrlUtil;
+  protected final LinkedDataUtil linkedDataUtil;
 
   protected static NodeIndexingService nodeIndexingService;
   protected static ValuerecommenderReindexQueueService valuerecommenderReindexQueueService;
@@ -66,9 +66,10 @@ public class CloneInstancesExecutorService {
   public CloneInstancesExecutorService(CedarConfig cedarConfig) {
     UserService userService = CedarDataServices.getNeoUserService();
 
-    this.cedarRequestContext = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
+    cedarRequestContext = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
     folderSession = CedarDataServices.getFolderServiceSession(cedarRequestContext);
     microserviceUrlUtil = cedarConfig.getMicroserviceUrlUtil();
+    linkedDataUtil = cedarRequestContext.getLinkedDataUtil();
   }
 
   public static void injectServices(NodeIndexingService nodeIndexingService,
@@ -94,13 +95,22 @@ public class CloneInstancesExecutorService {
 
       for (Map.Entry<String, List<FolderServerResourceExtract>> entry : instancesByOwner.entrySet()) {
         CedarUserId ownerUser = CedarUserId.build(entry.getKey());
-        FolderServerFolder destinationFolder = folderSession.findHomeFolderOfUser(ownerUser);
-        if (destinationFolder != null) {
+        FolderServerFolder homeFolder = folderSession.findHomeFolderOfUser(ownerUser);
+        if (homeFolder != null) {
+          FolderServerTemplate newTemplate = (FolderServerTemplate) folderSession.findResourceById(newTemplateId);
+          CedarFolderId newTargetFolderId = linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class);
+          FolderServerFolder newFolder = new FolderServerFolder();
+
+          newFolder.setName("Cloned instances of " + newTemplate.getName() + " v " + newTemplate.getVersion().getValue());
+          newFolder.setDescription("Automatically created folder");
+
+          FolderServerFolder newTargetFolder = folderSession.createFolderAsChildOfId(newFolder,
+              homeFolder.getResourceId(), newTargetFolderId, ownerUser);
           for (FolderServerResourceExtract instanceExtract : entry.getValue()) {
             try {
               copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId.build(instanceExtract.getId()),
                   oldTemplateId, newTemplateId,
-                  destinationFolder.getResourceId());
+                  newTargetFolder.getResourceId(), ownerUser);
             } catch (CedarException e) {
               log.error("Error when cloning instance:" + instanceExtract.getId(), e);
             }
@@ -116,7 +126,8 @@ public class CloneInstancesExecutorService {
   private Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId oldInstanceId,
                                                        CedarTemplateId oldTemplateId,
                                                        CedarTemplateId newTemplateId,
-                                                       CedarFolderId destinationFolderId) throws CedarException {
+                                                       CedarFolderId destinationFolderId,
+                                                       CedarUserId userId) throws CedarException {
     CedarRequestContext c = this.cedarRequestContext;
 
     FolderServiceSession folderSession = CedarDataServices.getFolderServiceSession(c);
@@ -167,7 +178,8 @@ public class CloneInstancesExecutorService {
                 ModelUtil.extractNameFromResource(resourceType, jsonNode).getValue(),
                 ModelUtil.extractDescriptionFromResource(resourceType, jsonNode).getValue(),
                 ModelUtil.extractIdentifierFromResource(resourceType, jsonNode).getValue(),
-                newTemplateId);
+                newTemplateId,
+                userId);
 
         if (templateProxyResponse.getEntity() != null) {
           // index the artifact that has been created
@@ -199,15 +211,18 @@ public class CloneInstancesExecutorService {
   }
 
   //TODO: extract this, present in the CommandFileSystemResource as well
-  private ValuerecommenderReindexMessage buildValuerecommenderEvent(FolderServerArtifact folderServerResource, ValuerecommenderReindexMessageActionType actionType) {
+  private ValuerecommenderReindexMessage buildValuerecommenderEvent(FolderServerArtifact folderServerResource,
+                                                                    ValuerecommenderReindexMessageActionType actionType) {
     ValuerecommenderReindexMessage event = null;
     if (folderServerResource.getType() == CedarResourceType.TEMPLATE) {
       CedarTemplateId templateId = CedarTemplateId.build(folderServerResource.getId());
-      event = new ValuerecommenderReindexMessage(templateId, null, ValuerecommenderReindexMessageResourceType.TEMPLATE, actionType);
+      event = new ValuerecommenderReindexMessage(templateId, null,
+          ValuerecommenderReindexMessageResourceType.TEMPLATE, actionType);
     } else if (folderServerResource.getType() == CedarResourceType.INSTANCE) {
       FolderServerInstance instance = (FolderServerInstance) folderServerResource;
       CedarTemplateInstanceId instanceId = CedarTemplateInstanceId.build(instance.getId());
-      event = new ValuerecommenderReindexMessage(instance.getIsBasedOn(), instanceId, ValuerecommenderReindexMessageResourceType.INSTANCE,
+      event = new ValuerecommenderReindexMessage(instance.getIsBasedOn(), instanceId,
+          ValuerecommenderReindexMessageResourceType.INSTANCE,
           actionType);
     }
     return event;
@@ -219,7 +234,8 @@ public class CloneInstancesExecutorService {
                                                              CedarArtifactId newId,
                                                              CedarFolderId targetFolderId,
                                                              CedarResourceType resourceType, String name,
-                                                             String description, String identifier, CedarTemplateId newTemplateId) throws CedarException {
+                                                             String description, String identifier,
+                                                             CedarTemplateId newTemplateId, CedarUserId userId) throws CedarException {
 
     FolderServiceSession folderSession = CedarDataServices.getFolderServiceSession(c);
 
@@ -238,7 +254,6 @@ public class CloneInstancesExecutorService {
     FolderServerArtifact newResource = null;
     FolderServerFolder parentFolder = folderSession.findFolderById(targetFolderId);
 
-    String candidatePath = null;
     if (parentFolder == null) {
       throw new CedarObjectNotFoundException("The parent folder is not present!")
           .parameter("targetFolderId", targetFolderId)
@@ -263,7 +278,7 @@ public class CloneInstancesExecutorService {
         if (resourceType == CedarResourceType.INSTANCE) {
           ((FolderServerInstance) brandNewResource).setIsBasedOn(newTemplateId);
         }
-        newResource = folderSession.createResourceAsChildOfId(brandNewResource, targetFolderId);
+        newResource = folderSession.createResourceAsChildOfId(brandNewResource, targetFolderId, userId);
       }
     }
 
