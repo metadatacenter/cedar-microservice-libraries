@@ -12,13 +12,13 @@ public class CloneInstancesEnqueueService {
     this.queueService = new CloneInstancesQueueService(cedarConfig.getCacheConfig().getPersistent());
   }
 
-  private void enqueue(CedarTemplateId oldId, CedarTemplateId newId) {
-    CloneInstancesQueueEvent event = new CloneInstancesQueueEvent(oldId, newId);
+  private void enqueue(CedarTemplateId oldId, CedarTemplateId newId, String newFolderName) {
+    CloneInstancesQueueEvent event = new CloneInstancesQueueEvent(oldId, newId, newFolderName);
     queueService.enqueueEvent(event);
   }
 
-  public void cloneInstances(CedarTemplateId oldId, CedarTemplateId newId) {
-    enqueue(oldId, newId);
+  public void cloneInstances(CedarTemplateId oldId, CedarTemplateId newId, String newFolderName) {
+    enqueue(oldId, newId, newFolderName);
   }
 
 }

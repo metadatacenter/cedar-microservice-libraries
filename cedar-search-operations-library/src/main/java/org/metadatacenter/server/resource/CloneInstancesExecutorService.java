@@ -80,10 +80,12 @@ public class CloneInstancesExecutorService {
 
   // Main entry point
   public void handleEvent(CloneInstancesQueueEvent event) {
-    cloneInstancesOfTemplate(CedarTemplateId.build(event.getOldId()), CedarTemplateId.build(event.getNewId()));
+    cloneInstancesOfTemplate(CedarTemplateId.build(event.getOldId()), CedarTemplateId.build(event.getNewId()),
+        event.getNewFolderName());
   }
 
-  private void cloneInstancesOfTemplate(CedarTemplateId oldTemplateId, CedarTemplateId newTemplateId) {
+  private void cloneInstancesOfTemplate(CedarTemplateId oldTemplateId, CedarTemplateId newTemplateId,
+                                        String newFolderName) {
     long numberOfInstances = folderSession.getNumberOfInstances(oldTemplateId);
     if (numberOfInstances > 0) {
       List<FolderServerResourceExtract> instanceExtracts =
@@ -101,7 +103,12 @@ public class CloneInstancesExecutorService {
           CedarFolderId newTargetFolderId = linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class);
           FolderServerFolder newFolder = new FolderServerFolder();
 
-          newFolder.setName("Cloned instances of " + newTemplate.getName() + " v " + newTemplate.getVersion().getValue());
+          if (newFolderName != null && !newFolderName.trim().isEmpty()) {
+            newFolder.setName(newFolderName.trim());
+          } else {
+            newFolder.setName(newTemplate.getName() + " v " + newTemplate.getVersion().getValue() + " cloned instances");
+          }
+
           newFolder.setDescription("Automatically created folder");
 
           FolderServerFolder newTargetFolder = folderSession.createFolderAsChildOfId(newFolder,

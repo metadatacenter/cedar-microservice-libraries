@@ -9,15 +9,17 @@ public class CloneInstancesQueueEvent {
 
   private String oldId;
   private String newId;
+  private String newFolderName;
   private String createdAt;
   private long createdAtTS;
 
   public CloneInstancesQueueEvent() {
   }
 
-  public CloneInstancesQueueEvent(CedarTemplateId oldId, CedarTemplateId newId) {
+  public CloneInstancesQueueEvent(CedarTemplateId oldId, CedarTemplateId newId, String newFolderName) {
     this.oldId = oldId.getId();
     this.newId = newId.getId();
+    this.newFolderName = newFolderName;
     Instant now = Instant.now();
     this.createdAt = CedarConstants.xsdDateTimeFormatter.format(now);
     this.createdAtTS = now.getEpochSecond();
@@ -29,6 +31,10 @@ public class CloneInstancesQueueEvent {
 
   public String getNewId() {
     return newId;
+  }
+
+  public String getNewFolderName() {
+    return newFolderName;
   }
 
   public String getCreatedAt() {
