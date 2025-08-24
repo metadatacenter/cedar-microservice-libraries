@@ -10,6 +10,7 @@ import org.apache.http.HttpStatus;
 import org.apache.http.util.EntityUtils;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.constant.CedarQueryParameters;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.exception.CedarObjectNotFoundException;
@@ -41,6 +42,7 @@ import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.Response;
 import java.net.URI;
@@ -164,6 +166,7 @@ public class CloneInstancesExecutorService {
 
     try {
       String url = microserviceUrlUtil.getArtifact().getResourceType(resourceType);
+      url += "?" + CedarQueryParameters.QP_SKIP_VALIDATION + "=true";
 
       HttpResponse templateProxyResponse = ProxyUtil.proxyPost(url, c, originalDocument);
 
