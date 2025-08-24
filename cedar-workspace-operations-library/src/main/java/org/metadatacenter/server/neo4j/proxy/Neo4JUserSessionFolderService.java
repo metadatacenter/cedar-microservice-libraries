@@ -26,17 +26,25 @@ import java.util.Map;
 
 public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession implements FolderServiceSession {
 
-  private Neo4JUserSessionFolderService(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cu, String globalRequestId, String localRequestId) {
+  private Neo4JUserSessionFolderService(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cu,
+                                        String globalRequestId, String localRequestId) {
     super(cedarConfig, proxies, cu, globalRequestId, localRequestId);
   }
 
-  public static FolderServiceSession get(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cedarUser, String globalRequestId, String localRequestId) {
+  public static FolderServiceSession get(CedarConfig cedarConfig, Neo4JProxies proxies, CedarUser cedarUser,
+                                         String globalRequestId, String localRequestId) {
     return new Neo4JUserSessionFolderService(cedarConfig, proxies, cedarUser, globalRequestId, localRequestId);
   }
 
   @Override
-  public FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentFolderId) {
-    newResource.setCreatedByTotal(cu.getResourceId());
+  public FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource,
+                                                        CedarFolderId parentFolderId) {
+    return createResourceAsChildOfId(newResource, parentFolderId, cu.getResourceId());
+  }
+
+  public FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource,
+                                                        CedarFolderId parentFolderId, CedarUserId userId) {
+    newResource.setCreatedByTotal(userId);
     return proxies.artifact().createResourceAsChildOfId(newResource, parentFolderId);
   }
 
@@ -46,7 +54,8 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType, Map<NodeProperty, String> updateFields) {
+  public FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
+                                                 Map<NodeProperty, String> updateFields) {
     return proxies.artifact().updateArtifactById(artifactId, updateFields, cu.getResourceId());
   }
 
@@ -200,8 +209,14 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId, CedarFolderId newFolderId) {
-    newFolder.setCreatedByTotal(cu.getResourceId());
+  public FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId,
+                                                    CedarFolderId newFolderId) {
+    return createFolderAsChildOfId(newFolder, parentFolderId, newFolderId, cu.getResourceId());
+  }
+
+  public FolderServerFolder createFolderAsChildOfId(FolderServerFolder newFolder, CedarFolderId parentFolderId,
+                                                    CedarFolderId newFolderId, CedarUserId userId) {
+    newFolder.setCreatedByTotal(userId);
     return proxies.folder().createFolderAsChildOfId(newFolder, parentFolderId, newFolderId);
   }
 
@@ -331,6 +346,10 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   @Override
   public FolderServerFolder findHomeFolderOf() {
     return proxies.folder().findHomeFolderOf(cu.getResourceId());
+  }
+
+  public FolderServerFolder findHomeFolderOfUser(CedarUserId userId) {
+    return proxies.folder().findHomeFolderOf(userId);
   }
 
   @Override
