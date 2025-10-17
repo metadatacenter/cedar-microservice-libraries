@@ -26,6 +26,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 
+import static org.metadatacenter.model.ModelNodeNames.*;
+
 public class InclusionSubgraphUtil {
 
   private static final Logger log = LoggerFactory.getLogger(InclusionSubgraphUtil.class);
@@ -33,11 +35,15 @@ public class InclusionSubgraphUtil {
   private InclusionSubgraphUtil() {
   }
 
-  public static void updateResourceInclusionInfo(CedarRequestContext context, CedarConfig cedarConfig, FolderServerResourceExtract resource, InclusionSubgraphServiceSession inclusionSubgraphSession) {
+  public static void updateResourceInclusionInfo(CedarRequestContext context, CedarConfig cedarConfig,
+                                                 FolderServerResourceExtract resource,
+                                                 InclusionSubgraphServiceSession inclusionSubgraphSession) {
     Response responseFromArtifact = null;
     try {
-      responseFromArtifact = ArtifactProxy.executeResourceGetByProxyFromArtifactServer(cedarConfig.getMicroserviceUrlUtil(), null, resource.getType(), resource.getId(), Optional.empty(),
-          context);
+      responseFromArtifact =
+          ArtifactProxy.executeResourceGetByProxyFromArtifactServer(cedarConfig.getMicroserviceUrlUtil(), null,
+              resource.getType(), resource.getId(), Optional.empty(),
+              context);
       InputStream is = (InputStream) responseFromArtifact.getEntity();
       JsonNode entityJsonNode = JsonMapper.MAPPER.readTree(is);
       updateResourceInclusionInfo(resource, inclusionSubgraphSession, entityJsonNode);
@@ -48,7 +54,9 @@ public class InclusionSubgraphUtil {
     }
   }
 
-  public static void updateResourceInclusionInfo(FolderServerResourceExtract resource, InclusionSubgraphServiceSession inclusionSubgraphSession, JsonNode entityJsonNode) {
+  public static void updateResourceInclusionInfo(FolderServerResourceExtract resource,
+                                                 InclusionSubgraphServiceSession inclusionSubgraphSession,
+                                                 JsonNode entityJsonNode) {
     List<String> includedIds = extractFirstLevelIncludedIds(entityJsonNode);
     inclusionSubgraphSession.updateInclusionArcs(resource.getResourceId(), includedIds);
   }
@@ -86,7 +94,8 @@ public class InclusionSubgraphUtil {
     return linkIds;
   }
 
-  public static InclusionSubgraphResponse buildAffectedTree(InclusionSubgraphRequest treeRequest, InclusionSubgraphServiceSession inclusionSubgraphSession) {
+  public static InclusionSubgraphResponse buildAffectedTree(InclusionSubgraphRequest treeRequest,
+                                                            InclusionSubgraphServiceSession inclusionSubgraphSession) {
     String rootId = treeRequest.getId();
     InclusionSubgraphResponse response = new InclusionSubgraphResponse();
     response.setId(rootId);
@@ -96,7 +105,8 @@ public class InclusionSubgraphUtil {
     return response;
   }
 
-  private static Map<String, InclusionSubgraphTemplate> computeAffectedTemplates(String id, Map<String, InclusionSubgraphTemplate> requestTemplates,
+  private static Map<String, InclusionSubgraphTemplate> computeAffectedTemplates(String id, Map<String,
+                                                                                     InclusionSubgraphTemplate> requestTemplates,
                                                                                  InclusionSubgraphServiceSession inclusionSubgraphSession) {
     Map<String, InclusionSubgraphTemplate> templates = new HashMap<>();
     CedarUntypedSchemaArtifactId aid = CedarUntypedSchemaArtifactId.build(id);
@@ -113,7 +123,8 @@ public class InclusionSubgraphUtil {
     return templates;
   }
 
-  private static Map<String, InclusionSubgraphElement> computeAffectedElements(String id, Map<String, InclusionSubgraphElement> requestElements,
+  private static Map<String, InclusionSubgraphElement> computeAffectedElements(String id, Map<String,
+                                                                                   InclusionSubgraphElement> requestElements,
                                                                                InclusionSubgraphServiceSession inclusionSubgraphSession) {
     Map<String, InclusionSubgraphElement> elements = new HashMap<>();
     CedarUntypedSchemaArtifactId aid = CedarUntypedSchemaArtifactId.build(id);
@@ -126,8 +137,10 @@ public class InclusionSubgraphUtil {
         InclusionSubgraphElement inclusionSubgraphElement = requestElements.get(elementId);
         e.setOperation(inclusionSubgraphElement.getOperation());
         if (inclusionSubgraphElement.getOperation() == InclusionSubgraphNodeOperation.UPDATE) {
-          e.setElements(computeAffectedElements(elementId, inclusionSubgraphElement.getElements(), inclusionSubgraphSession));
-          e.setTemplates(computeAffectedTemplates(elementId, inclusionSubgraphElement.getTemplates(), inclusionSubgraphSession));
+          e.setElements(computeAffectedElements(elementId, inclusionSubgraphElement.getElements(),
+              inclusionSubgraphSession));
+          e.setTemplates(computeAffectedTemplates(elementId, inclusionSubgraphElement.getTemplates(),
+              inclusionSubgraphSession));
 
         }
       }
@@ -142,7 +155,8 @@ public class InclusionSubgraphUtil {
     return todoList;
   }
 
-  private static void recursivelyUpdateElements(String sourceId, Map<String, InclusionSubgraphElement> elements, InclusionSubgraphTodoList todoList) {
+  private static void recursivelyUpdateElements(String sourceId, Map<String, InclusionSubgraphElement> elements,
+                                                InclusionSubgraphTodoList todoList) {
     if (elements != null) {
       for (InclusionSubgraphElement element : elements.values()) {
         updateElement(sourceId, element, todoList);
@@ -152,7 +166,8 @@ public class InclusionSubgraphUtil {
     }
   }
 
-  private static void updateTemplates(String sourceId, Map<String, InclusionSubgraphTemplate> templates, InclusionSubgraphTodoList todoList) {
+  private static void updateTemplates(String sourceId, Map<String, InclusionSubgraphTemplate> templates,
+                                      InclusionSubgraphTodoList todoList) {
     if (templates != null) {
       for (InclusionSubgraphTemplate template : templates.values()) {
         updateTemplate(sourceId, template, todoList);
@@ -160,7 +175,8 @@ public class InclusionSubgraphUtil {
     }
   }
 
-  private static void updateElement(String sourceId, InclusionSubgraphElement element, InclusionSubgraphTodoList todoList) {
+  private static void updateElement(String sourceId, InclusionSubgraphElement element,
+                                    InclusionSubgraphTodoList todoList) {
     if (element.getOperation() == InclusionSubgraphNodeOperation.UPDATE) {
       InclusionSubgraphTodoElement todo = new InclusionSubgraphTodoElement();
       todo.setSourceId(sourceId);
@@ -169,7 +185,8 @@ public class InclusionSubgraphUtil {
     }
   }
 
-  private static void updateTemplate(String sourceId, InclusionSubgraphTemplate template, InclusionSubgraphTodoList todoList) {
+  private static void updateTemplate(String sourceId, InclusionSubgraphTemplate template,
+                                     InclusionSubgraphTodoList todoList) {
     if (template.getOperation() == InclusionSubgraphNodeOperation.UPDATE) {
       InclusionSubgraphTodoElement todo = new InclusionSubgraphTodoElement();
       todo.setSourceId(sourceId);
@@ -180,12 +197,16 @@ public class InclusionSubgraphUtil {
 
 
   public static boolean updateSubdocumentByAtId(JsonNode parentDocument, String idToBeReplaced, JsonNode newDocument) {
-    return findAndReplaceDocumentNode(null, null, parentDocument, idToBeReplaced, newDocument, (ObjectNode) parentDocument);
+    return findAndReplaceDocumentNode(null, null, parentDocument, idToBeReplaced, newDocument,
+        (ObjectNode) parentDocument);
   }
 
-  private static boolean findAndReplaceDocumentNode(String key, ObjectNode parent, JsonNode currentNode, String idToBeReplaced, JsonNode newDocument, ObjectNode root) {
+  private static boolean findAndReplaceDocumentNode(String key, ObjectNode parent, JsonNode currentNode,
+                                                    String idToBeReplaced, JsonNode newDocument, ObjectNode root) {
     if (currentNode.has(LinkedData.ID) && currentNode.get(LinkedData.ID).asText().equals(idToBeReplaced)) {
       if (parent != null) {
+        Boolean requiredValue = getCurrentRequiredValue((ObjectNode)currentNode);
+        setRequiredValue((ObjectNode)newDocument, requiredValue);
         parent.replace(key, newDocument);
         updateUiMetadata(root, newDocument, key);
       }
@@ -197,7 +218,8 @@ public class InclusionSubgraphUtil {
       String childKey = fieldNames.next();
       JsonNode child = currentNode.get(childKey);
       if (child.isObject()) {
-        boolean found = findAndReplaceDocumentNode(childKey, (ObjectNode) currentNode, child, idToBeReplaced, newDocument, root);
+        boolean found = findAndReplaceDocumentNode(childKey, (ObjectNode) currentNode, child, idToBeReplaced,
+            newDocument, root);
         if (found) {
           return true;
         }
@@ -206,23 +228,49 @@ public class InclusionSubgraphUtil {
     return false;
   }
 
+  private static void setRequiredValue(ObjectNode root, Boolean requiredValue) {
+    if (requiredValue == null) {
+      return;
+    }
+    if (!root.has(VALUE_CONSTRAINTS)) {
+      root.putObject(VALUE_CONSTRAINTS);
+    }
+    ObjectNode valueConstraints = (ObjectNode) root.get(VALUE_CONSTRAINTS);
+    valueConstraints.put(VALUE_CONSTRAINTS_REQUIRED_VALUE, requiredValue);
+  }
+
+  private static Boolean getCurrentRequiredValue(ObjectNode root) {
+    if (!root.has(VALUE_CONSTRAINTS)) {
+      return null;
+    }
+    ObjectNode valueConstraints = (ObjectNode) root.get(VALUE_CONSTRAINTS);
+    if (!valueConstraints.has(VALUE_CONSTRAINTS_REQUIRED_VALUE)) {
+      return null;
+    }
+    return valueConstraints.get(VALUE_CONSTRAINTS_REQUIRED_VALUE).asBoolean();
+  }
+
   private static void updateUiMetadata(ObjectNode root, JsonNode newDocument, String nameRoBeReplaced) {
-    if (!newDocument.has("schema:name") || !newDocument.has("schema:description")) return;
-    if (!root.has("_ui")) return;
+    if (!newDocument.has(SCHEMA_ORG_NAME) || !newDocument.has(SCHEMA_ORG_DESCRIPTION)) {
+      return;
+    }
+    if (!root.has(UI)) {
+      return;
+    }
 
-    String fieldName = newDocument.get("schema:name").asText();
-    String description = newDocument.get("schema:description").asText();
+    String fieldName = newDocument.get(SCHEMA_ORG_NAME).asText();
+    String description = newDocument.get(SCHEMA_ORG_DESCRIPTION).asText();
 
-    ObjectNode uiNode = (ObjectNode) root.get("_ui");
+    ObjectNode uiNode = (ObjectNode) root.get(UI);
 
-    ObjectNode labels = uiNode.has("propertyLabels") && uiNode.get("propertyLabels").isObject()
-        ? (ObjectNode) uiNode.get("propertyLabels")
-        : uiNode.putObject("propertyLabels");
+    ObjectNode labels = uiNode.has(UI_PROPERTY_LABELS) && uiNode.get(UI_PROPERTY_LABELS).isObject()
+        ? (ObjectNode) uiNode.get(UI_PROPERTY_LABELS)
+        : uiNode.putObject(UI_PROPERTY_LABELS);
     labels.put(nameRoBeReplaced, fieldName);
 
-    ObjectNode descriptions = uiNode.has("propertyDescriptions") && uiNode.get("propertyDescriptions").isObject()
-        ? (ObjectNode) uiNode.get("propertyDescriptions")
-        : uiNode.putObject("propertyDescriptions");
+    ObjectNode descriptions = uiNode.has(UI_PROPERTY_DESCRIPTIONS) && uiNode.get(UI_PROPERTY_DESCRIPTIONS).isObject()
+        ? (ObjectNode) uiNode.get(UI_PROPERTY_DESCRIPTIONS)
+        : uiNode.putObject(UI_PROPERTY_DESCRIPTIONS);
     descriptions.put(nameRoBeReplaced, description);
   }
 
