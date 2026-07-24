@@ -26,8 +26,13 @@ public final class TestAuthUtil {
   private static final String TEST_USER_1_API_KEY = "11111111-2222-3333-4444-555555555555";
   private static final String TEST_USER_2_API_KEY = "66666666-7777-8888-9999-aaaaaaaaaaaa";
 
+  // The admin user has no id in AdminUserConfig; a fixed synthetic id suffices, since API-key
+  // authentication only needs the key to resolve to a user
+  private static final String ADMIN_USER_ID = "https://metadatacenter.org/users/00000000-aaaa-bbbb-cccc-000000000000";
+
   private static CedarUser testUser1;
   private static CedarUser testUser2;
+  private static CedarUser adminUser;
 
   private TestAuthUtil() {
   }
@@ -46,8 +51,20 @@ public final class TestAuthUtil {
     return testUser2;
   }
 
+  public static synchronized CedarUser getAdminUser(CedarConfig cedarConfig) {
+    if (adminUser == null) {
+      adminUser = buildTestUser(ADMIN_USER_ID, "Admin", cedarConfig.getAdminUserConfig().getApiKey());
+      adminUser.getRoles().clear();
+      for (CedarUserRole role : CedarUserRole.values()) {
+        adminUser.getRoles().add(role);
+      }
+      CedarUserRolePermissionUtil.expandRolesIntoPermissions(adminUser);
+    }
+    return adminUser;
+  }
+
   public static void installInMemoryUserService(CedarConfig cedarConfig) {
-    Authorization.setUserService(new InMemoryUserService(getTestUser1(cedarConfig), getTestUser2(cedarConfig)));
+    Authorization.setUserService(new InMemoryUserService(getTestUser1(cedarConfig), getTestUser2(cedarConfig), getAdminUser(cedarConfig)));
   }
 
   public static String getTestUser1AuthHeader(CedarConfig cedarConfig) {
@@ -56,6 +73,10 @@ public final class TestAuthUtil {
 
   public static String getTestUser2AuthHeader(CedarConfig cedarConfig) {
     return authHeaderFor(getTestUser2(cedarConfig));
+  }
+
+  public static String getAdminUserAuthHeader(CedarConfig cedarConfig) {
+    return authHeaderFor(getAdminUser(cedarConfig));
   }
 
   private static String authHeaderFor(CedarUser user) {
