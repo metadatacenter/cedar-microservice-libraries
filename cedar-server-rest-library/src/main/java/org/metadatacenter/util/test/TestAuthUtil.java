@@ -7,6 +7,10 @@ import org.metadatacenter.server.security.CedarUserRolePermissionUtil;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.CedarUserApiKey;
 import org.metadatacenter.server.security.model.user.CedarUserRole;
+import org.metadatacenter.server.security.model.user.CedarUserUIFolderView;
+import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
+import org.metadatacenter.server.security.model.user.SortDirection;
+import org.metadatacenter.server.security.model.user.ViewMode;
 
 import java.time.LocalDateTime;
 
@@ -33,6 +37,7 @@ public final class TestAuthUtil {
   private static CedarUser testUser1;
   private static CedarUser testUser2;
   private static CedarUser adminUser;
+  private static InMemoryUserService inMemoryUserService;
 
   private TestAuthUtil() {
   }
@@ -63,8 +68,20 @@ public final class TestAuthUtil {
     return adminUser;
   }
 
+  /**
+   * The in-memory user service holding the test users. Exposed so tests can also inject it where
+   * a server uses the user service beyond authentication (for example
+   * UsersResource.injectUserService in the user server).
+   */
+  public static synchronized InMemoryUserService getInMemoryUserService(CedarConfig cedarConfig) {
+    if (inMemoryUserService == null) {
+      inMemoryUserService = new InMemoryUserService(getTestUser1(cedarConfig), getTestUser2(cedarConfig), getAdminUser(cedarConfig));
+    }
+    return inMemoryUserService;
+  }
+
   public static void installInMemoryUserService(CedarConfig cedarConfig) {
-    Authorization.setUserService(new InMemoryUserService(getTestUser1(cedarConfig), getTestUser2(cedarConfig), getAdminUser(cedarConfig)));
+    Authorization.setUserService(getInMemoryUserService(cedarConfig));
   }
 
   public static String getTestUser1AuthHeader(CedarConfig cedarConfig) {
@@ -102,6 +119,15 @@ public final class TestAuthUtil {
     user.getRoles().add(CedarUserRole.TEMPLATE_CREATOR);
     user.getRoles().add(CedarUserRole.METADATA_CREATOR);
     CedarUserRolePermissionUtil.expandRolesIntoPermissions(user);
+
+    // Provisioned users carry populated UI preferences (CedarUserUtil fills them from the
+    // blueprint); the profile-patching machinery relies on the fields being present
+    CedarUserUIPreferences uiPreferences = user.getUiPreferences();
+    uiPreferences.setStylesheet("default");
+    CedarUserUIFolderView folderView = uiPreferences.getFolderView();
+    folderView.setSortBy("name");
+    folderView.setSortDirection(SortDirection.forValue("asc"));
+    folderView.setViewMode(ViewMode.forValue("grid"));
     return user;
   }
 
