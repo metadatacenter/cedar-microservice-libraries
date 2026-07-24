@@ -1,0 +1,87 @@
+package org.metadatacenter.util.test;
+
+import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.server.security.Authorization;
+import org.metadatacenter.server.security.CedarApiKeyAuthRequest;
+import org.metadatacenter.server.security.CedarUserRolePermissionUtil;
+import org.metadatacenter.server.security.model.user.CedarUser;
+import org.metadatacenter.server.security.model.user.CedarUserApiKey;
+import org.metadatacenter.server.security.model.user.CedarUserRole;
+
+import java.time.LocalDateTime;
+
+/**
+ * Provides authenticated identities for integration tests without any live auth backend. The
+ * test users are built in memory with the roles the artifact-handling endpoints require,
+ * registered with the Authorization holder through InMemoryUserService, and their API keys are
+ * used in the Authorization header of test requests. TestUserUtil offers the same headers backed
+ * by live Neo4j; this class is the backend-free replacement.
+ *
+ * Call installInMemoryUserService once per test class, after the DropwizardAppRule has started:
+ * the application's own startup wires the Neo4j-backed user service, and this call replaces it
+ * for the lifetime of the test JVM.
+ */
+public final class TestAuthUtil {
+
+  private static final String TEST_USER_1_API_KEY = "11111111-2222-3333-4444-555555555555";
+  private static final String TEST_USER_2_API_KEY = "66666666-7777-8888-9999-aaaaaaaaaaaa";
+
+  private static CedarUser testUser1;
+  private static CedarUser testUser2;
+
+  private TestAuthUtil() {
+  }
+
+  public static synchronized CedarUser getTestUser1(CedarConfig cedarConfig) {
+    if (testUser1 == null) {
+      testUser1 = buildTestUser(cedarConfig.getTestUsers().getTestUser1().getId(), "Test1", TEST_USER_1_API_KEY);
+    }
+    return testUser1;
+  }
+
+  public static synchronized CedarUser getTestUser2(CedarConfig cedarConfig) {
+    if (testUser2 == null) {
+      testUser2 = buildTestUser(cedarConfig.getTestUsers().getTestUser2().getId(), "Test2", TEST_USER_2_API_KEY);
+    }
+    return testUser2;
+  }
+
+  public static void installInMemoryUserService(CedarConfig cedarConfig) {
+    Authorization.setUserService(new InMemoryUserService(getTestUser1(cedarConfig), getTestUser2(cedarConfig)));
+  }
+
+  public static String getTestUser1AuthHeader(CedarConfig cedarConfig) {
+    return authHeaderFor(getTestUser1(cedarConfig));
+  }
+
+  public static String getTestUser2AuthHeader(CedarConfig cedarConfig) {
+    return authHeaderFor(getTestUser2(cedarConfig));
+  }
+
+  private static String authHeaderFor(CedarUser user) {
+    return new CedarApiKeyAuthRequest(user.getFirstActiveApiKey()).getAuthHeader();
+  }
+
+  private static CedarUser buildTestUser(String id, String firstName, String apiKey) {
+    CedarUser user = new CedarUser();
+    user.setId(id);
+    user.setFirstName(firstName);
+    user.setLastName("User");
+    user.setEmail(firstName.toLowerCase() + "@test.com");
+
+    CedarUserApiKey apiKeyObject = new CedarUserApiKey();
+    apiKeyObject.setKey(apiKey);
+    apiKeyObject.setServiceName("CEDAR");
+    apiKeyObject.setDescription("apiKey for the integration test user");
+    apiKeyObject.setCreationDate(LocalDateTime.now());
+    apiKeyObject.setEnabled(true);
+    user.getApiKeys().add(apiKeyObject);
+
+    user.getRoles().add(CedarUserRole.DEFAULT_USER);
+    user.getRoles().add(CedarUserRole.TEMPLATE_CREATOR);
+    user.getRoles().add(CedarUserRole.METADATA_CREATOR);
+    CedarUserRolePermissionUtil.expandRolesIntoPermissions(user);
+    return user;
+  }
+
+}
