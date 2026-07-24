@@ -49,6 +49,18 @@
     </dependency>
 
     <!--
+      In-process MariaDB for backend-free tests of the MySQL-backed servers; MySQL-compatible.
+      Consumers must add the OS-activated profile supplying the platform database binaries
+      (mariaDB4j-db-macos-arm64 / -linux64 / -winx64), since profiles do not travel with
+      dependencies.
+    -->
+    <dependency>
+      <groupId>ch.vorburger.mariaDB4j</groupId>
+      <artifactId>mariaDB4j</artifactId>
+      <version>3.2.0</version>
+    </dependency>
+
+    <!--
       A transitive dependency of the server stack pins the ancient JNA 4.2.1, whose native
       library lacks an arm64 slice; the embedded Neo4j needs a JNA that runs on Apple Silicon.
       Declared here so consumers inherit the working version on their test classpath.
