@@ -17,14 +17,19 @@ public class CloneInstancesQueueService extends QueueServiceWithBlockingQueue {
   }
 
   public void enqueueEvent(CloneInstancesQueueEvent event) {
+    // Enqueueing is best-effort: a failure is logged and the event dropped, so an
+    // unreachable queue (Redis) can not fail the request that produced the event
+    String json;
+    try {
+      json = JsonMapper.MAPPER.writeValueAsString(event);
+    } catch (JsonProcessingException e) {
+      log.error("The clone-instances event could not be serialized. Dropping it.", e);
+      return;
+    }
     try (Jedis jedis = pool.getResource()) {
-      String json = null;
-      try {
-        json = JsonMapper.MAPPER.writeValueAsString(event);
-      } catch (JsonProcessingException e) {
-        log.error("Error while enqueueing event", e);
-      }
       jedis.rpush(queueName, json);
+    } catch (Exception e) {
+      log.error("The clone-instances event could not be enqueued. The queue (Redis) may be unreachable. Dropping it.", e);
     }
   }
 }

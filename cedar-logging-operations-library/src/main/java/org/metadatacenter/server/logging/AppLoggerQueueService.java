@@ -25,15 +25,20 @@ public class AppLoggerQueueService extends QueueServiceWithBlockingQueue {
     // See metadatacenter/cedar-server-core-library#8 for a description of a principled way of enabling/disabling
     // this type of logging.
     // if (message.getType() != AppLogType.CYPHER_QUERY)
-      try (Jedis jedis = pool.getResource()) {
-        String json = null;
-        try {
-          json = JsonMapper.MAPPER.writeValueAsString(message);
-          jedis.rpush(queueName, json);
-        } catch (JsonProcessingException e) {
-          log.error("Error while enqueueing log message", e);
-        }
-      }
+    // Enqueueing is best-effort: a failure is logged and the message dropped, so an unreachable
+    // queue (Redis) can not fail the request that produced the log message
+    String json;
+    try {
+      json = JsonMapper.MAPPER.writeValueAsString(message);
+    } catch (JsonProcessingException e) {
+      log.error("The log message could not be serialized. Dropping it.", e);
+      return;
+    }
+    try (Jedis jedis = pool.getResource()) {
+      jedis.rpush(queueName, json);
+    } catch (Exception e) {
+      log.error("The log message could not be enqueued. The queue (Redis) may be unreachable. Dropping it.", e);
+    }
   }
 
 }

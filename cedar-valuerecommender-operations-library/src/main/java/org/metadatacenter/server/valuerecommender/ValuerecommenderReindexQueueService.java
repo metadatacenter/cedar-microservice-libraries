@@ -18,14 +18,19 @@ public class ValuerecommenderReindexQueueService extends QueueServiceWithNonBloc
   }
 
   public void enqueueEvent(ValuerecommenderReindexMessage message) {
+    // Enqueueing is best-effort: a failure is logged and the event dropped, so an
+    // unreachable queue (Redis) can not fail the request that produced the event
+    String json;
+    try {
+      json = JsonMapper.MAPPER.writeValueAsString(message);
+    } catch (JsonProcessingException e) {
+      log.error("The valuerecommender message could not be serialized. Dropping it.", e);
+      return;
+    }
     try (Jedis jedis = pool.getResource()) {
-      String json = null;
-      try {
-        json = JsonMapper.MAPPER.writeValueAsString(message);
-      } catch (JsonProcessingException e) {
-        log.error("Error while enqueueing valuerecommender message", e);
-      }
       jedis.rpush(queueName, json);
+    } catch (Exception e) {
+      log.error("The valuerecommender message could not be enqueued. The queue (Redis) may be unreachable. Dropping it.", e);
     }
   }
 
