@@ -61,6 +61,16 @@
     </dependency>
 
     <!--
+      In-process MongoDB for backend-free tests of the Mongo-backed servers. Downloads and runs
+      a real mongod (cached under ~/.embedmongo), so the tests exercise real query semantics.
+    -->
+    <dependency>
+      <groupId>de.flapdoodle.embed</groupId>
+      <artifactId>de.flapdoodle.embed.mongo</artifactId>
+      <version>4.20.0</version>
+    </dependency>
+
+    <!--
       A transitive dependency of the server stack pins the ancient JNA 4.2.1, whose native
       library lacks an arm64 slice; the embedded Neo4j needs a JNA that runs on Apple Silicon.
       Declared here so consumers inherit the working version on their test classpath.
