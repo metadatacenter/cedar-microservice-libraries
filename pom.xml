@@ -36,6 +36,7 @@
     <module>cedar-server-utils-core-library</module>
     <module>cedar-server-utils-dropwizard-library</module>
     <module>cedar-template-operations-library</module>
+    <module>cedar-test-support-library</module>
     <module>cedar-user-operations-library</module>
     <module>cedar-valuerecommender-operations-library</module>
     <module>cedar-workspace-operations-library</module>

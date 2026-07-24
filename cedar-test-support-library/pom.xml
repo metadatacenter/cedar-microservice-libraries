@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.metadatacenter</groupId>
+    <artifactId>cedar-microservice-libraries</artifactId>
+    <version>2.8.5-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>cedar-test-support-library</artifactId>
+  <packaging>jar</packaging>
+
+  <name>CEDAR Test Support Library</name>
+  <description>Test-time infrastructure for the CEDAR microservices: the in-process Neo4j and its
+    graph seeding. Consumed by the servers in test scope only; never a runtime dependency.
+  </description>
+
+  <dependencies>
+
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-server-rest-library</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-logging-operations-library</artifactId>
+    </dependency>
+
+    <!--
+      The JUnit 5 artifacts are excluded: their presence on a consumer's test classpath flips
+      surefire to the JUnit Platform provider, which does not discover JUnit 4 tests.
+    -->
+    <dependency>
+      <groupId>org.neo4j.test</groupId>
+      <artifactId>neo4j-harness</artifactId>
+      <version>${org.neo4j.driver.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.junit.jupiter</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.junit.platform</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!--
+      A transitive dependency of the server stack pins the ancient JNA 4.2.1, whose native
+      library lacks an arm64 slice; the embedded Neo4j needs a JNA that runs on Apple Silicon.
+      Declared here so consumers inherit the working version on their test classpath.
+    -->
+    <dependency>
+      <groupId>net.java.dev.jna</groupId>
+      <artifactId>jna</artifactId>
+      <version>5.13.0</version>
+    </dependency>
+
+  </dependencies>
+
+</project>
