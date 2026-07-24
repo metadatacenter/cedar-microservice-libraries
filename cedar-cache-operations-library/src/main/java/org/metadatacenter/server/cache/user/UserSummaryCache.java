@@ -64,6 +64,14 @@ public class UserSummaryCache {
     }
   }
 
+  /**
+   * Stores a summary directly in the cache. Integration tests use this to seed their test users,
+   * so a lookup never falls through to the loader, which would call the user server.
+   */
+  public void put(CedarUserSummary userSummary) {
+    userSummaryCache.put(userSummary.getId(), userSummary);
+  }
+
   public CedarUserSummary getUser(String id) {
     if (id == null) {
       return null;

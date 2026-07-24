@@ -108,11 +108,10 @@ public abstract class CedarUserRolePermissionUtil {
         permissions.addAll(roleToPermissions.get(role));
       }
     }
-    if (u.getPermissions() == null) {
-      u.setPermissions(new ArrayList<>());
-    }
-    u.getPermissions().clear();
-    u.getPermissions().addAll(permissions);
-    Collections.sort(u.getPermissions());
+    List<String> permissionList = new ArrayList<>(permissions);
+    Collections.sort(permissionList);
+    // Assign through the setter: it also rebuilds the derived permission set that
+    // CedarUser.has() consults, which mutating the list in place would leave stale
+    u.setPermissions(permissionList);
   }
 }
