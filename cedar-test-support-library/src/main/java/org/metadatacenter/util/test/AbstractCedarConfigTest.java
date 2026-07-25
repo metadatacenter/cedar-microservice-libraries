@@ -1,8 +1,8 @@
 package org.metadatacenter.util.test;
 
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariable;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
@@ -35,7 +35,7 @@ public abstract class AbstractCedarConfigTest {
   protected void assertServerSpecificConfig(CedarConfig config) {
   }
 
-  @Before
+  @BeforeEach
   public void setEnvironment() {
     Map<String, String> env = new HashMap<>();
 
@@ -159,7 +159,7 @@ public abstract class AbstractCedarConfigTest {
   public void testGetInstance() throws Exception {
     Map<String, String> environment = CedarEnvironmentVariableProvider.getFor(getSystemComponent());
     CedarConfig instance = CedarConfig.getInstance(environment);
-    Assert.assertNotNull(instance);
+    Assertions.assertNotNull(instance);
     assertServerSpecificConfig(instance);
   }
 

@@ -1,8 +1,8 @@
 package org.metadatacenter.util.test;
 
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
@@ -42,7 +42,7 @@ public class WorkspaceFolderMoveIntegrationTest {
   private static CedarFolderId user1HomeId;
   private static String user1HomePath;
 
-  @BeforeClass
+  @BeforeAll
   public static void oneTimeSetUp() throws Exception {
     // The Redis redirection must be in place before startRedirectAndSeed builds the CedarConfig
     // singleton from the environment
@@ -61,7 +61,7 @@ public class WorkspaceFolderMoveIntegrationTest {
     user1HomeId = home.getResourceId();
     user1Folders.addPathAndParentId(home);
     user1HomePath = home.getPath();
-    Assert.assertNotNull("The home folder should have a computable path", user1HomePath);
+    Assertions.assertNotNull(user1HomePath, "The home folder should have a computable path");
   }
 
   private static FolderServiceSession foldersOf(CedarRequestContext context) {
@@ -74,7 +74,7 @@ public class WorkspaceFolderMoveIntegrationTest {
     newFolder.setDescription("Created by WorkspaceFolderMoveIntegrationTest");
     CedarFolderId newFolderId = cedarConfig.getLinkedDataUtil().buildNewLinkedDataIdObject(CedarFolderId.class);
     FolderServerFolder created = foldersOf(user1Context).createFolderAsChildOfId(newFolder, parentId, newFolderId);
-    Assert.assertNotNull("The folder '" + name + "' should be created", created);
+    Assertions.assertNotNull(created, "The folder '" + name + "' should be created");
     return created;
   }
 
@@ -87,33 +87,35 @@ public class WorkspaceFolderMoveIntegrationTest {
     FolderServerFolder grandchild = createFolderUnder(subject.getResourceId(), "Move Grandchild");
     FolderServerFolder newParent = createFolderUnder(user1HomeId, "Move New Parent");
 
-    Assert.assertTrue("Moving the subject under the sibling should succeed",
-        user1Folders.moveFolder(subject.getResourceId(), newParent.getResourceId()));
+    Assertions.assertTrue(user1Folders.moveFolder(subject.getResourceId(), newParent.getResourceId()),
+        "Moving the subject under the sibling should succeed");
 
-    Assert.assertNull("The old parent should no longer list the moved folder",
-        user1Folders.findFilesystemResourceByParentFolderIdAndName(oldParent.getResourceId(), "Move Subject"));
+    Assertions.assertNull(
+        user1Folders.findFilesystemResourceByParentFolderIdAndName(oldParent.getResourceId(), "Move Subject"),
+        "The old parent should no longer list the moved folder");
     FileSystemResource listedInNewParent =
         user1Folders.findFilesystemResourceByParentFolderIdAndName(newParent.getResourceId(), "Move Subject");
-    Assert.assertNotNull("The new parent should list the moved folder", listedInNewParent);
-    Assert.assertEquals("The listing under the new parent should be the same node",
-        subject.getId(), listedInNewParent.getId());
+    Assertions.assertNotNull(listedInNewParent, "The new parent should list the moved folder");
+    Assertions.assertEquals(subject.getId(), listedInNewParent.getId(),
+        "The listing under the new parent should be the same node");
 
     // The path is computed from the CONTAINS chain, so it reflects the move without any update
     FolderServerFolder movedFresh = user1Folders.findFolderById(subject.getResourceId());
     user1Folders.addPathAndParentId(movedFresh);
-    Assert.assertEquals("The moved folder's parent path should be the new parent's path",
-        user1HomePath + "/Move New Parent", movedFresh.getParentPath());
-    Assert.assertEquals("The moved folder's own path should sit under the new parent",
-        user1HomePath + "/Move New Parent/Move Subject", movedFresh.getPath());
+    Assertions.assertEquals(user1HomePath + "/Move New Parent", movedFresh.getParentPath(),
+        "The moved folder's parent path should be the new parent's path");
+    Assertions.assertEquals(user1HomePath + "/Move New Parent/Move Subject", movedFresh.getPath(),
+        "The moved folder's own path should sit under the new parent");
 
     // The subtree moved with its root: the grandchild resolves on the new path, not the old one
     FolderServerFolder resolvedGrandchild =
         user1Folders.findFolderByPath(user1HomePath + "/Move New Parent/Move Subject/Move Grandchild");
-    Assert.assertNotNull("The grandchild should resolve through the new path", resolvedGrandchild);
-    Assert.assertEquals("The grandchild resolved through the new path should be the same node",
-        grandchild.getId(), resolvedGrandchild.getId());
-    Assert.assertNull("The grandchild should no longer resolve through the old path",
-        user1Folders.findFolderByPath(user1HomePath + "/Move Old Parent/Move Subject/Move Grandchild"));
+    Assertions.assertNotNull(resolvedGrandchild, "The grandchild should resolve through the new path");
+    Assertions.assertEquals(grandchild.getId(), resolvedGrandchild.getId(),
+        "The grandchild resolved through the new path should be the same node");
+    Assertions.assertNull(
+        user1Folders.findFolderByPath(user1HomePath + "/Move Old Parent/Move Subject/Move Grandchild"),
+        "The grandchild should no longer resolve through the old path");
   }
 
   @Test
@@ -126,19 +128,20 @@ public class WorkspaceFolderMoveIntegrationTest {
 
     // The proxy rejects both degenerate targets up front: a folder can be moved neither onto
     // itself nor under its own descendant (which would detach the subtree into a cycle)
-    Assert.assertFalse("Moving a folder onto itself should be refused",
-        user1Folders.moveFolder(a.getResourceId(), a.getResourceId()));
-    Assert.assertFalse("Moving a folder under its own grandchild should be refused",
-        user1Folders.moveFolder(a.getResourceId(), c.getResourceId()));
+    Assertions.assertFalse(user1Folders.moveFolder(a.getResourceId(), a.getResourceId()),
+        "Moving a folder onto itself should be refused");
+    Assertions.assertFalse(user1Folders.moveFolder(a.getResourceId(), c.getResourceId()),
+        "Moving a folder under its own grandchild should be refused");
 
     // The refused moves should leave the tree untouched
     FileSystemResource aStillUnderHome =
         user1Folders.findFilesystemResourceByParentFolderIdAndName(user1HomeId, "Cycle Guard A");
-    Assert.assertNotNull("The top folder should still sit under the home folder", aStillUnderHome);
-    Assert.assertEquals("The top folder under home should be the original node", a.getId(), aStillUnderHome.getId());
+    Assertions.assertNotNull(aStillUnderHome, "The top folder should still sit under the home folder");
+    Assertions.assertEquals(a.getId(), aStillUnderHome.getId(),
+        "The top folder under home should be the original node");
     FileSystemResource bStillUnderA =
         user1Folders.findFilesystemResourceByParentFolderIdAndName(a.getResourceId(), "Cycle Guard B");
-    Assert.assertNotNull("The middle folder should still sit under the top folder", bStillUnderA);
+    Assertions.assertNotNull(bStillUnderA, "The middle folder should still sit under the top folder");
   }
 
   @Test
@@ -155,22 +158,22 @@ public class WorkspaceFolderMoveIntegrationTest {
         new ResourcePermissionUser(user2.getId()), FilesystemResourcePermission.READ));
     BackendCallResult result = CedarDataServices.getResourcePermissionServiceSession(user1Context)
         .updateResourcePermissions(grantedRoot.getResourceId(), request);
-    Assert.assertFalse("The permission update should succeed", result.isError());
+    Assertions.assertFalse(result.isError(), "The permission update should succeed");
 
     ResourcePermissionServiceSession user2Permissions =
         CedarDataServices.getResourcePermissionServiceSession(user2Context);
-    Assert.assertTrue("Before the move, user2 should read the child through the grant on its parent",
-        user2Permissions.userHasReadAccessToResource(child.getResourceId()));
+    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(child.getResourceId()),
+        "Before the move, user2 should read the child through the grant on its parent");
 
-    Assert.assertTrue("Moving the child under the ungranted sibling should succeed",
-        user1Folders.moveFolder(child.getResourceId(), neutral.getResourceId()));
+    Assertions.assertTrue(user1Folders.moveFolder(child.getResourceId(), neutral.getResourceId()),
+        "Moving the child under the ungranted sibling should succeed");
 
     // Access is derived from the current ancestor chain at query time; leaving the granted
     // subtree severs it, with no revocation step involved
-    Assert.assertFalse("After the move, user2 should no longer read the child",
-        user2Permissions.userHasReadAccessToResource(child.getResourceId()));
-    Assert.assertTrue("The grant on the original folder itself should be unaffected",
-        user2Permissions.userHasReadAccessToResource(grantedRoot.getResourceId()));
+    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(child.getResourceId()),
+        "After the move, user2 should no longer read the child");
+    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(grantedRoot.getResourceId()),
+        "The grant on the original folder itself should be unaffected");
   }
 
 }

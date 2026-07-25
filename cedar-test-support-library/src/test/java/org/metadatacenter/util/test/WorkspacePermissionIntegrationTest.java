@@ -1,8 +1,8 @@
 package org.metadatacenter.util.test;
 
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
@@ -48,7 +48,7 @@ public class WorkspacePermissionIntegrationTest {
   private static CedarRequestContext user2Context;
   private static CedarFolderId user1HomeId;
 
-  @BeforeClass
+  @BeforeAll
   public static void oneTimeSetUp() throws Exception {
     // The Redis redirection must be in place before startRedirectAndSeed builds the CedarConfig
     // singleton from the environment
@@ -87,7 +87,7 @@ public class WorkspacePermissionIntegrationTest {
     newFolder.setDescription("Created by WorkspacePermissionIntegrationTest");
     CedarFolderId newFolderId = cedarConfig.getLinkedDataUtil().buildNewLinkedDataIdObject(CedarFolderId.class);
     FolderServerFolder created = foldersOf(user1Context).createFolderAsChildOfId(newFolder, parentId, newFolderId);
-    Assert.assertNotNull("The folder '" + name + "' should be created", created);
+    Assertions.assertNotNull(created, "The folder '" + name + "' should be created");
     return created;
   }
 
@@ -104,30 +104,30 @@ public class WorkspacePermissionIntegrationTest {
   private static void updatePermissionsAsUser1(FolderServerFolder folder, ResourcePermissionsRequest request) {
     BackendCallResult result = permissionsOf(user1Context).updateResourcePermissions(folder.getResourceId(), request);
     if (result.isError()) {
-      Assert.fail("The permission update should succeed: " + result.getFirstErrorMessage());
+      Assertions.fail("The permission update should succeed: " + result.getFirstErrorMessage());
     }
   }
 
   @Test
   public void ownerHasReadAndWriteAccessToHomeFolder() {
     ResourcePermissionServiceSession user1Permissions = permissionsOf(user1Context);
-    Assert.assertTrue("The owner should have read access to the home folder",
-        user1Permissions.userHasReadAccessToResource(user1HomeId));
-    Assert.assertTrue("The owner should have write access to the home folder",
-        user1Permissions.userHasWriteAccessToResource(user1HomeId));
-    Assert.assertTrue("The home folder should report user1 as its owner",
-        user1Permissions.userIsOwnerOfResource(user1HomeId));
+    Assertions.assertTrue(user1Permissions.userHasReadAccessToResource(user1HomeId),
+        "The owner should have read access to the home folder");
+    Assertions.assertTrue(user1Permissions.userHasWriteAccessToResource(user1HomeId),
+        "The owner should have write access to the home folder");
+    Assertions.assertTrue(user1Permissions.userIsOwnerOfResource(user1HomeId),
+        "The home folder should report user1 as its owner");
   }
 
   @Test
   public void strangerHasNoAccessToHomeFolder() {
     ResourcePermissionServiceSession user2Permissions = permissionsOf(user2Context);
-    Assert.assertFalse("A stranger should have no read access to another user's home folder",
-        user2Permissions.userHasReadAccessToResource(user1HomeId));
-    Assert.assertFalse("A stranger should have no write access to another user's home folder",
-        user2Permissions.userHasWriteAccessToResource(user1HomeId));
-    Assert.assertFalse("A stranger should not be reported as the owner of another user's home folder",
-        user2Permissions.userIsOwnerOfResource(user1HomeId));
+    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(user1HomeId),
+        "A stranger should have no read access to another user's home folder");
+    Assertions.assertFalse(user2Permissions.userHasWriteAccessToResource(user1HomeId),
+        "A stranger should have no write access to another user's home folder");
+    Assertions.assertFalse(user2Permissions.userIsOwnerOfResource(user1HomeId),
+        "A stranger should not be reported as the owner of another user's home folder");
   }
 
   @Test
@@ -135,20 +135,20 @@ public class WorkspacePermissionIntegrationTest {
     FolderServerFolder folder = createFolderUnderUser1Home("Direct Grant Folder");
 
     ResourcePermissionServiceSession user2Permissions = permissionsOf(user2Context);
-    Assert.assertFalse("Before the grant, user2 should have no read access",
-        user2Permissions.userHasReadAccessToResource(folder.getResourceId()));
+    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(folder.getResourceId()),
+        "Before the grant, user2 should have no read access");
 
     ResourcePermissionsRequest request = requestOwnedByUser1();
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
         new ResourcePermissionUser(user2.getId()), FilesystemResourcePermission.READ));
     updatePermissionsAsUser1(folder, request);
 
-    Assert.assertTrue("After a READ grant, user2 should have read access",
-        user2Permissions.userHasReadAccessToResource(folder.getResourceId()));
-    Assert.assertFalse("A READ grant should not confer write access",
-        user2Permissions.userHasWriteAccessToResource(folder.getResourceId()));
-    Assert.assertFalse("A READ grant should not confer ownership",
-        user2Permissions.userIsOwnerOfResource(folder.getResourceId()));
+    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(folder.getResourceId()),
+        "After a READ grant, user2 should have read access");
+    Assertions.assertFalse(user2Permissions.userHasWriteAccessToResource(folder.getResourceId()),
+        "A READ grant should not confer write access");
+    Assertions.assertFalse(user2Permissions.userIsOwnerOfResource(folder.getResourceId()),
+        "A READ grant should not confer ownership");
   }
 
   @Test
@@ -158,9 +158,9 @@ public class WorkspacePermissionIntegrationTest {
     GroupServiceSession user1Groups = CedarDataServices.getGroupServiceSession(user1Context);
     FolderServerGroup group = user1Groups.createGroup("workspace-integration-test-group",
         "Group for the group-resolved ACL test");
-    Assert.assertNotNull("The group should be created", group);
-    Assert.assertTrue("The creator should administer the new group",
-        user1Groups.userAdministersGroup(group.getResourceId()));
+    Assertions.assertNotNull(group, "The group should be created");
+    Assertions.assertTrue(user1Groups.userAdministersGroup(group.getResourceId()),
+        "The creator should administer the new group");
 
     // Membership updates replace the full member and administrator sets, so the request lists
     // user1 (creator, administrator) alongside the new member user2
@@ -168,23 +168,23 @@ public class WorkspacePermissionIntegrationTest {
     membership.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user1.getId()), true, true));
     membership.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user2.getId()), false, true));
     BackendCallResult membershipResult = user1Groups.updateGroupUsers(group.getResourceId(), membership);
-    Assert.assertFalse("The membership update should succeed", membershipResult.isError());
+    Assertions.assertFalse(membershipResult.isError(), "The membership update should succeed");
 
     ResourcePermissionServiceSession user2Permissions = permissionsOf(user2Context);
-    Assert.assertFalse("Group membership alone should confer nothing before the grant",
-        user2Permissions.userHasReadAccessToResource(folder.getResourceId()));
+    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(folder.getResourceId()),
+        "Group membership alone should confer nothing before the grant");
 
     ResourcePermissionsRequest request = requestOwnedByUser1();
     request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
         new ResourcePermissionGroup(group.getId()), FilesystemResourcePermission.WRITE));
     updatePermissionsAsUser1(folder, request);
 
-    Assert.assertTrue("A WRITE grant to the group should give the member write access",
-        user2Permissions.userHasWriteAccessToResource(folder.getResourceId()));
-    Assert.assertTrue("Write access through the group should imply read access",
-        user2Permissions.userHasReadAccessToResource(folder.getResourceId()));
-    Assert.assertFalse("The group grant should not make the member the owner",
-        user2Permissions.userIsOwnerOfResource(folder.getResourceId()));
+    Assertions.assertTrue(user2Permissions.userHasWriteAccessToResource(folder.getResourceId()),
+        "A WRITE grant to the group should give the member write access");
+    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(folder.getResourceId()),
+        "Write access through the group should imply read access");
+    Assertions.assertFalse(user2Permissions.userIsOwnerOfResource(folder.getResourceId()),
+        "The group grant should not make the member the owner");
   }
 
   @Test
@@ -196,39 +196,40 @@ public class WorkspacePermissionIntegrationTest {
 
     // Find by id
     FolderServerFolder foundById = user1Folders.findFolderById(child.getResourceId());
-    Assert.assertNotNull("The nested folder should be found by id", foundById);
-    Assert.assertEquals("The folder found by id should carry the created name",
-        "Lifecycle Child", foundById.getName());
+    Assertions.assertNotNull(foundById, "The nested folder should be found by id");
+    Assertions.assertEquals("Lifecycle Child", foundById.getName(),
+        "The folder found by id should carry the created name");
 
     // Find through the parent listing
     FileSystemResource foundInParent =
         user1Folders.findFilesystemResourceByParentFolderIdAndName(parent.getResourceId(), "Lifecycle Child");
-    Assert.assertNotNull("The nested folder should be found under its parent by name", foundInParent);
-    Assert.assertEquals("The lookup under the parent should return the same node",
-        child.getId(), foundInParent.getId());
+    Assertions.assertNotNull(foundInParent, "The nested folder should be found under its parent by name");
+    Assertions.assertEquals(child.getId(), foundInParent.getId(),
+        "The lookup under the parent should return the same node");
 
     // Rename; the graph stores the lowercased name alongside, for case-insensitive ordering
     Map<NodeProperty, String> updateFields = new HashMap<>();
     updateFields.put(NodeProperty.NAME, "Lifecycle Child Renamed");
     updateFields.put(NodeProperty.NAME_LOWER, "lifecycle child renamed");
     FolderServerFolder renamed = user1Folders.updateFolderById(child.getResourceId(), updateFields);
-    Assert.assertNotNull("The rename should return the updated folder", renamed);
-    Assert.assertEquals("The rename should persist the new name", "Lifecycle Child Renamed", renamed.getName());
-    Assert.assertEquals("The rename should be visible on a fresh read",
-        "Lifecycle Child Renamed", user1Folders.findFolderById(child.getResourceId()).getName());
+    Assertions.assertNotNull(renamed, "The rename should return the updated folder");
+    Assertions.assertEquals("Lifecycle Child Renamed", renamed.getName(), "The rename should persist the new name");
+    Assertions.assertEquals("Lifecycle Child Renamed", user1Folders.findFolderById(child.getResourceId()).getName(),
+        "The rename should be visible on a fresh read");
 
     // Delete, leaf first
-    Assert.assertTrue("Deleting the nested folder should succeed",
-        user1Folders.deleteFolderById(child.getResourceId()));
-    Assert.assertNull("The deleted folder should no longer be found by id",
-        user1Folders.findFolderById(child.getResourceId()));
-    Assert.assertNull("The deleted folder should no longer appear under its parent",
-        user1Folders.findFilesystemResourceByParentFolderIdAndName(parent.getResourceId(), "Lifecycle Child Renamed"));
+    Assertions.assertTrue(user1Folders.deleteFolderById(child.getResourceId()),
+        "Deleting the nested folder should succeed");
+    Assertions.assertNull(user1Folders.findFolderById(child.getResourceId()),
+        "The deleted folder should no longer be found by id");
+    Assertions.assertNull(
+        user1Folders.findFilesystemResourceByParentFolderIdAndName(parent.getResourceId(), "Lifecycle Child Renamed"),
+        "The deleted folder should no longer appear under its parent");
 
-    Assert.assertTrue("Deleting the emptied parent should succeed",
-        user1Folders.deleteFolderById(parent.getResourceId()));
-    Assert.assertNull("The deleted parent should no longer be found by id",
-        user1Folders.findFolderById(parent.getResourceId()));
+    Assertions.assertTrue(user1Folders.deleteFolderById(parent.getResourceId()),
+        "Deleting the emptied parent should succeed");
+    Assertions.assertNull(user1Folders.findFolderById(parent.getResourceId()),
+        "The deleted parent should no longer be found by id");
   }
 
 }

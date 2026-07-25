@@ -1,8 +1,8 @@
 package org.metadatacenter.util.test;
 
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
@@ -44,7 +44,7 @@ public class WorkspacePermissionInheritanceIntegrationTest {
   private static CedarRequestContext user2Context;
   private static CedarFolderId user1HomeId;
 
-  @BeforeClass
+  @BeforeAll
   public static void oneTimeSetUp() throws Exception {
     // The Redis redirection must be in place before startRedirectAndSeed builds the CedarConfig
     // singleton from the environment
@@ -75,7 +75,7 @@ public class WorkspacePermissionInheritanceIntegrationTest {
     newFolder.setDescription("Created by WorkspacePermissionInheritanceIntegrationTest");
     CedarFolderId newFolderId = cedarConfig.getLinkedDataUtil().buildNewLinkedDataIdObject(CedarFolderId.class);
     FolderServerFolder created = foldersOf(user1Context).createFolderAsChildOfId(newFolder, parentId, newFolderId);
-    Assert.assertNotNull("The folder '" + name + "' should be created", created);
+    Assertions.assertNotNull(created, "The folder '" + name + "' should be created");
     return created;
   }
 
@@ -95,7 +95,7 @@ public class WorkspacePermissionInheritanceIntegrationTest {
   private static void applyAsUser1(FolderServerFolder folder, ResourcePermissionsRequest request) {
     BackendCallResult result = permissionsOf(user1Context).updateResourcePermissions(folder.getResourceId(), request);
     if (result.isError()) {
-      Assert.fail("The permission update should succeed: " + result.getFirstErrorMessage());
+      Assertions.fail("The permission update should succeed: " + result.getFirstErrorMessage());
     }
   }
 
@@ -107,28 +107,28 @@ public class WorkspacePermissionInheritanceIntegrationTest {
     FolderServerFolder c = createFolderUnder(b.getResourceId(), "Inherit Read C");
 
     ResourcePermissionServiceSession user2Permissions = permissionsOf(user2Context);
-    Assert.assertFalse("Before the grant, user2 should not read the top folder",
-        user2Permissions.userHasReadAccessToResource(a.getResourceId()));
-    Assert.assertFalse("Before the grant, user2 should not read the leaf folder",
-        user2Permissions.userHasReadAccessToResource(c.getResourceId()));
+    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(a.getResourceId()),
+        "Before the grant, user2 should not read the top folder");
+    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(c.getResourceId()),
+        "Before the grant, user2 should not read the leaf folder");
 
     grantUser2(a, FilesystemResourcePermission.READ);
 
-    Assert.assertTrue("The READ grant should apply to the granted folder itself",
-        user2Permissions.userHasReadAccessToResource(a.getResourceId()));
-    Assert.assertTrue("The READ grant should inherit down to the middle folder",
-        user2Permissions.userHasReadAccessToResource(b.getResourceId()));
-    Assert.assertTrue("The READ grant should inherit down to the artifact-free leaf folder",
-        user2Permissions.userHasReadAccessToResource(c.getResourceId()));
+    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(a.getResourceId()),
+        "The READ grant should apply to the granted folder itself");
+    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(b.getResourceId()),
+        "The READ grant should inherit down to the middle folder");
+    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(c.getResourceId()),
+        "The READ grant should inherit down to the artifact-free leaf folder");
 
-    Assert.assertFalse("A READ grant should never confer write on the granted folder",
-        user2Permissions.userHasWriteAccessToResource(a.getResourceId()));
-    Assert.assertFalse("A READ grant should never confer write on a descendant",
-        user2Permissions.userHasWriteAccessToResource(b.getResourceId()));
-    Assert.assertFalse("A READ grant should never confer write on the leaf",
-        user2Permissions.userHasWriteAccessToResource(c.getResourceId()));
-    Assert.assertFalse("Inherited read should not make user2 the owner of a descendant",
-        user2Permissions.userIsOwnerOfResource(c.getResourceId()));
+    Assertions.assertFalse(user2Permissions.userHasWriteAccessToResource(a.getResourceId()),
+        "A READ grant should never confer write on the granted folder");
+    Assertions.assertFalse(user2Permissions.userHasWriteAccessToResource(b.getResourceId()),
+        "A READ grant should never confer write on a descendant");
+    Assertions.assertFalse(user2Permissions.userHasWriteAccessToResource(c.getResourceId()),
+        "A READ grant should never confer write on the leaf");
+    Assertions.assertFalse(user2Permissions.userIsOwnerOfResource(c.getResourceId()),
+        "Inherited read should not make user2 the owner of a descendant");
   }
 
   @Test
@@ -141,18 +141,18 @@ public class WorkspacePermissionInheritanceIntegrationTest {
     grantUser2(b, FilesystemResourcePermission.WRITE);
 
     ResourcePermissionServiceSession user2Permissions = permissionsOf(user2Context);
-    Assert.assertTrue("The WRITE grant should apply to the granted mid folder",
-        user2Permissions.userHasWriteAccessToResource(b.getResourceId()));
-    Assert.assertTrue("The WRITE grant should inherit down to the leaf",
-        user2Permissions.userHasWriteAccessToResource(c.getResourceId()));
-    Assert.assertFalse("The WRITE grant on the mid folder should not propagate up to its parent",
-        user2Permissions.userHasWriteAccessToResource(a.getResourceId()));
+    Assertions.assertTrue(user2Permissions.userHasWriteAccessToResource(b.getResourceId()),
+        "The WRITE grant should apply to the granted mid folder");
+    Assertions.assertTrue(user2Permissions.userHasWriteAccessToResource(c.getResourceId()),
+        "The WRITE grant should inherit down to the leaf");
+    Assertions.assertFalse(user2Permissions.userHasWriteAccessToResource(a.getResourceId()),
+        "The WRITE grant on the mid folder should not propagate up to its parent");
 
     // The READ check matches CANREAD or CANWRITE, so the WRITE grant also satisfies read below
-    Assert.assertTrue("Read on the parent should come from its own READ grant",
-        user2Permissions.userHasReadAccessToResource(a.getResourceId()));
-    Assert.assertTrue("Write on the leaf should imply read on the leaf",
-        user2Permissions.userHasReadAccessToResource(c.getResourceId()));
+    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(a.getResourceId()),
+        "Read on the parent should come from its own READ grant");
+    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(c.getResourceId()),
+        "Write on the leaf should imply read on the leaf");
   }
 
   @Test
@@ -162,8 +162,8 @@ public class WorkspacePermissionInheritanceIntegrationTest {
 
     grantUser2(a, FilesystemResourcePermission.READ);
     ResourcePermissionServiceSession user2Permissions = permissionsOf(user2Context);
-    Assert.assertTrue("The grant should give user2 read on the descendant",
-        user2Permissions.userHasReadAccessToResource(b.getResourceId()));
+    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(b.getResourceId()),
+        "The grant should give user2 read on the descendant");
 
     // Replacing the permission sets with empty ones revokes the user grant; nothing was ever
     // written to the descendant, so access disappears with the single relation on the ancestor
@@ -171,10 +171,10 @@ public class WorkspacePermissionInheritanceIntegrationTest {
     revocation.setOwner(new ResourcePermissionUser(user1.getId()));
     applyAsUser1(a, revocation);
 
-    Assert.assertFalse("After the revocation, user2 should not read the granted folder",
-        user2Permissions.userHasReadAccessToResource(a.getResourceId()));
-    Assert.assertFalse("After the revocation, user2 should not read the descendant either",
-        user2Permissions.userHasReadAccessToResource(b.getResourceId()));
+    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(a.getResourceId()),
+        "After the revocation, user2 should not read the granted folder");
+    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(b.getResourceId()),
+        "After the revocation, user2 should not read the descendant either");
   }
 
 }

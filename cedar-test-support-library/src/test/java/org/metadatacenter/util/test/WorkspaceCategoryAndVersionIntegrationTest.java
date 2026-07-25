@@ -1,8 +1,8 @@
 package org.metadatacenter.util.test;
 
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
@@ -59,7 +59,7 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
   private static CedarFolderId user1HomeId;
   private static CedarCategoryId rootCategoryId;
 
-  @BeforeClass
+  @BeforeAll
   public static void oneTimeSetUp() throws Exception {
     // The Redis redirection must be in place before startRedirectAndSeed builds the CedarConfig
     // singleton from the environment
@@ -77,7 +77,7 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
 
     // Seeding creates the root category the way provisioning does
     FolderServerCategory rootCategory = categoriesOf(user1Context).getRootCategory();
-    Assert.assertNotNull("The seeded graph should contain the root category", rootCategory);
+    Assertions.assertNotNull(rootCategory, "The seeded graph should contain the root category");
     rootCategoryId = rootCategory.getResourceId();
   }
 
@@ -96,7 +96,7 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
   private static FolderServerCategory createCategoryAsUser1(CedarCategoryId parentId, String name) {
     FolderServerCategory created = categoriesOf(user1Context).createCategory(parentId, name,
         "Created by WorkspaceCategoryAndVersionIntegrationTest", null);
-    Assert.assertNotNull("The category '" + name + "' should be created", created);
+    Assertions.assertNotNull(created, "The category '" + name + "' should be created");
     return created;
   }
 
@@ -111,7 +111,7 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
         new CategoryPermissionUser(user2.getId()), permission));
     BackendCallResult result = categoryPermissionsOf(user1Context).updateCategoryPermissions(categoryId, request);
     if (result.isError()) {
-      Assert.fail("The category permission update should succeed: " + result.getFirstErrorMessage());
+      Assertions.fail("The category permission update should succeed: " + result.getFirstErrorMessage());
     }
   }
 
@@ -130,7 +130,7 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
 
   private static FolderServerArtifact createTemplateUnderUser1Home(FolderServerTemplate template) {
     FolderServerArtifact created = foldersOf(user1Context).createResourceAsChildOfId(template, user1HomeId);
-    Assert.assertNotNull("The template '" + template.getName() + "' should be created", created);
+    Assertions.assertNotNull(created, "The template '" + template.getName() + "' should be created");
     return created;
   }
 
@@ -141,19 +141,21 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
 
     CategoryServiceSession user1Categories = categoriesOf(user1Context);
     FolderServerCategory foundByParentAndName = user1Categories.getCategoryByParentAndName(rootCategoryId, "Tree Child");
-    Assert.assertNotNull("The child category should be found under the root by name", foundByParentAndName);
-    Assert.assertEquals("The lookup under the root should return the created node",
-        child.getId(), foundByParentAndName.getId());
+    Assertions.assertNotNull(foundByParentAndName, "The child category should be found under the root by name");
+    Assertions.assertEquals(child.getId(), foundByParentAndName.getId(),
+        "The lookup under the root should return the created node");
 
-    Assert.assertEquals("The grandchild should record its parent category",
-        child.getId(), user1Categories.getCategoryById(grandchild.getResourceId()).getParentCategoryId());
+    Assertions.assertEquals(
+        child.getId(),
+        user1Categories.getCategoryById(grandchild.getResourceId()).getParentCategoryId(),
+        "The grandchild should record its parent category");
 
     List<FolderServerCategoryExtract> path = user1Categories.getCategoryPath(grandchild.getResourceId());
-    Assert.assertEquals("The grandchild's category path should span root, child and grandchild", 3, path.size());
+    Assertions.assertEquals(3, path.size(), "The grandchild's category path should span root, child and grandchild");
     List<String> pathIds = path.stream().map(FolderServerCategoryExtract::getId).toList();
-    Assert.assertTrue("The path should contain the root category", pathIds.contains(rootCategoryId.getId()));
-    Assert.assertTrue("The path should contain the child category", pathIds.contains(child.getId()));
-    Assert.assertTrue("The path should contain the grandchild category", pathIds.contains(grandchild.getId()));
+    Assertions.assertTrue(pathIds.contains(rootCategoryId.getId()), "The path should contain the root category");
+    Assertions.assertTrue(pathIds.contains(child.getId()), "The path should contain the child category");
+    Assertions.assertTrue(pathIds.contains(grandchild.getId()), "The path should contain the grandchild category");
   }
 
   @Test
@@ -164,26 +166,27 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
     CategoryPermissionServiceSession user1CategoryPermissions = categoryPermissionsOf(user1Context);
     CategoryPermissionServiceSession user2CategoryPermissions = categoryPermissionsOf(user2Context);
 
-    Assert.assertTrue("The creator should own the category", user1CategoryPermissions.userIsOwnerOfCategory(parent.getResourceId()));
-    Assert.assertTrue("Ownership should confer write on the owned node",
-        user1CategoryPermissions.userHasWriteAccessToCategory(parent.getResourceId()));
-    Assert.assertFalse("A stranger should not write the category before any grant",
-        user2CategoryPermissions.userHasWriteAccessToCategory(parent.getResourceId()));
-    Assert.assertFalse("A stranger should not attach to the category before any grant",
-        user2CategoryPermissions.userHasAttachAccessToCategory(parent.getResourceId()));
+    Assertions.assertTrue(user1CategoryPermissions.userIsOwnerOfCategory(parent.getResourceId()),
+        "The creator should own the category");
+    Assertions.assertTrue(user1CategoryPermissions.userHasWriteAccessToCategory(parent.getResourceId()),
+        "Ownership should confer write on the owned node");
+    Assertions.assertFalse(user2CategoryPermissions.userHasWriteAccessToCategory(parent.getResourceId()),
+        "A stranger should not write the category before any grant");
+    Assertions.assertFalse(user2CategoryPermissions.userHasAttachAccessToCategory(parent.getResourceId()),
+        "A stranger should not attach to the category before any grant");
 
     grantUser2OnCategory(parent.getResourceId(), CategoryPermission.WRITE);
 
-    Assert.assertTrue("The WRITE grant should give user2 write on the granted category",
-        user2CategoryPermissions.userHasWriteAccessToCategory(parent.getResourceId()));
-    Assert.assertTrue("A WRITE grant should also satisfy the attach check",
-        user2CategoryPermissions.userHasAttachAccessToCategory(parent.getResourceId()));
+    Assertions.assertTrue(user2CategoryPermissions.userHasWriteAccessToCategory(parent.getResourceId()),
+        "The WRITE grant should give user2 write on the granted category");
+    Assertions.assertTrue(user2CategoryPermissions.userHasAttachAccessToCategory(parent.getResourceId()),
+        "A WRITE grant should also satisfy the attach check");
     // Unlike folder ACLs, the grant stops at the granted node: the permission Cypher walks
     // CONTAINS, but the category tree is linked with CONTAINSCATEGORY, so no inheritance occurs
-    Assert.assertFalse("The WRITE grant on the parent category should not reach its child category",
-        user2CategoryPermissions.userHasWriteAccessToCategory(child.getResourceId()));
-    Assert.assertFalse("The grant should not make user2 the category owner",
-        user2CategoryPermissions.userIsOwnerOfCategory(parent.getResourceId()));
+    Assertions.assertFalse(user2CategoryPermissions.userHasWriteAccessToCategory(child.getResourceId()),
+        "The WRITE grant on the parent category should not reach its child category");
+    Assertions.assertFalse(user2CategoryPermissions.userIsOwnerOfCategory(parent.getResourceId()),
+        "The grant should not make user2 the category owner");
   }
 
   @Test
@@ -193,10 +196,10 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
     grantUser2OnCategory(category.getResourceId(), CategoryPermission.ATTACH);
 
     CategoryPermissionServiceSession user2CategoryPermissions = categoryPermissionsOf(user2Context);
-    Assert.assertTrue("The ATTACH grant should give user2 attach access",
-        user2CategoryPermissions.userHasAttachAccessToCategory(category.getResourceId()));
-    Assert.assertFalse("An ATTACH grant should not confer write access",
-        user2CategoryPermissions.userHasWriteAccessToCategory(category.getResourceId()));
+    Assertions.assertTrue(user2CategoryPermissions.userHasAttachAccessToCategory(category.getResourceId()),
+        "The ATTACH grant should give user2 attach access");
+    Assertions.assertFalse(user2CategoryPermissions.userHasWriteAccessToCategory(category.getResourceId()),
+        "An ATTACH grant should not confer write access");
   }
 
   @Test
@@ -206,18 +209,18 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
     CedarTemplateId templateId = CedarTemplateId.build(template.getId());
 
     CategoryServiceSession user1Categories = categoriesOf(user1Context);
-    Assert.assertTrue("Attaching the category to the template should succeed",
-        user1Categories.attachCategoryToArtifact(category.getResourceId(), templateId));
+    Assertions.assertTrue(user1Categories.attachCategoryToArtifact(category.getResourceId(), templateId),
+        "Attaching the category to the template should succeed");
 
     List<CedarCategoryId> attached = user1Categories.getAttachedCategoryIds(templateId);
-    Assert.assertEquals("The template should carry exactly one attached category", 1, attached.size());
-    Assert.assertEquals("The attached category should be the one just linked",
-        category.getId(), attached.get(0).getId());
+    Assertions.assertEquals(1, attached.size(), "The template should carry exactly one attached category");
+    Assertions.assertEquals(category.getId(), attached.get(0).getId(),
+        "The attached category should be the one just linked");
 
-    Assert.assertTrue("Detaching the category should succeed",
-        user1Categories.detachCategoryFromArtifact(category.getResourceId(), templateId));
-    Assert.assertTrue("After the detach, the template should carry no categories",
-        user1Categories.getAttachedCategoryIds(templateId).isEmpty());
+    Assertions.assertTrue(user1Categories.detachCategoryFromArtifact(category.getResourceId(), templateId),
+        "Detaching the category should succeed");
+    Assertions.assertTrue(user1Categories.getAttachedCategoryIds(templateId).isEmpty(),
+        "After the detach, the template should carry no categories");
   }
 
   @Test
@@ -236,35 +239,38 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
 
     // The latest flags are caller-maintained, the way the resource server flips them after
     // creating a new version
-    Assert.assertTrue("Clearing the latest flag on the old version should succeed",
-        user1Folders.unsetLatestVersion(version1Id));
-    Assert.assertTrue("Setting the latest flag on the new version should succeed",
-        user1Folders.setLatestVersion(version2Id));
+    Assertions.assertTrue(user1Folders.unsetLatestVersion(version1Id),
+        "Clearing the latest flag on the old version should succeed");
+    Assertions.assertTrue(user1Folders.setLatestVersion(version2Id),
+        "Setting the latest flag on the new version should succeed");
 
     FolderServerSchemaArtifact fresh1 = user1Folders.findSchemaArtifactById(version1Id);
-    Assert.assertNotNull("The old version should stay retrievable", fresh1);
-    Assert.assertEquals("The old version should not be flagged latest", Boolean.FALSE, fresh1.isLatestVersion());
+    Assertions.assertNotNull(fresh1, "The old version should stay retrievable");
+    Assertions.assertEquals(Boolean.FALSE, fresh1.isLatestVersion(), "The old version should not be flagged latest");
 
     FolderServerSchemaArtifact fresh2 = user1Folders.findSchemaArtifactById(version2Id);
-    Assert.assertNotNull("The new version should be retrievable", fresh2);
-    Assert.assertEquals("The new version should be flagged latest", Boolean.TRUE, fresh2.isLatestVersion());
-    Assert.assertNotNull("The new version should carry the previousVersion link", fresh2.getPreviousVersion());
-    Assert.assertEquals("The previousVersion link should point at the old version",
-        version1.getId(), fresh2.getPreviousVersion().getId());
+    Assertions.assertNotNull(fresh2, "The new version should be retrievable");
+    Assertions.assertEquals(Boolean.TRUE, fresh2.isLatestVersion(), "The new version should be flagged latest");
+    Assertions.assertNotNull(fresh2.getPreviousVersion(), "The new version should carry the previousVersion link");
+    Assertions.assertEquals(version1.getId(), fresh2.getPreviousVersion().getId(),
+        "The previousVersion link should point at the old version");
 
     // The history query matches the longest PREVIOUSVERSION path through the queried node and
     // returns its nodes newest first, from either end of the chain
     List<FolderServerArtifactExtract> historyFromOld = user1Folders.getVersionHistory(version1Id);
-    Assert.assertEquals("The history queried on the old version should span both versions", 2, historyFromOld.size());
-    Assert.assertEquals("The history should list the new version first", version2.getId(), historyFromOld.get(0).getId());
-    Assert.assertEquals("The history should list the old version last", version1.getId(), historyFromOld.get(1).getId());
+    Assertions.assertEquals(2, historyFromOld.size(),
+        "The history queried on the old version should span both versions");
+    Assertions.assertEquals(version2.getId(), historyFromOld.get(0).getId(),
+        "The history should list the new version first");
+    Assertions.assertEquals(version1.getId(), historyFromOld.get(1).getId(),
+        "The history should list the old version last");
 
     // The permission-filtered variant hides every node the caller cannot read; user2 has no
     // access anywhere under user1's home
     List<FolderServerArtifactExtract> historyForStranger =
         foldersOf(user2Context).getVersionHistoryWithPermission(version1Id);
-    Assert.assertTrue("A stranger should see an empty permission-filtered version history",
-        historyForStranger.isEmpty());
+    Assertions.assertTrue(historyForStranger.isEmpty(),
+        "A stranger should see an empty permission-filtered version history");
   }
 
 }
