@@ -31,6 +31,15 @@ public abstract class QueueServiceWithBlockingQueue extends QueueService {
   }
 
   public void initializeBlockingQueue() {
+    // Close a previously held connection first: a consumer re-initializes after a failure, and
+    // the broken connection would otherwise leak
+    if (blockingQueue != null) {
+      try {
+        blockingQueue.close();
+      } catch (Exception e) {
+        // The connection is already broken; nothing to preserve
+      }
+    }
     blockingQueue = pool.getResource();
   }
 
