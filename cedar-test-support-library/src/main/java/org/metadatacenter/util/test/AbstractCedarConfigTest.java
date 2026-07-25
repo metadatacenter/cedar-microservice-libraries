@@ -1,9 +1,11 @@
 package org.metadatacenter.util.test;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.config.environment.CedarEnvironmentSource;
 import org.metadatacenter.config.environment.CedarEnvironmentVariable;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.model.SystemComponent;
@@ -18,14 +20,17 @@ import java.util.Map;
  * that builds the component's environment map and instantiates {@link CedarConfig} from it.
  * The environment set here is the union of the variables the per-server tests used to set
  * individually; {@link CedarEnvironmentVariableProvider#getFor} narrows it to the variables the
- * component declares, so the surplus is inert. {@link TestUtil#setEnv} merges into the process
- * environment rather than replacing it, matching the behavior of the tests this class replaces.
+ * component declares, so the surplus is inert. The entries are merged over the active
+ * environment and installed as a {@link CedarEnvironmentSource} override, matching the merge
+ * behavior of the tests this class replaces.
  *
  * <p>Subclasses can adjust the environment before it is applied via
  * {@link #customizeEnvironment(Map)}, and add server-specific assertions on the loaded
  * configuration via {@link #assertServerSpecificConfig(CedarConfig)}.
  */
 public abstract class AbstractCedarConfigTest {
+
+  private Map<String, String> previousOverride;
 
   protected abstract SystemComponent getSystemComponent();
 
@@ -37,6 +42,10 @@ public abstract class AbstractCedarConfigTest {
 
   @BeforeEach
   public void setEnvironment() {
+    // The fake entries below must not outlive this test: in a shared JVM a later test class
+    // reads the active environment when it boots, so the prior override is restored afterwards
+    previousOverride = CedarEnvironmentSource.hasOverride() ? CedarEnvironmentSource.getAll() : null;
+
     Map<String, String> env = new HashMap<>();
 
     env.put(CedarEnvironmentVariable.CEDAR_HOST.getName(), "metadatacenter.orgx");
@@ -152,7 +161,14 @@ public abstract class AbstractCedarConfigTest {
 
     customizeEnvironment(env);
 
-    TestUtil.setEnv(env);
+    Map<String, String> merged = new HashMap<>(CedarEnvironmentSource.getAll());
+    merged.putAll(env);
+    CedarEnvironmentSource.setOverride(merged);
+  }
+
+  @AfterEach
+  public void restoreEnvironment() {
+    CedarEnvironmentSource.setOverride(previousOverride);
   }
 
   @Test

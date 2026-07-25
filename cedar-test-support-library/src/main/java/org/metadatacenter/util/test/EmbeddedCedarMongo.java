@@ -8,6 +8,7 @@ import de.flapdoodle.embed.mongo.transitions.Mongod;
 import de.flapdoodle.embed.mongo.transitions.RunningMongodProcess;
 import de.flapdoodle.reverse.TransitionWalker;
 import org.bson.Document;
+import org.metadatacenter.config.environment.CedarEnvironmentSource;
 
 import java.util.HashMap;
 import java.util.List;
@@ -42,20 +43,22 @@ public final class EmbeddedCedarMongo {
       running = Mongod.instance().start(Version.Main.V5_0);
       ServerAddress address = running.current().getServerAddress();
 
-      String userName = System.getenv("CEDAR_MONGO_APP_USER_NAME");
-      String password = System.getenv("CEDAR_MONGO_APP_USER_PASSWORD");
+      String userName = CedarEnvironmentSource.get("CEDAR_MONGO_APP_USER_NAME");
+      String password = CedarEnvironmentSource.get("CEDAR_MONGO_APP_USER_PASSWORD");
       try (MongoClient client = MongoClients.create("mongodb://" + address.getHost() + ":" + address.getPort())) {
         client.getDatabase(DATABASE_NAME).runCommand(new Document("createUser", userName)
             .append("pwd", password)
             .append("roles", List.of(new Document("role", "readWrite").append("db", DATABASE_NAME))));
       }
-
-      Map<String, String> environment = new HashMap<>(System.getenv());
-      environment.put("CEDAR_MONGO_HOST", address.getHost());
-      environment.put("CEDAR_MONGO_PORT", String.valueOf(address.getPort()));
-      environment.putAll(extraEnvironment);
-      TestUtil.setEnv(environment);
     }
+    // Re-applied even when the server is already up: in a shared JVM a later test class may
+    // have replaced the override, and its own extra entries must land as well
+    ServerAddress address = running.current().getServerAddress();
+    Map<String, String> environment = new HashMap<>(CedarEnvironmentSource.getAll());
+    environment.put("CEDAR_MONGO_HOST", address.getHost());
+    environment.put("CEDAR_MONGO_PORT", String.valueOf(address.getPort()));
+    environment.putAll(extraEnvironment);
+    CedarEnvironmentSource.setOverride(environment);
   }
 
 }

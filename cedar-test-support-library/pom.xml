@@ -84,17 +84,16 @@
   <build>
     <plugins>
       <!--
-        The add-opens flags let TestUtil.setEnv rewrite the in-JVM environment, which is how the
-        tests point the configuration at the embedded Neo4j. Each test class runs in its own JVM
-        (reuseForks false): CedarConfig is a singleton built from the environment on first use,
-        so the redirection must happen before any other test class builds it.
+        The tests point the configuration at the embedded Neo4j through a CedarEnvironmentSource
+        override, so no add-opens flags or reflective environment rewriting are involved, and the
+        test classes can share a JVM (reuseForks true): CedarConfig.getInstance rebuilds when the
+        override changes, and the embedded servers and their redirection survive across classes.
       -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
-          <argLine>--add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED</argLine>
-          <reuseForks>false</reuseForks>
+          <reuseForks>true</reuseForks>
         </configuration>
       </plugin>
     </plugins>

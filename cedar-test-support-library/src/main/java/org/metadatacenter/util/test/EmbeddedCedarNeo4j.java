@@ -2,6 +2,7 @@ package org.metadatacenter.util.test;
 
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.config.environment.CedarEnvironmentSource;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.rest.context.CedarRequestContext;
@@ -38,6 +39,7 @@ import java.util.Map;
 public final class EmbeddedCedarNeo4j {
 
   private static Neo4j embedded;
+  private static boolean seeded;
 
   private EmbeddedCedarNeo4j() {
   }
@@ -49,12 +51,14 @@ public final class EmbeddedCedarNeo4j {
   public static synchronized void startAndRedirectEnvironment(Map<String, String> extraEnvironment) {
     if (embedded == null) {
       embedded = Neo4jBuilders.newInProcessBuilder().withDisabledServer().build();
-      Map<String, String> environment = new HashMap<>(System.getenv());
-      environment.put("CEDAR_NEO4J_HOST", embedded.boltURI().getHost());
-      environment.put("CEDAR_NEO4J_BOLT_PORT", String.valueOf(embedded.boltURI().getPort()));
-      environment.putAll(extraEnvironment);
-      TestUtil.setEnv(environment);
     }
+    // Re-applied even when the server is already up: in a shared JVM a later test class may
+    // have replaced the override, and its own extra entries must land as well
+    Map<String, String> environment = new HashMap<>(CedarEnvironmentSource.getAll());
+    environment.put("CEDAR_NEO4J_HOST", embedded.boltURI().getHost());
+    environment.put("CEDAR_NEO4J_BOLT_PORT", String.valueOf(embedded.boltURI().getPort()));
+    environment.putAll(extraEnvironment);
+    CedarEnvironmentSource.setOverride(environment);
   }
 
   public static synchronized void startRedirectAndSeed(SystemComponent systemComponent) {
@@ -77,7 +81,16 @@ public final class EmbeddedCedarNeo4j {
     }
   }
 
-  public static void seed(CedarConfig cedarConfig) throws Exception {
+  /**
+   * Seeds at most once per JVM. Repeating the graph seeding would duplicate the users and the
+   * CONTAINS chains they hang from, which corrupts path computation, so a second call in a
+   * shared JVM is a no-op; the guard lives here so every caller is safe without discipline.
+   */
+  public static synchronized void seed(CedarConfig cedarConfig) throws Exception {
+    if (seeded) {
+      return;
+    }
+    seeded = true;
     CedarUser admin = TestAuthUtil.getAdminUser(cedarConfig);
     CedarDataServices.getNeoUserService().createUser(admin);
     CedarRequestContext adminContext = CedarRequestContextFactory.fromUser(admin);

@@ -19,17 +19,31 @@ public final class CedarDataServices {
   private Neo4JProxies proxies;
   private CedarConfig cedarConfig;
   private MongoClientFactory mongoClientFactoryForDocuments;
+  private MongoConnection mongoConnectionForDocuments;
   private static final CedarDataServices instance = new CedarDataServices();
 
   private CedarDataServices() {
   }
 
+  // Re-initialization with the same connection is a no-op. In production each initializer runs
+  // once, at startup; in a shared test JVM every application boot runs it again, and each
+  // abandoned client or proxy set would leak its connection pool (the Neo4j drivers alone hold
+  // enough file descriptors that a test suite exhausts the process limit). The same CedarConfig
+  // yields the same connection object, so an identity check recognizes a repeated boot.
   public static void initializeMongoClientFactoryForDocuments(MongoConnection mongoConnection) {
+    if (instance.mongoClientFactoryForDocuments != null
+        && instance.mongoConnectionForDocuments == mongoConnection) {
+      return;
+    }
+    instance.mongoConnectionForDocuments = mongoConnection;
     instance.mongoClientFactoryForDocuments = new MongoClientFactory(mongoConnection);
     instance.mongoClientFactoryForDocuments.buildClient();
   }
 
   public static void initializeNeo4jServices(CedarConfig cedarConfig) {
+    if (instance.proxies != null && instance.cedarConfig == cedarConfig) {
+      return;
+    }
     instance.cedarConfig = cedarConfig;
     instance.proxies = new Neo4JProxies(cedarConfig);
     instance.neoUserService = new UserServiceNeo4j(instance.proxies.user());

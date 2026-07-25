@@ -2,6 +2,7 @@ package org.metadatacenter.util.test;
 
 import ch.vorburger.mariadb4j.DB;
 import ch.vorburger.mariadb4j.DBConfigurationBuilder;
+import org.metadatacenter.config.environment.CedarEnvironmentSource;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -40,13 +41,13 @@ public final class EmbeddedCedarMySql {
         throw new IllegalStateException("Could not start the embedded MariaDB", e);
       }
     }
-    Map<String, String> environment = new HashMap<>(System.getenv());
+    Map<String, String> environment = new HashMap<>(CedarEnvironmentSource.getAll());
     environment.put(envPrefix + "_HOST", "127.0.0.1");
     environment.put(envPrefix + "_PORT", String.valueOf(db.getConfiguration().getPort()));
     environment.put(envPrefix + "_USER", "root");
     environment.put(envPrefix + "_PASSWORD", "");
     environment.putAll(extraEnvironment);
-    TestUtil.setEnv(environment);
+    CedarEnvironmentSource.setOverride(environment);
   }
 
 }
