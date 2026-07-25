@@ -90,6 +90,10 @@ public class CedarUserUtil {
 
     user.getUiPreferences().setStylesheet(blueprintProfile.getUiPreferences().getStylesheet());
 
+    if (blueprintProfile.getUiPreferences().getPreferredDateFormat() != null) {
+      user.getUiPreferences().setPreferredDateFormat(blueprintProfile.getUiPreferences().getPreferredDateFormat());
+    }
+
     return user;
   }
 
