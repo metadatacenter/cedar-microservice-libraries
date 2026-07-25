@@ -10,7 +10,4 @@ public class GenericAssertions {
   public static final SuccessfulAssertion Successful = new SuccessfulAssertion();
   public static final ValidIdAssertion ValidId = new ValidIdAssertion();
   public static final ValidUrlAssertion ValidUrl = new ValidUrlAssertion();
-  public static final ValidTemplateAssertion ValidTemplate = new ValidTemplateAssertion();
-  public static final ValidElementAssertion ValidElement = new ValidElementAssertion();
-  public static final ValidFieldAssertion ValidField = new ValidFieldAssertion();
 }
