@@ -7,7 +7,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * An in-process MariaDB for integration tests, replacing the live MySQL. Call
+ * An in-process MariaDB for integration tests, replacing the live MySQL. Note the stand-in is
+ * MariaDB 11 while the deployment runs MySQL 8 (cedar-infra-mysql): protocol- and
+ * dialect-compatible for the Hibernate-managed schemas tested here, but not the identical
+ * engine; MariaDB4j ships no MySQL binaries. Call
  * startAndRedirectEnvironment from a static initializer, before the DropwizardAppRule starts the
  * application: it boots the embedded server on a random port (so it can never collide with, or
  * write into, a real MySQL) and redirects the CEDAR MySQL environment variables for the given

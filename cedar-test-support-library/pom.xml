@@ -35,7 +35,8 @@
     <dependency>
       <groupId>org.neo4j.test</groupId>
       <artifactId>neo4j-harness</artifactId>
-      <version>${org.neo4j.driver.version}</version>
+      <!-- Tracks the deployed Neo4j server version (cedar-infra-neo4j), not the driver version -->
+      <version>5.3.0</version>
       <exclusions>
         <exclusion>
           <groupId>org.junit.jupiter</groupId>

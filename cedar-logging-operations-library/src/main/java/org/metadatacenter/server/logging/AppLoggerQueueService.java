@@ -37,7 +37,7 @@ public class AppLoggerQueueService extends QueueServiceWithBlockingQueue {
     try (Jedis jedis = pool.getResource()) {
       jedis.rpush(queueName, json);
     } catch (Exception e) {
-      log.error("The log message could not be enqueued. The queue (Redis) may be unreachable. Dropping it.", e);
+      reportDroppedEvent(log, "log message", e);
     }
   }
 

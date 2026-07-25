@@ -29,7 +29,7 @@ public class PermissionQueueService extends QueueServiceWithBlockingQueue {
     try (Jedis jedis = pool.getResource()) {
       jedis.rpush(queueName, json);
     } catch (Exception e) {
-      log.error("The permission event could not be enqueued. The queue (Redis) may be unreachable. Dropping it.", e);
+      reportDroppedEvent(log, "permission event", e);
     }
   }
 }
