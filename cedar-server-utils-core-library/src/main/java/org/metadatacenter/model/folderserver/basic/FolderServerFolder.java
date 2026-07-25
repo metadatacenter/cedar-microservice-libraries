@@ -10,11 +10,15 @@ import org.metadatacenter.model.folderserver.datagroup.ResourceWithFolderData;
 import org.metadatacenter.model.folderserver.datagroup.ResourceWithHomeOf;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerFolder extends FileSystemResource implements ResourceWithFolderData, ResourceWithHomeOf {
+
+  private static final Logger log = LoggerFactory.getLogger(FolderServerFolder.class);
 
   private FolderDataGroup folderDataGroup;
   private String homeOf;
@@ -35,7 +39,7 @@ public class FolderServerFolder extends FileSystemResource implements ResourceWi
       String s = JsonMapper.MAPPER.writeValueAsString(folder);
       return JsonMapper.MAPPER.readValue(s, FolderServerFolder.class);
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the current-user report to a FolderServerFolder", e);
     }
     return null;
   }

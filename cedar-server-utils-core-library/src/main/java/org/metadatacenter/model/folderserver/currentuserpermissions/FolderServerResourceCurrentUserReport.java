@@ -9,6 +9,8 @@ import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
 import org.metadatacenter.server.security.model.auth.FilesystemResourceWithCurrentUserPermissions;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
@@ -25,6 +27,8 @@ import java.io.IOException;
 })
 public abstract class FolderServerResourceCurrentUserReport extends FileSystemResource implements FilesystemResourceWithCurrentUserPermissions {
 
+  private static final Logger log = LoggerFactory.getLogger(FolderServerResourceCurrentUserReport.class);
+
   private CurrentUserResourcePermissions currentUserPermissions = new CurrentUserResourcePermissions();
 
   public FolderServerResourceCurrentUserReport(CedarResourceType resourceType) {
@@ -36,7 +40,7 @@ public abstract class FolderServerResourceCurrentUserReport extends FileSystemRe
       String s = JsonMapper.MAPPER.writeValueAsString(resource);
       return JsonMapper.MAPPER.readValue(s, FolderServerResourceCurrentUserReport.class);
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the file system resource to a current-user report", e);
     }
     return null;
   }

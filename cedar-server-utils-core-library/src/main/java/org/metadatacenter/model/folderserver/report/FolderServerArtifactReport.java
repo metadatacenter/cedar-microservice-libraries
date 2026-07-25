@@ -11,6 +11,8 @@ import org.metadatacenter.model.folderserver.extract.FolderServerArtifactExtract
 import org.metadatacenter.model.folderserver.extract.FolderServerCategoryExtract;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -27,6 +29,8 @@ import java.util.List;
     @JsonSubTypes.Type(value = FolderServerInstanceReport.class, name = CedarResourceType.Types.INSTANCE)
 })
 public abstract class FolderServerArtifactReport extends FolderServerArtifactCurrentUserReport {
+
+  private static final Logger log = LoggerFactory.getLogger(FolderServerArtifactReport.class);
 
   private FolderServerArtifactExtract derivedFromExtract;
   private List<FolderServerArtifactExtract> versions;
@@ -48,7 +52,7 @@ public abstract class FolderServerArtifactReport extends FolderServerArtifactCur
       String s = JsonMapper.MAPPER.writeValueAsString(resource);
       return JsonMapper.MAPPER.readValue(s, FolderServerArtifactReport.class);
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the artifact to an artifact report", e);
     }
     return null;
   }

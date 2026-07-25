@@ -9,10 +9,14 @@ import org.metadatacenter.model.folderserver.datagroup.ResourceWithIsBasedOn;
 import org.metadatacenter.model.folderserver.extract.FolderServerTemplateExtract;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 public abstract class FolderServerInstanceArtifactReport extends FolderServerArtifactReport implements ResourceWithIsBasedOn {
+
+  private static final Logger log = LoggerFactory.getLogger(FolderServerInstanceArtifactReport.class);
 
   private IsBasedOnGroup isBasedOnGroup;
   private FolderServerTemplateExtract isBasedOnExtract;
@@ -27,7 +31,7 @@ public abstract class FolderServerInstanceArtifactReport extends FolderServerArt
       String s = JsonMapper.MAPPER.writeValueAsString(resource);
       return JsonMapper.MAPPER.readValue(s, FolderServerInstanceArtifactReport.class);
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the artifact to an instance artifact report", e);
     }
     return null;
   }

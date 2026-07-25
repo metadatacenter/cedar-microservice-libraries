@@ -4,12 +4,16 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FolderServerElement;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class InclusionSubgraphElement extends InclusionSubgraphNode {
+
+  private static final Logger log = LoggerFactory.getLogger(InclusionSubgraphElement.class);
 
   private Map<String, InclusionSubgraphElement> elements;
 
@@ -29,7 +33,7 @@ public class InclusionSubgraphElement extends InclusionSubgraphNode {
       InclusionSubgraphElement inclusionSubgraphElement = JsonMapper.MAPPER.readValue(s, InclusionSubgraphElement.class);
       return inclusionSubgraphElement;
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the element to an inclusion subgraph element", e);
     }
     return null;
   }

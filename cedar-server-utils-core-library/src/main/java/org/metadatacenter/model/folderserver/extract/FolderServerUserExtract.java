@@ -9,11 +9,15 @@ import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.security.model.user.CedarUserRepresentation;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerUserExtract extends AbstractCedarResourceWithDates implements CedarUserRepresentation {
+
+  private static final Logger log = LoggerFactory.getLogger(FolderServerUserExtract.class);
 
   private String firstName;
   private String lastName;
@@ -28,7 +32,7 @@ public class FolderServerUserExtract extends AbstractCedarResourceWithDates impl
       FolderServerUserExtract extract = JsonMapper.MAPPER.readValue(s, FolderServerUserExtract.class);
       return extract;
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the user to a user extract", e);
     }
     return null;
   }
