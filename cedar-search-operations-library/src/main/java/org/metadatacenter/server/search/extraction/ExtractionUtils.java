@@ -1,7 +1,6 @@
 package org.metadatacenter.server.search.extraction;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.apache.commons.lang.CharEncoding;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.util.EntityUtils;
@@ -17,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Utilities used to extract information from CEDAR artifacts
@@ -42,7 +42,7 @@ public class ExtractionUtils {
       String artifactString = null;
       JsonNode artifactJson = null;
       try {
-        artifactString = EntityUtils.toString(entity, CharEncoding.UTF_8);
+        artifactString = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         artifactJson = JsonMapper.MAPPER.readTree(artifactString);
       } catch (IOException e) {
         throw new CedarProcessingException("Error when reading artifact as Json: " + artifactId);

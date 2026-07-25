@@ -10,7 +10,6 @@ import io.dropwizard.jetty.HttpConnectorFactory;
 import io.dropwizard.server.DefaultServerFactory;
 import io.dropwizard.setup.Bootstrap;
 import io.dropwizard.setup.Environment;
-import org.apache.commons.lang.StringUtils;
 import org.eclipse.jetty.servlets.CrossOriginFilter;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
@@ -188,8 +187,8 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     // Configure CORS parameters
     String httpOrigins = "*";
-    String httpHeaders = StringUtils.join(HTTP_HEADERS, ",");
-    String httpMethods = StringUtils.join(HTTP_METHODS, ",");
+    String httpHeaders = String.join(",", HTTP_HEADERS);
+    String httpMethods = String.join(",", HTTP_METHODS);
     log.info("Setting up CORS...");
     log.info(ALLOWED_ORIGINS_PARAM + ":" + httpOrigins);
     log.info(ALLOWED_HEADERS_PARAM + ":" + httpHeaders);

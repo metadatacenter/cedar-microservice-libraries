@@ -7,7 +7,6 @@ import com.google.common.cache.CacheStats;
 import com.google.common.cache.LoadingCache;
 import org.apache.commons.codec.EncoderException;
 import org.apache.commons.codec.net.URLCodec;
-import org.apache.commons.lang.CharEncoding;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.util.EntityUtils;
@@ -24,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
@@ -97,7 +97,7 @@ public class UserSummaryCache {
       proxyResponse = ProxyUtil.proxyGet(url, context);
       HttpEntity entity = proxyResponse.getEntity();
       if (entity != null) {
-        String userSummaryString = EntityUtils.toString(entity, CharEncoding.UTF_8);
+        String userSummaryString = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         if (userSummaryString != null && !userSummaryString.isEmpty()) {
           JsonNode jsonNode = JsonMapper.MAPPER.readTree(userSummaryString);
           JsonNode at = jsonNode.at("/screenName");

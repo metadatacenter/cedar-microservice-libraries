@@ -2,7 +2,6 @@ package org.metadatacenter.server.resource;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.apache.commons.lang.CharEncoding;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -46,6 +45,7 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.Response;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -149,7 +149,7 @@ public class CloneInstancesExecutorService {
       HttpEntity entity = proxyResponse.getEntity();
       int statusCode = proxyResponse.getStatusLine().getStatusCode();
       if (entity != null) {
-        originalDocument = EntityUtils.toString(entity, CharEncoding.UTF_8);
+        originalDocument = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         JsonNode jsonNode = JsonMapper.MAPPER.readTree(originalDocument);
         ((ObjectNode) jsonNode).remove("@id");
         ((ObjectNode) jsonNode).put(SCHEMA_IS_BASED_ON, newTemplateId.getId());
@@ -178,7 +178,7 @@ public class CloneInstancesExecutorService {
         // artifact was created
         HttpEntity entity = templateProxyResponse.getEntity();
         Header locationHeader = templateProxyResponse.getFirstHeader(HttpHeaders.LOCATION);
-        String entityContent = EntityUtils.toString(entity, CharEncoding.UTF_8);
+        String entityContent = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         JsonNode jsonNode = JsonMapper.MAPPER.readTree(entityContent);
         String createdId = jsonNode.get("@id").asText();
         CedarArtifactId newInstanceId = CedarArtifactId.build(createdId, resourceType);

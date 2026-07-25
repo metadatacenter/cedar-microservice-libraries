@@ -1,6 +1,6 @@
 package org.metadatacenter.server.neo4j.cypher.parameter;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.metadatacenter.id.CedarFolderId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
