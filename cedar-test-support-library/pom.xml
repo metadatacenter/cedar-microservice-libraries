@@ -82,10 +82,15 @@
       <version>5.13.0</version>
     </dependency>
 
+    <!--
+      Compile scope, not the parent-managed test scope: AbstractCedarConfigTest lives in main
+      sources so the servers can subclass it from their test classpath, and it carries JUnit 4
+      annotations.
+    -->
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <scope>test</scope>
+      <scope>compile</scope>
     </dependency>
 
   </dependencies>
