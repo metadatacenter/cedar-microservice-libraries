@@ -5,10 +5,10 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.deser.DeserializationProblemHandler;
-import com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider;
-import com.fasterxml.jackson.jaxrs.json.JacksonJsonProvider;
+import com.fasterxml.jackson.jakarta.rs.json.JacksonJsonProvider;
+import com.fasterxml.jackson.jakarta.rs.json.JacksonXmlBindJsonProvider;
 import jakarta.ws.rs.client.Client;
-import org.jboss.resteasy.client.jaxrs.ResteasyClientBuilder;
+import org.jboss.resteasy.client.jaxrs.internal.ResteasyClientBuilderImpl;
 import org.keycloak.adapters.KeycloakDeployment;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.KeycloakBuilder;
@@ -111,7 +111,7 @@ public class KeycloakUtils {
 
   private static JacksonJsonProvider getCustomizedJacksonJsonProvider() {
     ObjectMapper m = new ObjectMapper();
-    JacksonJsonProvider jacksonJsonProvider = new JacksonJaxbJsonProvider();
+    JacksonJsonProvider jacksonJsonProvider = new JacksonXmlBindJsonProvider();
     jacksonJsonProvider.setMapper(m);
 
     m.addHandler(new DeserializationProblemHandler() {
@@ -159,8 +159,11 @@ public class KeycloakUtils {
     JacksonJsonProvider jacksonJsonProvider = getCustomizedJacksonJsonProvider();
 
     // TODO: add connectionPoolSize(10)
-    Client resteasyClient = ResteasyClientBuilder
-            .newBuilder()
+    // Instantiate the RESTEasy builder concretely rather than via ResteasyClientBuilder.newBuilder():
+    // under jakarta ws.rs 3.0 the ClientBuilder ServiceLoader also finds Jersey on the classpath and
+    // may resolve to it, and the Keycloak admin client requires a genuine RESTEasy client (it casts
+    // the WebTarget to ResteasyWebTarget).
+    Client resteasyClient = new ResteasyClientBuilderImpl()
             .register(jacksonJsonProvider)
             .sslContext(sslContext)
             .build();

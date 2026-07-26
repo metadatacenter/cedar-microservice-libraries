@@ -5,9 +5,9 @@ import org.metadatacenter.server.logging.model.AppLogParam;
 import org.metadatacenter.server.logging.model.AppLogSubType;
 import org.metadatacenter.server.logging.model.AppLogType;
 
-import javax.ws.rs.container.ContainerRequestContext;
-import javax.ws.rs.container.ContainerRequestFilter;
-import javax.ws.rs.ext.Provider;
+import jakarta.ws.rs.container.ContainerRequestContext;
+import jakarta.ws.rs.container.ContainerRequestFilter;
+import jakarta.ws.rs.ext.Provider;
 import java.io.IOException;
 import java.util.UUID;
 

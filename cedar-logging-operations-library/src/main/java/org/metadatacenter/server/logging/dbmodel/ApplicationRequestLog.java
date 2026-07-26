@@ -9,7 +9,7 @@ import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -38,7 +38,7 @@ public class ApplicationRequestLog {
   private static final Logger log = LoggerFactory.getLogger(ApplicationRequestLog.class);
 
   @Id
-  @GeneratedValue(strategy = GenerationType.AUTO)
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
   @Column(length = 36)

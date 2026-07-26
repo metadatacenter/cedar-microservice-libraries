@@ -2,7 +2,7 @@ package org.metadatacenter.server.security;
 
 import org.metadatacenter.server.security.model.AuthRequest;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
 import static org.metadatacenter.constant.HttpConstants.*;
 

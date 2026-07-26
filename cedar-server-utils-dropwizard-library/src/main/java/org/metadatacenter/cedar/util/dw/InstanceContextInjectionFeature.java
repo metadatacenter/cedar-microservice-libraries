@@ -7,8 +7,8 @@ import org.glassfish.jersey.server.ResourceConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.core.Feature;
-import javax.ws.rs.core.FeatureContext;
+import jakarta.ws.rs.core.Feature;
+import jakarta.ws.rs.core.FeatureContext;
 import java.lang.reflect.Field;
 
 /**

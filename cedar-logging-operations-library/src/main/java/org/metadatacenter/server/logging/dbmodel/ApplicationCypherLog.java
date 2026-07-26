@@ -7,7 +7,7 @@ import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.Map;
 
@@ -32,7 +32,7 @@ public class ApplicationCypherLog {
   private static final Logger log = LoggerFactory.getLogger(ApplicationCypherLog.class);
 
   @Id
-  @GeneratedValue(strategy = GenerationType.AUTO)
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
   @Column(length = 36)

@@ -4,10 +4,10 @@ import org.metadatacenter.server.logging.AppLogger;
 import org.metadatacenter.server.logging.model.AppLogSubType;
 import org.metadatacenter.server.logging.model.AppLogType;
 
-import javax.ws.rs.container.ContainerRequestContext;
-import javax.ws.rs.container.ContainerResponseContext;
-import javax.ws.rs.container.ContainerResponseFilter;
-import javax.ws.rs.ext.Provider;
+import jakarta.ws.rs.container.ContainerRequestContext;
+import jakarta.ws.rs.container.ContainerResponseContext;
+import jakarta.ws.rs.container.ContainerResponseFilter;
+import jakarta.ws.rs.ext.Provider;
 import java.io.IOException;
 
 import static org.metadatacenter.constant.CedarHeaderParameters.GLOBAL_REQUEST_ID_KEY;

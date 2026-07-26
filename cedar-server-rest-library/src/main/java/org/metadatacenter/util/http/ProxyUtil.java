@@ -20,8 +20,8 @@ import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.util.json.JsonMapper;
 
-import javax.servlet.http.HttpServletResponse;
-import javax.ws.rs.core.HttpHeaders;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.ws.rs.core.HttpHeaders;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;

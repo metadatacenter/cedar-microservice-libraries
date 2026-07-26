@@ -3,9 +3,9 @@ package org.metadatacenter.util.http;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.Header;
 
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.UriBuilder;
-import javax.ws.rs.core.UriInfo;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.UriBuilder;
+import jakarta.ws.rs.core.UriInfo;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 

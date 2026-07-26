@@ -2,8 +2,8 @@ package org.metadatacenter.util.http;
 
 import org.metadatacenter.exception.CedarException;
 
-import javax.ws.rs.core.UriBuilder;
-import javax.ws.rs.core.UriInfo;
+import jakarta.ws.rs.core.UriBuilder;
+import jakarta.ws.rs.core.UriInfo;
 import java.net.URI;
 import java.util.Optional;
 

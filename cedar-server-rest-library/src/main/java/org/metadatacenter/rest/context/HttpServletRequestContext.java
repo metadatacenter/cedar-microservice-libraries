@@ -8,8 +8,8 @@ import org.metadatacenter.server.security.Authorization;
 import org.metadatacenter.server.security.CedarAuthFromRequestFactory;
 import org.metadatacenter.server.security.model.AuthRequest;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.ws.rs.core.HttpHeaders;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.ws.rs.core.HttpHeaders;
 
 public class HttpServletRequestContext extends AbstractRequestContext {
 

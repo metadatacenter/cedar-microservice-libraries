@@ -1,7 +1,7 @@
 package org.metadatacenter.cedar.util.dw;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.dropwizard.Configuration;
+import io.dropwizard.core.Configuration;
 
 import java.util.Optional;
 
