@@ -1,6 +1,7 @@
 package org.metadatacenter.cedar.util.dw;
 
 import ch.qos.logback.classic.Level;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import io.dropwizard.Application;
 import io.dropwizard.assets.AssetsBundle;
 import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
@@ -100,6 +101,10 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   public void run(T configuration, Environment environment) throws Exception {
     log.info("********** Initializing CEDAR microservice " + getName());
 
+    // Dropwizard 2 ignores unknown request-body properties by default; CEDAR's API contract
+    // predates that change and rejects them, so restore the strict behavior.
+    environment.getObjectMapper().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
     CedarRequestContextFactory.init(cedarConfig.getLinkedDataUtil());
 
     //Initialize user service
@@ -138,6 +143,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     environment.jersey().register(CedarServerInsightReportResource.class);
     environment.jersey().register(RequestIdGeneratorFilter.class);
     environment.jersey().register(ResponseLoggerFilter.class);
+    environment.jersey().register(new InstanceContextInjectionFeature(environment.jersey().getResourceConfig()));
   }
 
   private Integer getApplicationHttpPort(T configuration) {
