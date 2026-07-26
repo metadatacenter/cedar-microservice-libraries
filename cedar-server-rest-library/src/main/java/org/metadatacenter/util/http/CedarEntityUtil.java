@@ -1,7 +1,8 @@
 package org.metadatacenter.util.http;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.ParseException;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.metadatacenter.exception.CedarProcessingException;
 
 import java.io.IOException;
@@ -16,7 +17,7 @@ public abstract class CedarEntityUtil {
     String es;
     try {
       es = EntityUtils.toString(entity, StandardCharsets.UTF_8);
-    } catch (IOException e) {
+    } catch (IOException | ParseException e) {
       throw new CedarProcessingException(e);
     }
     return es;

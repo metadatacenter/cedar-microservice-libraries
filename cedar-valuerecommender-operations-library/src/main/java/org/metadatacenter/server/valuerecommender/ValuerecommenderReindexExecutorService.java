@@ -1,9 +1,10 @@
 package org.metadatacenter.server.valuerecommender;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import org.apache.http.HttpResponse;
-import org.apache.http.HttpStatus;
-import org.apache.http.client.fluent.Request;
+import org.apache.hc.client5.http.fluent.Request;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.HttpStatus;
+import org.apache.hc.core5.util.Timeout;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.WorkerValuerecommenderConfig;
 import org.metadatacenter.id.CedarTemplateId;
@@ -101,12 +102,12 @@ public class ValuerecommenderReindexExecutorService {
     log.debug(url);
     Set<String> idSet = new HashSet<>();
     try {
-      Request request = Request.Get(url)
-          .connectTimeout(CONNECTION_TIMEOUT)
-          .socketTimeout(SOCKET_TIMEOUT)
+      Request request = Request.get(url)
+          .connectTimeout(Timeout.ofMilliseconds(CONNECTION_TIMEOUT))
+          .responseTimeout(Timeout.ofMilliseconds(SOCKET_TIMEOUT))
           .addHeader(HTTP_HEADER_AUTHORIZATION, authString);
-      HttpResponse response = request.execute().returnResponse();
-      int statusCode = response.getStatusLine().getStatusCode();
+      ClassicHttpResponse response = (ClassicHttpResponse) request.execute().returnResponse();
+      int statusCode = response.getCode();
       if (statusCode == HttpStatus.SC_OK) {
         List<RulesGenerationStatus> list = JsonMapper.MAPPER
             .readValue(response.getEntity().getContent(), new TypeReference<List<RulesGenerationStatus>>() {
@@ -139,12 +140,12 @@ public class ValuerecommenderReindexExecutorService {
     String authString = adminUser.getFirstApiKeyAuthHeader();
     log.debug(url);
     try {
-      Request request = Request.Post(url)
-          .connectTimeout(CONNECTION_TIMEOUT)
-          .socketTimeout(SOCKET_TIMEOUT)
+      Request request = Request.post(url)
+          .connectTimeout(Timeout.ofMilliseconds(CONNECTION_TIMEOUT))
+          .responseTimeout(Timeout.ofMilliseconds(SOCKET_TIMEOUT))
           .addHeader(HTTP_HEADER_AUTHORIZATION, authString);
-      HttpResponse response = request.execute().returnResponse();
-      int statusCode = response.getStatusLine().getStatusCode();
+      ClassicHttpResponse response = (ClassicHttpResponse) request.execute().returnResponse();
+      int statusCode = response.getCode();
       if (statusCode == HttpStatus.SC_OK) {
         log.info("The rule regeneration was successfully requested.");
       } else {

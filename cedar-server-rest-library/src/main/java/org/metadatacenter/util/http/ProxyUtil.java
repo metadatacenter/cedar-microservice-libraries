@@ -3,12 +3,14 @@ package org.metadatacenter.util.http;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Lists;
 import org.apache.commons.codec.CharEncoding;
-import org.apache.http.Header;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.fluent.Request;
-import org.apache.http.entity.ContentType;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.client5.http.fluent.Request;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.ParseException;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.util.Timeout;
 import org.metadatacenter.constant.CedarHeaderParameters;
 import org.metadatacenter.constant.CustomHttpConstants;
 import org.metadatacenter.constant.HttpConnectionConstants;
@@ -34,108 +36,110 @@ public class ProxyUtil {
       CustomHttpConstants.HEADER_CEDAR_VALIDATION_REPORT,
       HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS);
 
-  public static HttpResponse proxyGet(String url, CedarRequestContext context) throws CedarProcessingException {
-    Request proxyRequest = Request.Get(url)
-        .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
-        .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT);
+  public static ClassicHttpResponse proxyGet(String url, CedarRequestContext context) throws CedarProcessingException {
+    Request proxyRequest = Request.get(url)
+        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
+        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT));
     copyHeaders(proxyRequest, context);
     try {
-      return proxyRequest.execute().returnResponse();
+      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }
 
-  public static HttpResponse proxyGet(String url, CedarRequestContext context, Map<String, String> additionalHeaders) throws CedarProcessingException {
-    Request proxyRequest = Request.Get(url)
-        .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
-        .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT);
+  public static ClassicHttpResponse proxyGet(String url, CedarRequestContext context, Map<String, String> additionalHeaders) throws CedarProcessingException {
+    Request proxyRequest = Request.get(url)
+        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
+        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT));
     copyHeaders(proxyRequest, context);
     copyHeaders(proxyRequest, additionalHeaders);
     try {
-      return proxyRequest.execute().returnResponse();
+      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }
 
-  public static HttpResponse proxyGet(String url, Map<String, String> additionalHeaders) throws CedarProcessingException {
-    Request proxyRequest = Request.Get(url)
-        .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
-        .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT);
+  public static ClassicHttpResponse proxyGet(String url, Map<String, String> additionalHeaders) throws CedarProcessingException {
+    Request proxyRequest = Request.get(url)
+        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
+        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT));
     copyHeaders(proxyRequest, additionalHeaders);
     try {
-      return proxyRequest.execute().returnResponse();
+      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }
 
-  public static HttpResponse proxyDelete(String url, CedarRequestContext context) throws CedarProcessingException {
-    Request proxyRequest = Request.Delete(url)
-        .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
-        .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT)
-        .addHeader(HttpHeaders.CONTENT_LENGTH, ZERO_LENGTH)
+  public static ClassicHttpResponse proxyDelete(String url, CedarRequestContext context) throws CedarProcessingException {
+    // HttpClient 5 sets Content-Length itself from the (empty) body; adding it explicitly, as the
+    // HttpClient 4 code did, makes the client reject the request with "Content-Length header
+    // already present". Only the content type is set here.
+    Request proxyRequest = Request.delete(url)
+        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
+        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT))
         .addHeader(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN.toString());
     copyHeaders(proxyRequest, context);
     try {
-      return proxyRequest.execute().returnResponse();
+      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }
 
-  public static HttpResponse proxyPost(String url, CedarRequestContext context) throws CedarProcessingException,
+  public static ClassicHttpResponse proxyPost(String url, CedarRequestContext context) throws CedarProcessingException,
       CedarBadRequestException {
     return proxyPost(url, context, context.request().getRequestBody().asJsonString());
   }
 
-  public static HttpResponse proxyPost(String url, CedarRequestContext context, String content) throws CedarProcessingException {
-    Request proxyRequest = Request.Post(url)
-        .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
-        .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT)
+  public static ClassicHttpResponse proxyPost(String url, CedarRequestContext context, String content) throws CedarProcessingException {
+    Request proxyRequest = Request.post(url)
+        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
+        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT))
         .bodyString(content, ContentType.APPLICATION_JSON);
     copyHeaders(proxyRequest, context);
     try {
-      return proxyRequest.execute().returnResponse();
+      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }
 
-  public static HttpResponse proxyPost(String url, Map<String, String> additionalHeaders, String content) throws CedarProcessingException {
-    Request proxyRequest = Request.Post(url)
-        .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
-        .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT)
+  public static ClassicHttpResponse proxyPost(String url, Map<String, String> additionalHeaders, String content) throws CedarProcessingException {
+    Request proxyRequest = Request.post(url)
+        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
+        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT))
         .bodyString(content, ContentType.APPLICATION_FORM_URLENCODED);
     copyHeaders(proxyRequest, additionalHeaders);
     try {
-      return proxyRequest.execute().returnResponse();
+      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }
 
-  public static HttpResponse proxyPut(String url, CedarRequestContext context) throws CedarProcessingException,
+  public static ClassicHttpResponse proxyPut(String url, CedarRequestContext context) throws CedarProcessingException,
       CedarBadRequestException {
     return proxyPut(url, context, context.request().getRequestBody().asJsonString());
   }
 
-  public static HttpResponse proxyPut(String url, CedarRequestContext context, String content) throws CedarProcessingException {
-    Request proxyRequest = Request.Put(url)
-        .connectTimeout(HttpConnectionConstants.CONNECTION_TIMEOUT)
-        .socketTimeout(HttpConnectionConstants.SOCKET_TIMEOUT)
+  public static ClassicHttpResponse proxyPut(String url, CedarRequestContext context, String content) throws CedarProcessingException {
+    Request proxyRequest = Request.put(url)
+        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
+        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT))
         .bodyString(content, ContentType.APPLICATION_JSON);
     copyHeaders(proxyRequest, context);
     try {
-      return proxyRequest.execute().returnResponse();
+      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
   }
 
-  public static void proxyResponseHeaders(HttpResponse proxyResponse, HttpServletResponse response) {
-    for (Header header : proxyResponse.getAllHeaders()) {
+  public static void proxyResponseHeaders(ClassicHttpResponse proxyResponse, HttpServletResponse response) {
+    for (Header header : proxyResponse.getHeaders()) {
       if (CEDAR_RESPONSE_HEADERS.contains(header.getName())) {
         response.setHeader(header.getName(), header.getValue());
       }
@@ -163,12 +167,12 @@ public class ProxyUtil {
   }
 
   public static JsonNode proxyGetBodyAsJsonNode(String url, CedarRequestContext context) throws CedarProcessingException {
-    HttpResponse proxyResponse = ProxyUtil.proxyGet(url, context);
+    ClassicHttpResponse proxyResponse = ProxyUtil.proxyGet(url, context);
     HttpEntity proxyEntity = proxyResponse.getEntity();
     try {
       String proxyString = EntityUtils.toString(proxyEntity, CharEncoding.UTF_8);
       return JsonMapper.MAPPER.readTree(proxyString);
-    } catch (IOException e) {
+    } catch (IOException | ParseException e) {
       throw new CedarProcessingException(e);
     }
   }

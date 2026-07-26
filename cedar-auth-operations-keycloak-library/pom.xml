@@ -47,11 +47,6 @@
     </dependency>
 
     <dependency>
-      <groupId>org.apache.httpcomponents</groupId>
-      <artifactId>httpcore</artifactId>
-    </dependency>
-
-    <dependency>
       <groupId>org.keycloak</groupId>
       <artifactId>keycloak-common</artifactId>
     </dependency>
@@ -79,6 +74,22 @@
     <dependency>
       <groupId>org.keycloak</groupId>
       <artifactId>keycloak-admin-client-jakarta</artifactId>
+      <!--
+        The admin client drags in RESTEasy's multipart and JAXB providers. CEDAR speaks only JSON
+        to Keycloak (via resteasy-jackson2-provider), so these are unused - and the JAXB provider's
+        startup scan fails to classload jakarta.xml.bind.JAXBException ~27 times per boot, since no
+        jakarta JAXB api is on the classpath. Excluding it removes the providers and the noise.
+      -->
+      <exclusions>
+        <exclusion>
+          <groupId>org.jboss.resteasy</groupId>
+          <artifactId>resteasy-multipart-provider</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jboss.resteasy</groupId>
+          <artifactId>resteasy-jaxb-provider</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <dependency>
@@ -99,19 +110,6 @@
     <dependency>
       <groupId>javax.xml.bind</groupId>
       <artifactId>jaxb-api</artifactId>
-    </dependency>
-
-    <!--
-      The jakarta-namespace RESTEasy client (pulled by keycloak-admin-client-jakarta, used only
-      to build the Keycloak admin client) scans its built-in providers at startup and tries to
-      classload the JAXB ones, which reference jakarta.xml.bind.JAXBException. Without this api on
-      the classpath that load fails ~27 times per boot with a ClassNotFoundException. CEDAR speaks
-      only JSON to Keycloak, so the providers are never used - this just lets them register quietly.
-    -->
-    <dependency>
-      <groupId>jakarta.xml.bind</groupId>
-      <artifactId>jakarta.xml.bind-api</artifactId>
-      <version>2.3.3</version>
     </dependency>
 
     <dependency>

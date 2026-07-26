@@ -7,9 +7,10 @@ import com.google.common.cache.CacheStats;
 import com.google.common.cache.LoadingCache;
 import org.apache.commons.codec.EncoderException;
 import org.apache.commons.codec.net.URLCodec;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.ParseException;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
@@ -92,7 +93,7 @@ public class UserSummaryCache {
     CedarRequestContext context = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
     String uuid = extractUserUUID(id);
     String url = microserviceUrlUtil.getUser().UuidSummary(uuid);
-    HttpResponse proxyResponse = null;
+    ClassicHttpResponse proxyResponse = null;
     try {
       proxyResponse = ProxyUtil.proxyGet(url, context);
       HttpEntity entity = proxyResponse.getEntity();
@@ -109,7 +110,7 @@ public class UserSummaryCache {
           }
         }
       }
-    } catch (IOException e) {
+    } catch (IOException | ParseException e) {
       throw new CedarProcessingException(e);
     }
     return null;

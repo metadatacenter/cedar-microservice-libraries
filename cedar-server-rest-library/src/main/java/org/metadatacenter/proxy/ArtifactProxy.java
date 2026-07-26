@@ -1,7 +1,7 @@
 package org.metadatacenter.proxy;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.HttpEntity;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.rest.context.CedarRequestContext;
@@ -19,13 +19,13 @@ public class ArtifactProxy {
     try {
       String url = microserviceUrlUtil.getArtifact().getArtifactTypeWithId(resourceType, id, format);
       // parameter
-      HttpResponse proxyResponse = ProxyUtil.proxyGet(url, context);
+      ClassicHttpResponse proxyResponse = ProxyUtil.proxyGet(url, context);
       if (response != null) {
         ProxyUtil.proxyResponseHeaders(proxyResponse, response);
       }
       HttpEntity entity = proxyResponse.getEntity();
-      int statusCode = proxyResponse.getStatusLine().getStatusCode();
-      String mediaType = entity.getContentType().getValue();
+      int statusCode = proxyResponse.getCode();
+      String mediaType = entity.getContentType();
       return Response.status(statusCode).type(mediaType).entity(entity.getContent()).build();
     } catch (Exception e) {
       throw new CedarProcessingException(e);
