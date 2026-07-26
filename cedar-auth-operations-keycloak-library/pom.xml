@@ -101,6 +101,19 @@
       <artifactId>jaxb-api</artifactId>
     </dependency>
 
+    <!--
+      The jakarta-namespace RESTEasy client (pulled by keycloak-admin-client-jakarta, used only
+      to build the Keycloak admin client) scans its built-in providers at startup and tries to
+      classload the JAXB ones, which reference jakarta.xml.bind.JAXBException. Without this api on
+      the classpath that load fails ~27 times per boot with a ClassNotFoundException. CEDAR speaks
+      only JSON to Keycloak, so the providers are never used - this just lets them register quietly.
+    -->
+    <dependency>
+      <groupId>jakarta.xml.bind</groupId>
+      <artifactId>jakarta.xml.bind-api</artifactId>
+      <version>2.3.3</version>
+    </dependency>
+
     <dependency>
       <groupId>com.fasterxml.jackson.module</groupId>
       <artifactId>jackson-module-afterburner</artifactId>
