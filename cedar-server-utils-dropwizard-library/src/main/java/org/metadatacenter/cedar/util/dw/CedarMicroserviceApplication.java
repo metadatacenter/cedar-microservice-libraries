@@ -25,6 +25,7 @@ import org.metadatacenter.server.logging.AppLoggerQueueService;
 import org.metadatacenter.server.logging.filter.ResponseLoggerFilter;
 import org.metadatacenter.server.logging.filter.RequestIdGeneratorFilter;
 import org.metadatacenter.server.security.Authorization;
+import org.keycloak.adapters.KeycloakDeployment;
 import org.metadatacenter.server.security.AuthorizationKeycloakAndApiKeyResolver;
 import org.metadatacenter.server.security.IAuthorizationResolver;
 import org.metadatacenter.server.security.KeycloakDeploymentProvider;
@@ -113,9 +114,10 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     //Initialize Keycloak
     KeycloakDeploymentProvider keycloakDeploymentProvider = new KeycloakDeploymentProvider();
-    keycloakDeploymentProvider.buildDeployment(cedarConfig.getKeycloakConfig());
-    // Init Authorization Resolver
-    IAuthorizationResolver authResolver = new AuthorizationKeycloakAndApiKeyResolver();
+    KeycloakDeployment keycloakDeployment = keycloakDeploymentProvider.buildDeployment(cedarConfig.getKeycloakConfig());
+    // Init Authorization Resolver. The deployment carries the realm's signing keys, so the resolver can
+    // verify a bearer token's signature instead of trusting its payload.
+    IAuthorizationResolver authResolver = new AuthorizationKeycloakAndApiKeyResolver(keycloakDeployment);
     Authorization.setAuthorizationResolver(authResolver);
     Authorization.setUserService(CedarDataServices.getNeoUserService());
 

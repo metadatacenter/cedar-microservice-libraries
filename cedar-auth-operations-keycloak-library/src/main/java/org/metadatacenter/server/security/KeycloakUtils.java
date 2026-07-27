@@ -10,11 +10,15 @@ import com.fasterxml.jackson.jakarta.rs.json.JacksonXmlBindJsonProvider;
 import jakarta.ws.rs.client.Client;
 import org.jboss.resteasy.client.jaxrs.internal.ResteasyClientBuilderImpl;
 import org.keycloak.adapters.KeycloakDeployment;
+import org.keycloak.adapters.rotation.AdapterTokenVerifier;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.KeycloakBuilder;
+import org.keycloak.common.VerificationException;
 import org.keycloak.common.util.Base64Url;
+import org.keycloak.exceptions.TokenNotActiveException;
 import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.AccessTokenResponse;
+import org.keycloak.representations.JsonWebToken;
 import org.keycloak.util.JsonSerialization;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.exception.security.AccessTokenExpiredException;
@@ -57,29 +61,37 @@ public class KeycloakUtils {
     return JsonSerialization.readValue(bytes, clazz);
   }
 
-  private static AccessToken checkIfTokenIsStillActiveByUserInfo(String token) throws CedarAccessException {
-    AccessToken accessToken;
+  /**
+   * Verifies the token and returns its claims, or throws. This is the security boundary: it checks the
+   * signature against the realm's published keys, the issuer against the configured realm, and that the
+   * token is currently active. The earlier implementation decoded the payload and checked only expiry,
+   * so a token with any signature — or none — was accepted as whoever its payload named.
+   *
+   * An expired (or not-yet-valid) token is reported as {@link AccessTokenExpiredException} so the client
+   * is told to refresh rather than to log out; every other failure — a bad or absent signature, a wrong
+   * issuer, a malformed token — is an invalid credential and is reported as
+   * {@link InvalidOfflineAccessTokenException}. Both map to 401.
+   */
+  private static AccessToken verifyToken(String token, KeycloakDeployment deployment) throws CedarAccessException {
     if (token == null) {
       throw new AccessTokenMissingException();
     }
     try {
-      accessToken = KeycloakUtils.parseToken(token, AccessToken.class);
-    } catch (IOException e) {
-      throw new InvalidOfflineAccessTokenException();
-    }
-    if (accessToken == null) {
-      throw new InvalidOfflineAccessTokenException();
-    } else if (accessToken.isExpired()) {
-      throw new AccessTokenExpiredException(accessToken.getExpiration());
-    } else {
-      return accessToken;
+      return AdapterTokenVerifier.verifyToken(token, deployment);
+    } catch (TokenNotActiveException e) {
+      JsonWebToken jwt = e.getToken();
+      int expiration = (jwt != null && jwt.getExp() != null) ? jwt.getExp().intValue() : 0;
+      throw new AccessTokenExpiredException(expiration);
+    } catch (VerificationException e) {
+      throw new InvalidOfflineAccessTokenException(e);
     }
   }
 
   public static CedarUser getUserFromAuthRequest(LinkedDataUtil linkedDataUtil, AuthRequest authRequest,
-                                                 IUserService userService) throws CedarAccessException {
+                                                 IUserService userService, KeycloakDeployment deployment)
+      throws CedarAccessException {
     String token = authRequest.getAuthString();
-    AccessToken accessToken = checkIfTokenIsStillActiveByUserInfo(token);
+    AccessToken accessToken = verifyToken(token, deployment);
     String userUuid = accessToken.getSubject();
     String userId = linkedDataUtil.getUserId(userUuid);
     CedarUserId uid = CedarUserId.build(userId);
