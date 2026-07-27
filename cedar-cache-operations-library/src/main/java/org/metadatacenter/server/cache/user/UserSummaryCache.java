@@ -5,6 +5,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.CacheStats;
 import com.google.common.cache.LoadingCache;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import org.apache.commons.codec.EncoderException;
 import org.apache.commons.codec.net.URLCodec;
 import org.apache.hc.core5.http.ClassicHttpResponse;
@@ -79,6 +80,16 @@ public class UserSummaryCache {
     }
     try {
       return userSummaryCache.get(id);
+    } catch (CacheLoader.InvalidCacheLoadException e) {
+      // The loader returned null: the user service does not know this id, or could not be reached.
+      // Every caller already treats a null summary as "no display name available" — see
+      // ProvenanceNameUtil — so degrade to that instead of failing the request. Guava reports this
+      // case with an unchecked exception, which is why it needs its own catch: without it the
+      // exception escaped to the generic mapper and turned every read of a resource whose
+      // creator/owner could not be resolved into a 500.
+      log.warn("No user summary available for {}; serving without a provenance display name", id);
+    } catch (UncheckedExecutionException e) {
+      log.error("Unchecked error retrieving the user summary for " + id, e);
     } catch (ExecutionException e) {
       log.error("Error Retrieving Elements from the CedarUserSummary Cache" + e.getMessage());
     }
