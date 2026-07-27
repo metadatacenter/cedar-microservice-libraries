@@ -44,6 +44,13 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
       // HTTP protocol version: this previously answered 505, reporting a client mistake as a
       // server fault (and as a retryable 5xx).
       return CedarResponse.unsupportedMediaType().build();
+    } else if (exception instanceof WebApplicationException webApplicationException) {
+      // Any other framework-level rejection Jersey raises before the resource runs — most visibly a
+      // ParamException when a query param cannot be parsed into its type, such as a non-integer
+      // limit=abc, which Jersey classifies as 400. Honor the status Jersey chose; the fallthrough
+      // below would otherwise report every one of these as a 500.
+      int status = webApplicationException.getResponse().getStatus();
+      return Response.status(status).build();
     }
 
     LoggingContext loggingContext = ThreadLocalRequestIdHolder.getLoggingContext();
