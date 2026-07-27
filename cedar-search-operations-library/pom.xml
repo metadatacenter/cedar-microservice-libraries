@@ -55,6 +55,15 @@
       <artifactId>httpclient5</artifactId>
     </dependency>
 
+    <!-- ElasticsearchManagementService names org.apache.http.HttpHost, which is HttpClient 4 and
+         reaches us through the OpenSearch client below rather than through anything we chose.
+         Declared so the compile dependency is visible here instead of resting on OpenSearch's
+         transitive graph; it goes away when OpenSearch moves to HttpClient 5. -->
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.opensearch.client</groupId>
       <artifactId>opensearch-rest-high-level-client</artifactId>
