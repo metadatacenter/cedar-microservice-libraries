@@ -82,7 +82,7 @@ public class ResourcePermissionRequestValidator {
 
   private void validateWritePermission() {
     if (!permissionService.userHasWriteAccessToResource(resourceId)) {
-      callResult.addError(AUTHORIZATION)
+      callResult.addError(PERMISSION)
           .errorKey(CedarErrorKey.NO_WRITE_ACCESS_TO_RESOURCE)
           .message("The current user has no write access to the resource")
           .parameter("nodeId", resourceId);
@@ -229,7 +229,7 @@ public class ResourcePermissionRequestValidator {
         return;
       }
       if (!permissionService.userIsOwnerOfResource(resource.getResourceId())) {
-        callResult.addError(AUTHORIZATION)
+        callResult.addError(PERMISSION)
             .errorKey(CedarErrorKey.NOT_AUTHORIZED)
             .message("Only the owner of a resource can change the ownership")
             .parameter("nodeId", resourceId);

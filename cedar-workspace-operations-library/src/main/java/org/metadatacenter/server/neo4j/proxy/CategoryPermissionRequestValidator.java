@@ -79,7 +79,7 @@ public class CategoryPermissionRequestValidator {
 
   private void validateWritePermission() {
     if (!categoryPermissionService.userHasWriteAccessToCategory(categoryId)) {
-      callResult.addError(AUTHORIZATION)
+      callResult.addError(PERMISSION)
           .errorKey(CedarErrorKey.NO_WRITE_ACCESS_TO_CATEGORY)
           .message("The current user has no write access to the category")
           .parameter("categoryId", categoryId.getId());
@@ -226,7 +226,7 @@ public class CategoryPermissionRequestValidator {
         return;
       }
       if (!categoryPermissionService.userIsOwnerOfCategory(categoryId)) {
-        callResult.addError(AUTHORIZATION)
+        callResult.addError(PERMISSION)
             .errorKey(CedarErrorKey.NOT_AUTHORIZED)
             .message("Only the owner of a category can change the ownership")
             .parameter("categoryId", categoryId.getId());
