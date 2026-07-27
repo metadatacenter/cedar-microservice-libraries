@@ -52,6 +52,9 @@ public abstract class UserServiceUtil {
     if (uiPreferences.getStylesheet() == null) {
       return false;
     }
+    if (uiPreferences.getPreferredDateFormat() == null) {
+      return false;
+    }
     if (uiPreferences.getTemplateEditor() == null) {
       return false;
     }

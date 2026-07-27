@@ -4,8 +4,8 @@ import org.metadatacenter.constant.CedarHeaderParameters;
 import org.metadatacenter.constant.CedarQueryParameters;
 import org.metadatacenter.error.CedarErrorPack;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.ws.rs.core.Context;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.ws.rs.core.Context;
 
 public abstract class AbstractExceptionMapper {
 

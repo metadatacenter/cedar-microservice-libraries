@@ -2,8 +2,8 @@ package org.metadatacenter.model.request;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
-import javax.validation.Valid;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 
 public class TemplateRecommendationRequest {
 

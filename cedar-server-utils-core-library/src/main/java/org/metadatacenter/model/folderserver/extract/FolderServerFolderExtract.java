@@ -10,11 +10,15 @@ import org.metadatacenter.model.folderserver.datagroup.FolderDataGroup;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.security.model.FilesystemResourceWithIdAndType;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerFolderExtract extends FolderServerResourceExtract implements FilesystemResourceWithIdAndType {
+
+  private static final Logger log = LoggerFactory.getLogger(FolderServerFolderExtract.class);
 
   private FolderDataGroup folderDataGroup;
 
@@ -27,7 +31,7 @@ public class FolderServerFolderExtract extends FolderServerResourceExtract imple
     try {
       return JsonMapper.MAPPER.readValue(JsonMapper.MAPPER.writeValueAsString(folder), FolderServerFolderExtract.class);
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the folder to a folder extract", e);
     }
     return null;
   }

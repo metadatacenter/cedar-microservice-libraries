@@ -1,6 +1,6 @@
 package org.metadatacenter.server.neo4j.proxy;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.server.neo4j.PathUtil;
 

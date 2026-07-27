@@ -11,6 +11,8 @@ import org.metadatacenter.model.folderserver.datagroup.DerivedFromGroup;
 import org.metadatacenter.model.folderserver.datagroup.ResourceWithDOIData;
 import org.metadatacenter.model.folderserver.datagroup.ResourceWithDerivedFromData;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
@@ -27,6 +29,8 @@ import java.io.IOException;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public abstract class FolderServerArtifact extends FileSystemResource implements ResourceWithDerivedFromData, ResourceWithDOIData {
 
+  private static final Logger log = LoggerFactory.getLogger(FolderServerArtifact.class);
+
   protected DerivedFromGroup provenanceDataGroup;
   protected DOIGroup doiDataGroup;
 
@@ -42,7 +46,7 @@ public abstract class FolderServerArtifact extends FileSystemResource implements
       FolderServerArtifact folderServerArtifact = JsonMapper.MAPPER.readValue(s, FolderServerArtifact.class);
       return folderServerArtifact;
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the current-user report to a FolderServerArtifact", e);
     }
     return null;
   }

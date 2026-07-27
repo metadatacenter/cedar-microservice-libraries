@@ -11,7 +11,6 @@ import java.util.List;
 public abstract class QueueServiceWithNonBlockingQueue extends QueueService {
 
   private static final Logger log = LoggerFactory.getLogger(QueueServiceWithNonBlockingQueue.class);
-  protected Jedis nonBlockingQueue;
   protected String queueName;
 
   public QueueServiceWithNonBlockingQueue(CacheServerPersistent cacheConfig, String queueId) {
@@ -21,29 +20,26 @@ public abstract class QueueServiceWithNonBlockingQueue extends QueueService {
 
   @Override
   public void close() {
-    log.info("NonBlocking queue:" + nonBlockingQueue);
-    if (nonBlockingQueue != null) {
-      log.info("Closing nonBlocking queue");
-      nonBlockingQueue.close();
-    }
     log.info("Closing pool");
     pool.close();
     log.info("Closed");
   }
 
-  public void initializeNonBlockingQueue() {
-    nonBlockingQueue = pool.getResource();
-  }
+  // Each poll borrows a connection from the pool instead of holding one for the lifetime of the
+  // service: an unreachable queue (Redis) then affects only the poll that hit it, instead of
+  // breaking the service permanently - or, when acquired at startup, preventing boot altogether
 
   public List<String> getAllMessages() {
     List<String> messages = new ArrayList<>();
-    boolean doRead = true;
-    while (doRead) {
-      String message = nonBlockingQueue.lpop(queueName);
-      if (message != null) {
-        messages.add(message);
-      } else {
-        doRead = false;
+    try (Jedis jedis = pool.getResource()) {
+      boolean doRead = true;
+      while (doRead) {
+        String message = jedis.lpop(queueName);
+        if (message != null) {
+          messages.add(message);
+        } else {
+          doRead = false;
+        }
       }
     }
     return messages;
@@ -51,7 +47,9 @@ public abstract class QueueServiceWithNonBlockingQueue extends QueueService {
 
   @Override
   public long messageCount() {
-    return nonBlockingQueue.llen(queueName);
+    try (Jedis jedis = pool.getResource()) {
+      return jedis.llen(queueName);
+    }
   }
 
 }

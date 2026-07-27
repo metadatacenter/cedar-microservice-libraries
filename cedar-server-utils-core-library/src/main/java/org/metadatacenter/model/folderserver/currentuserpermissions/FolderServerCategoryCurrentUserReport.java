@@ -29,7 +29,7 @@ public class FolderServerCategoryCurrentUserReport extends FolderServerCategory 
       String s = JsonMapper.MAPPER.writeValueAsString(category);
       return JsonMapper.MAPPER.readValue(s, FolderServerCategoryCurrentUserReport.class);
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the category to a current-user report", e);
     }
     return null;
   }

@@ -13,11 +13,15 @@ import org.metadatacenter.server.model.provenance.ProvenanceTime;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerNodeInfo implements ResourceWithVersionData, ResourceWithUsersData {
+
+  private static final Logger log = LoggerFactory.getLogger(FolderServerNodeInfo.class);
 
   protected BaseDataGroup baseData;
   protected NameDescriptionIdentifierGroup nameDescriptionIdentifierData;
@@ -52,7 +56,7 @@ public class FolderServerNodeInfo implements ResourceWithVersionData, ResourceWi
       }
       return info;
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the file system resource to a FolderServerNodeInfo", e);
     }
     return null;
   }

@@ -1,5 +1,6 @@
 package org.metadatacenter.server.security;
 
+import org.keycloak.adapters.KeycloakDeployment;
 import org.metadatacenter.exception.security.*;
 import org.metadatacenter.server.jsonld.LinkedDataUtil;
 import org.metadatacenter.server.security.model.AuthRequest;
@@ -11,7 +12,12 @@ import java.io.IOException;
 
 public class AuthorizationKeycloakAndApiKeyResolver implements IAuthorizationResolver {
 
-  public AuthorizationKeycloakAndApiKeyResolver() {
+  // Holds the realm's signing keys and issuer, so a bearer token can be verified rather than merely
+  // decoded. Supplied once at startup by CedarMicroserviceApplication.
+  private final KeycloakDeployment keycloakDeployment;
+
+  public AuthorizationKeycloakAndApiKeyResolver(KeycloakDeployment keycloakDeployment) {
+    this.keycloakDeployment = keycloakDeployment;
   }
 
   @Override
@@ -33,7 +39,7 @@ public class AuthorizationKeycloakAndApiKeyResolver implements IAuthorizationRes
       CedarAccessException {
     CedarUser user;
     if (authRequest instanceof CedarBearerAuthRequest) {
-      user = KeycloakUtils.getUserFromAuthRequest(linkedDataUtil, authRequest, userService);
+      user = KeycloakUtils.getUserFromAuthRequest(linkedDataUtil, authRequest, userService, keycloakDeployment);
       if (user == null) {
         throw new CedarUserNotFoundException(new FailedToLoadUserByTokenException(null));
       } else {

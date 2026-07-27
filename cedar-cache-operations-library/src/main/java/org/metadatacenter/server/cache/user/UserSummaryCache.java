@@ -5,12 +5,13 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.CacheStats;
 import com.google.common.cache.LoadingCache;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import org.apache.commons.codec.EncoderException;
 import org.apache.commons.codec.net.URLCodec;
-import org.apache.commons.lang.CharEncoding;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.ParseException;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
@@ -24,6 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
@@ -64,12 +66,30 @@ public class UserSummaryCache {
     }
   }
 
+  /**
+   * Stores a summary directly in the cache. Integration tests use this to seed their test users,
+   * so a lookup never falls through to the loader, which would call the user server.
+   */
+  public void put(CedarUserSummary userSummary) {
+    userSummaryCache.put(userSummary.getId(), userSummary);
+  }
+
   public CedarUserSummary getUser(String id) {
     if (id == null) {
       return null;
     }
     try {
       return userSummaryCache.get(id);
+    } catch (CacheLoader.InvalidCacheLoadException e) {
+      // The loader returned null: the user service does not know this id, or could not be reached.
+      // Every caller already treats a null summary as "no display name available" — see
+      // ProvenanceNameUtil — so degrade to that instead of failing the request. Guava reports this
+      // case with an unchecked exception, which is why it needs its own catch: without it the
+      // exception escaped to the generic mapper and turned every read of a resource whose
+      // creator/owner could not be resolved into a 500.
+      log.warn("No user summary available for {}; serving without a provenance display name", id);
+    } catch (UncheckedExecutionException e) {
+      log.error("Unchecked error retrieving the user summary for " + id, e);
     } catch (ExecutionException e) {
       log.error("Error Retrieving Elements from the CedarUserSummary Cache" + e.getMessage());
     }
@@ -84,12 +104,12 @@ public class UserSummaryCache {
     CedarRequestContext context = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
     String uuid = extractUserUUID(id);
     String url = microserviceUrlUtil.getUser().UuidSummary(uuid);
-    HttpResponse proxyResponse = null;
+    ClassicHttpResponse proxyResponse = null;
     try {
       proxyResponse = ProxyUtil.proxyGet(url, context);
       HttpEntity entity = proxyResponse.getEntity();
       if (entity != null) {
-        String userSummaryString = EntityUtils.toString(entity, CharEncoding.UTF_8);
+        String userSummaryString = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         if (userSummaryString != null && !userSummaryString.isEmpty()) {
           JsonNode jsonNode = JsonMapper.MAPPER.readTree(userSummaryString);
           JsonNode at = jsonNode.at("/screenName");
@@ -101,7 +121,7 @@ public class UserSummaryCache {
           }
         }
       }
-    } catch (IOException e) {
+    } catch (IOException | ParseException e) {
       throw new CedarProcessingException(e);
     }
     return null;

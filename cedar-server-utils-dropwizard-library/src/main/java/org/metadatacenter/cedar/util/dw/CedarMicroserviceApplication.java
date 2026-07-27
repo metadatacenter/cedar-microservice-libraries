@@ -1,16 +1,16 @@
 package org.metadatacenter.cedar.util.dw;
 
 import ch.qos.logback.classic.Level;
-import io.dropwizard.Application;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import io.dropwizard.core.Application;
 import io.dropwizard.assets.AssetsBundle;
 import io.dropwizard.configuration.EnvironmentVariableSubstitutor;
 import io.dropwizard.configuration.SubstitutingSourceProvider;
 import io.dropwizard.jetty.ConnectorFactory;
 import io.dropwizard.jetty.HttpConnectorFactory;
-import io.dropwizard.server.DefaultServerFactory;
-import io.dropwizard.setup.Bootstrap;
-import io.dropwizard.setup.Environment;
-import org.apache.commons.lang.StringUtils;
+import io.dropwizard.core.server.DefaultServerFactory;
+import io.dropwizard.core.setup.Bootstrap;
+import io.dropwizard.core.setup.Environment;
 import org.eclipse.jetty.servlets.CrossOriginFilter;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
@@ -25,6 +25,7 @@ import org.metadatacenter.server.logging.AppLoggerQueueService;
 import org.metadatacenter.server.logging.filter.ResponseLoggerFilter;
 import org.metadatacenter.server.logging.filter.RequestIdGeneratorFilter;
 import org.metadatacenter.server.security.Authorization;
+import org.keycloak.adapters.KeycloakDeployment;
 import org.metadatacenter.server.security.AuthorizationKeycloakAndApiKeyResolver;
 import org.metadatacenter.server.security.IAuthorizationResolver;
 import org.metadatacenter.server.security.KeycloakDeploymentProvider;
@@ -32,8 +33,8 @@ import org.metadatacenter.server.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.servlet.DispatcherType;
-import javax.servlet.FilterRegistration;
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.FilterRegistration;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -101,6 +102,10 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   public void run(T configuration, Environment environment) throws Exception {
     log.info("********** Initializing CEDAR microservice " + getName());
 
+    // Dropwizard 2 ignores unknown request-body properties by default; CEDAR's API contract
+    // predates that change and rejects them, so restore the strict behavior.
+    environment.getObjectMapper().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
     CedarRequestContextFactory.init(cedarConfig.getLinkedDataUtil());
 
     //Initialize user service
@@ -109,9 +114,10 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     //Initialize Keycloak
     KeycloakDeploymentProvider keycloakDeploymentProvider = new KeycloakDeploymentProvider();
-    keycloakDeploymentProvider.buildDeployment(cedarConfig.getKeycloakConfig());
-    // Init Authorization Resolver
-    IAuthorizationResolver authResolver = new AuthorizationKeycloakAndApiKeyResolver();
+    KeycloakDeployment keycloakDeployment = keycloakDeploymentProvider.buildDeployment(cedarConfig.getKeycloakConfig());
+    // Init Authorization Resolver. The deployment carries the realm's signing keys, so the resolver can
+    // verify a bearer token's signature instead of trusting its payload.
+    IAuthorizationResolver authResolver = new AuthorizationKeycloakAndApiKeyResolver(keycloakDeployment);
     Authorization.setAuthorizationResolver(authResolver);
     Authorization.setUserService(CedarDataServices.getNeoUserService());
 
@@ -139,6 +145,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     environment.jersey().register(CedarServerInsightReportResource.class);
     environment.jersey().register(RequestIdGeneratorFilter.class);
     environment.jersey().register(ResponseLoggerFilter.class);
+    environment.jersey().register(new InstanceContextInjectionFeature(environment.jersey().getResourceConfig()));
   }
 
   private Integer getApplicationHttpPort(T configuration) {
@@ -188,8 +195,8 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     // Configure CORS parameters
     String httpOrigins = "*";
-    String httpHeaders = StringUtils.join(HTTP_HEADERS, ",");
-    String httpMethods = StringUtils.join(HTTP_METHODS, ",");
+    String httpHeaders = String.join(",", HTTP_HEADERS);
+    String httpMethods = String.join(",", HTTP_METHODS);
     log.info("Setting up CORS...");
     log.info(ALLOWED_ORIGINS_PARAM + ":" + httpOrigins);
     log.info(ALLOWED_HEADERS_PARAM + ":" + httpHeaders);

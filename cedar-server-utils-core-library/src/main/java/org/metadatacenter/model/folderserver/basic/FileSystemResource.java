@@ -12,6 +12,8 @@ import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract
 import org.metadatacenter.server.security.model.FilesystemResourceWithIdAndType;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
@@ -30,6 +32,8 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public abstract class FileSystemResource extends AbstractCedarResourceWithDates implements ResourceWithOpenFlag,
     FilesystemResourceWithIdAndType, ResourceWithUsersAndUserNamesData, ResourceWithEverybodyPermission, ResourceWithParentPathInfoData {
+
+  private static final Logger log = LoggerFactory.getLogger(FileSystemResource.class);
 
   protected NameDescriptionIdentifierGroup nameDescriptionIdentifierGroup;
   protected ParentPathInfoGroup parentPathInfoGroup;
@@ -51,7 +55,7 @@ public abstract class FileSystemResource extends AbstractCedarResourceWithDates 
     try {
       return JsonMapper.MAPPER.readValue(JsonMapper.MAPPER.writeValueAsString(node), FileSystemResource.class);
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the resource extract to a FileSystemResource", e);
     }
     return null;
   }

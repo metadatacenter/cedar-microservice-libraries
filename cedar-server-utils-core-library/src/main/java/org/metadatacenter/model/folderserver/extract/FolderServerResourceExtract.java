@@ -12,6 +12,8 @@ import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.security.model.FilesystemResourceWithIdAndType;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
@@ -28,6 +30,8 @@ import java.io.IOException;
 })
 public abstract class FolderServerResourceExtract extends AbstractCedarResourceExtract implements FilesystemResourceWithIdAndType,
     ResourceWithUserNamesData, ResourceWithUsersData, ResourceWithEverybodyPermission {
+
+  private static final Logger log = LoggerFactory.getLogger(FolderServerResourceExtract.class);
 
   protected UsersDataGroup usersData;
   protected UserNamesDataGroup userNamesData;
@@ -53,7 +57,7 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
     try {
       return JsonMapper.MAPPER.readValue(JsonMapper.MAPPER.writeValueAsString(node), FolderServerResourceExtract.class);
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the file system resource to a resource extract", e);
     }
     return null;
   }
@@ -62,7 +66,7 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
     try {
       return JsonMapper.MAPPER.readValue(JsonMapper.MAPPER.writeValueAsString(info), FolderServerResourceExtract.class);
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the node info to a resource extract", e);
     }
     return null;
   }

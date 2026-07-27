@@ -49,12 +49,14 @@ public class PagedQuery {
     limit = limitDefault;
     if (limitInput.isPresent()) {
       limit = limitInput.get();
+      // A bad limit is a client mistake, so it must be a 400. Without badRequest() the error pack
+      // keeps its default INTERNAL_SERVER_ERROR status and a caller's typo answers 500.
       if (limit <= 0) {
         throw new CedarAssertionException("You should specify a positive limit!")
-            .parameter("limit", limit);
+            .parameter("limit", limit).badRequest();
       } else if (limit > limitMax) {
         throw new CedarAssertionException("You should specify a limit smaller than " + limitMax + "!")
-            .parameter("limit", limit);
+            .parameter("limit", limit).badRequest();
       }
     }
   }
@@ -64,7 +66,7 @@ public class PagedQuery {
     if (offsetInput.isPresent()) {
       if (offsetInput.get() < 0) {
         throw new CedarAssertionException("You should specify a positive or zero offset!")
-            .parameter("offset", offsetInput.get());
+            .parameter("offset", offsetInput.get()).badRequest();
       }
       offset = offsetInput.get();
     }

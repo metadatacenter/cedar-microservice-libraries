@@ -1,8 +1,8 @@
 package org.metadatacenter.util.http;
 
-import org.apache.http.NameValuePair;
-import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.message.BasicNameValuePair;
+import org.apache.hc.core5.http.NameValuePair;
+import org.apache.hc.core5.http.message.BasicNameValuePair;
+import org.apache.hc.core5.net.URIBuilder;
 import org.metadatacenter.constant.HttpConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

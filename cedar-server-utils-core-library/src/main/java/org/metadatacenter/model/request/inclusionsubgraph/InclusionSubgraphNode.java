@@ -11,10 +11,14 @@ import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract
 import org.metadatacenter.model.request.InclusionSubgraphNodeOperation;
 import org.metadatacenter.server.security.model.FilesystemResourceWithIdAndType;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 public class InclusionSubgraphNode extends AbstractCedarResourceWithDates implements FilesystemResourceWithIdAndType, ResourceWithUsersAndUserNamesData {
+
+  private static final Logger log = LoggerFactory.getLogger(InclusionSubgraphNode.class);
 
   protected NameDescriptionIdentifierGroup nameDescriptionIdentifierGroup;
   protected UsersDataGroup usersData;
@@ -41,7 +45,7 @@ public class InclusionSubgraphNode extends AbstractCedarResourceWithDates implem
     try {
       return JsonMapper.MAPPER.readValue(JsonMapper.MAPPER.writeValueAsString(node), InclusionSubgraphNode.class);
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the resource extract to an inclusion subgraph node", e);
     }
     return null;
   }

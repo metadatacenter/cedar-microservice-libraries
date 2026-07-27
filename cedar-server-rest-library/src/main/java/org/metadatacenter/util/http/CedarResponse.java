@@ -11,7 +11,7 @@ import org.metadatacenter.operation.CedarOperationDescriptor;
 import org.metadatacenter.server.result.BackendCallError;
 import org.metadatacenter.server.result.BackendCallResult;
 
-import javax.ws.rs.core.Response;
+import jakarta.ws.rs.core.Response;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
@@ -221,6 +221,14 @@ public abstract class CedarResponse {
 
   public static CedarResponseBuilder methodNotAllowed() {
     return newResponseBuilder().status(CedarResponseStatus.METHOD_NOT_ALLOWED);
+  }
+
+  public static CedarResponseBuilder conflict() {
+    return newResponseBuilder().status(CedarResponseStatus.CONFLICT);
+  }
+
+  public static CedarResponseBuilder unsupportedMediaType() {
+    return newResponseBuilder().status(CedarResponseStatus.UNSUPPORTED_MEDIA_TYPE);
   }
 
   public static CedarResponseBuilder httpVersionNotSupported() {

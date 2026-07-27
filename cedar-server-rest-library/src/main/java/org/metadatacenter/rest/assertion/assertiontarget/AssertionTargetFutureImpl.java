@@ -42,6 +42,11 @@ public abstract class AssertionTargetFutureImpl<T> implements AssertionTargetFut
     buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), errorPack, CedarResponseStatus.FORBIDDEN);
   }
 
+  @Override
+  public void otherwiseConflict(CedarErrorPack errorPack) throws CedarAssertionException {
+    buildAndThrowAssertionExceptionIfNeeded(getFirstAssertionError(), errorPack, CedarResponseStatus.CONFLICT);
+  }
+
   protected CedarAssertionResult getFirstAssertionError() {
     CedarAssertionResult assertionError;
     for (T target : targets) {

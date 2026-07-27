@@ -14,6 +14,7 @@ public abstract class CedarUserRolePermissionUtil {
   private static final Set<String> metadataCreatorPermissions;
   private static final Set<String> userAdministratorPermissions;
   private static final Set<String> groupAdministratorPermissions;
+  private static final Set<String> groupPrivilegedAdministratorPermissions;
   private static final Set<String> filesystemAdministratorPermissions;
   private static final Set<String> categoryAdministratorPermissions;
   private static final Set<String> categoryPrivilegedAdministratorPermissions;
@@ -59,7 +60,13 @@ public abstract class CedarUserRolePermissionUtil {
     groupAdministratorPermissions.add(CedarPermission.GROUP_READ.getPermissionName());
     groupAdministratorPermissions.add(CedarPermission.GROUP_UPDATE.getPermissionName());
     groupAdministratorPermissions.add(CedarPermission.GROUP_DELETE.getPermissionName());
-    groupAdministratorPermissions.add(CedarPermission.UPDATE_NOT_ADMINISTERED_GROUP.getPermissionName());
+
+    // UPDATE_NOT_ADMINISTERED_GROUP is the override that lets a user change a group they do not
+    // administer. It must not be in the default groupAdministrator role, which every user holds —
+    // otherwise anyone can rename, re-staff or delete anyone's group. Kept in a separate privileged
+    // role granted only to the built-in admin, mirroring categoryPrivilegedAdministrator.
+    groupPrivilegedAdministratorPermissions = new HashSet<>();
+    groupPrivilegedAdministratorPermissions.add(CedarPermission.UPDATE_NOT_ADMINISTERED_GROUP.getPermissionName());
 
     filesystemAdministratorPermissions = new HashSet<>();
     filesystemAdministratorPermissions.add(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE.getPermissionName());
@@ -93,6 +100,7 @@ public abstract class CedarUserRolePermissionUtil {
     roleToPermissions.put(CedarUserRole.METADATA_CREATOR, metadataCreatorPermissions);
     roleToPermissions.put(CedarUserRole.USER_ADMINISTRATOR, userAdministratorPermissions);
     roleToPermissions.put(CedarUserRole.GROUP_ADMINISTRATOR, groupAdministratorPermissions);
+    roleToPermissions.put(CedarUserRole.GROUP_PRIVILEGED_ADMINISTRATOR, groupPrivilegedAdministratorPermissions);
     roleToPermissions.put(CedarUserRole.FILESYSTEM_ADMINISTRATOR, filesystemAdministratorPermissions);
     roleToPermissions.put(CedarUserRole.CATEGORY_ADMINISTRATOR, categoryAdministratorPermissions);
     roleToPermissions.put(CedarUserRole.CATEGORY_PRIVILEGED_ADMINISTRATOR, categoryPrivilegedAdministratorPermissions);
@@ -108,11 +116,10 @@ public abstract class CedarUserRolePermissionUtil {
         permissions.addAll(roleToPermissions.get(role));
       }
     }
-    if (u.getPermissions() == null) {
-      u.setPermissions(new ArrayList<>());
-    }
-    u.getPermissions().clear();
-    u.getPermissions().addAll(permissions);
-    Collections.sort(u.getPermissions());
+    List<String> permissionList = new ArrayList<>(permissions);
+    Collections.sort(permissionList);
+    // Assign through the setter: it also rebuilds the derived permission set that
+    // CedarUser.has() consults, which mutating the list in place would leave stale
+    u.setPermissions(permissionList);
   }
 }

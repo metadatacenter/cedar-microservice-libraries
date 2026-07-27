@@ -29,6 +29,10 @@ public class GroupUsersRequestValidator {
     validateNodeExistence();
 
     if (callResult.isOk()) {
+      validateAdministratorPermission();
+    }
+
+    if (callResult.isOk()) {
       validateAndSetUsers();
     }
   }
@@ -39,6 +43,22 @@ public class GroupUsersRequestValidator {
       callResult.addError(CedarErrorType.NOT_FOUND)
           .errorKey(CedarErrorKey.GROUP_NOT_FOUND)
           .message("Group not found by id")
+          .parameter("groupId", groupId);
+    }
+  }
+
+  /**
+   * Membership is the widest lever in the sharing model, so changing it requires administering the
+   * group. GroupsResource enforces this at the HTTP layer; enforcing it here too means a non-HTTP
+   * caller of updateGroupUsers cannot skip it. Mirrors ResourcePermissionRequestValidator, which
+   * refuses an ACL change from a caller without write access. Checked after existence so a missing
+   * group is still a 404 rather than a 403.
+   */
+  private void validateAdministratorPermission() {
+    if (!neo4JUserSessionGroupService.userCanAdministerGroup(groupId)) {
+      callResult.addError(CedarErrorType.AUTHORIZATION)
+          .errorKey(CedarErrorKey.GROUP_CAN_BY_MODIFIED_ONLY_BY_GROUP_ADMIN)
+          .message("Only the administrators can update the group!")
           .parameter("groupId", groupId);
     }
   }

@@ -67,7 +67,6 @@ public class IndexUtils {
         pagedNodes = findAllNodes(context, Optional.empty(), limit, offset);
       } catch (CedarException e) {
         log.error("Error while reading nodes", e);
-        e.printStackTrace();
       }
       int count = 0;
       long totalCount = 0;

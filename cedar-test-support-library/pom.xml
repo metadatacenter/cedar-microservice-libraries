@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.metadatacenter</groupId>
+    <artifactId>cedar-microservice-libraries</artifactId>
+    <version>2.9.0</version>
+  </parent>
+
+  <artifactId>cedar-test-support-library</artifactId>
+  <packaging>jar</packaging>
+
+  <name>CEDAR Test Support Library</name>
+  <description>Test-time infrastructure for the CEDAR microservices: the in-process Neo4j and its
+    graph seeding. Consumed by the servers in test scope only; never a runtime dependency.
+  </description>
+
+  <dependencies>
+
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-server-rest-library</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-logging-operations-library</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.neo4j.test</groupId>
+      <artifactId>neo4j-harness</artifactId>
+      <!-- Tracks the deployed Neo4j server version (cedar-infra-neo4j), not the driver version -->
+      <version>5.3.0</version>
+      <exclusions>
+        <!-- Neo4j drags in slf4j-nop to silence its own logging. It was inert under slf4j 1.7
+             (no 1.7-style StaticLoggerBinder), but with the slf4j 2.0 ServiceLoader binding that
+             Dropwizard 4 requires, slf4j-nop competes with logback as the SLF4JServiceProvider and
+             can win, leaving Dropwizard unable to acquire its LoggerContext at boot. Excluding it
+             lets logback be the sole provider. -->
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-nop</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!--
+      In-process MariaDB for backend-free tests of the MySQL-backed servers; MySQL-compatible.
+      Consumers must add the OS-activated profile supplying the platform database binaries
+      (mariaDB4j-db-macos-arm64 / -linux64 / -winx64), since profiles do not travel with
+      dependencies.
+    -->
+    <dependency>
+      <groupId>ch.vorburger.mariaDB4j</groupId>
+      <artifactId>mariaDB4j</artifactId>
+      <version>3.2.0</version>
+    </dependency>
+
+    <!--
+      In-process MongoDB for backend-free tests of the Mongo-backed servers. Downloads and runs
+      a real mongod (cached under ~/.embedmongo), so the tests exercise real query semantics.
+    -->
+    <dependency>
+      <groupId>de.flapdoodle.embed</groupId>
+      <artifactId>de.flapdoodle.embed.mongo</artifactId>
+      <version>4.20.0</version>
+    </dependency>
+
+    <!--
+      A transitive dependency of the server stack pins the ancient JNA 4.2.1, whose native
+      library lacks an arm64 slice; the embedded Neo4j needs a JNA that runs on Apple Silicon.
+      Declared here so consumers inherit the working version on their test classpath.
+    -->
+    <dependency>
+      <groupId>net.java.dev.jna</groupId>
+      <artifactId>jna</artifactId>
+      <version>5.13.0</version>
+    </dependency>
+
+    <!--
+      Compile scope, not the parent-managed test scope: AbstractCedarConfigTest lives in main
+      sources so the servers can subclass it from their test classpath, and it carries JUnit 5
+      annotations.
+    -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>compile</scope>
+    </dependency>
+
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!--
+        The tests point the configuration at the embedded Neo4j through a CedarEnvironmentSource
+        override, so no add-opens flags or reflective environment rewriting are involved, and the
+        test classes can share a JVM (reuseForks true): CedarConfig.getInstance rebuilds when the
+        override changes, and the embedded servers and their redirection survive across classes.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <reuseForks>true</reuseForks>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>

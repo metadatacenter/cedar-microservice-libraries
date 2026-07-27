@@ -10,10 +10,14 @@ import org.metadatacenter.model.folderserver.datagroup.VersionDataGroup;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.security.model.auth.FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 public abstract class FolderServerSchemaArtifactReport extends FolderServerArtifactReport implements FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus, ResourceWithOpenFlag {
+
+  private static final Logger log = LoggerFactory.getLogger(FolderServerSchemaArtifactReport.class);
 
   private VersionDataGroup versionData;
 
@@ -27,7 +31,7 @@ public abstract class FolderServerSchemaArtifactReport extends FolderServerArtif
       String s = JsonMapper.MAPPER.writeValueAsString(resource);
       return JsonMapper.MAPPER.readValue(s, FolderServerSchemaArtifactReport.class);
     } catch (IOException e) {
-      e.printStackTrace();
+      log.error("Error while converting the artifact to a schema artifact report", e);
     }
     return null;
   }

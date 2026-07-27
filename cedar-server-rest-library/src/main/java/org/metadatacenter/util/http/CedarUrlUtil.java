@@ -1,11 +1,11 @@
 package org.metadatacenter.util.http;
 
-import org.apache.http.Header;
-import org.apache.http.HttpResponse;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.Header;
 
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.UriBuilder;
-import javax.ws.rs.core.UriInfo;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.UriBuilder;
+import jakarta.ws.rs.core.UriInfo;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 
@@ -41,7 +41,7 @@ public abstract class CedarUrlUtil {
     return builder.build();
   }
 
-  public static URI getLocationURI(HttpResponse httpResponse) {
+  public static URI getLocationURI(ClassicHttpResponse httpResponse) {
     URI location = null;
     if (httpResponse != null) {
       Header locationHeader = httpResponse.getFirstHeader(HttpHeaders.LOCATION);

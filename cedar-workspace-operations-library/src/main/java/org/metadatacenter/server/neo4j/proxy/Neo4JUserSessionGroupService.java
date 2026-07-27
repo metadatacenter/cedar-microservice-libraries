@@ -13,6 +13,7 @@ import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarGroupUser;
 import org.metadatacenter.server.security.model.auth.CedarGroupUsers;
 import org.metadatacenter.server.security.model.auth.CedarGroupUsersRequest;
+import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.*;
@@ -55,11 +56,19 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
 
   @Override
   public FolderServerGroup updateGroupById(CedarGroupId groupId, Map<NodeProperty, String> updateFields) {
+    // Session-layer backstop for the HTTP administrator check (defense in depth): a caller reaching
+    // this method without authority to administer the group makes no change and gets nothing back.
+    if (!userCanAdministerGroup(groupId)) {
+      return null;
+    }
     return proxies.group().updateGroupById(groupId, updateFields, cu.getResourceId());
   }
 
   @Override
   public boolean deleteGroupById(CedarGroupId groupId) {
+    if (!userCanAdministerGroup(groupId)) {
+      return false;
+    }
     return proxies.group().deleteGroupById(groupId);
   }
 
@@ -106,6 +115,15 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
       );
     }
     return ret;
+  }
+
+  /**
+   * Whether the current user may administer this group: either they administer it directly, or they
+   * hold the privileged override (built-in admin). This is the authority the HTTP layer already checks
+   * inline in GroupsResource; enforcing it here too closes the gap for any non-HTTP caller.
+   */
+  public boolean userCanAdministerGroup(CedarGroupId groupId) {
+    return userAdministersGroup(groupId) || cu.has(CedarPermission.UPDATE_NOT_ADMINISTERED_GROUP);
   }
 
   @Override

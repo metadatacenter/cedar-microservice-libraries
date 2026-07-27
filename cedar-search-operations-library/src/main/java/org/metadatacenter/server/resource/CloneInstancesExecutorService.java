@@ -2,12 +2,11 @@ package org.metadatacenter.server.resource;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.apache.commons.lang.CharEncoding;
-import org.apache.http.Header;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.HttpStatus;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.HttpStatus;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.constant.CedarQueryParameters;
@@ -42,10 +41,11 @@ import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.QueryParam;
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.Response;
+import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -145,11 +145,11 @@ public class CloneInstancesExecutorService {
     String originalDocument = null;
     try {
       String url = microserviceUrlUtil.getArtifact().getArtifactTypeWithId(resourceType, oldInstanceId);
-      HttpResponse proxyResponse = ProxyUtil.proxyGet(url, c);
+      ClassicHttpResponse proxyResponse = ProxyUtil.proxyGet(url, c);
       HttpEntity entity = proxyResponse.getEntity();
-      int statusCode = proxyResponse.getStatusLine().getStatusCode();
+      int statusCode = proxyResponse.getCode();
       if (entity != null) {
-        originalDocument = EntityUtils.toString(entity, CharEncoding.UTF_8);
+        originalDocument = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         JsonNode jsonNode = JsonMapper.MAPPER.readTree(originalDocument);
         ((ObjectNode) jsonNode).remove("@id");
         ((ObjectNode) jsonNode).put(SCHEMA_IS_BASED_ON, newTemplateId.getId());
@@ -168,9 +168,9 @@ public class CloneInstancesExecutorService {
       String url = microserviceUrlUtil.getArtifact().getResourceType(resourceType);
       url += "?" + CedarQueryParameters.QP_SKIP_VALIDATION + "=true";
 
-      HttpResponse templateProxyResponse = ProxyUtil.proxyPost(url, c, originalDocument);
+      ClassicHttpResponse templateProxyResponse = ProxyUtil.proxyPost(url, c, originalDocument);
 
-      int statusCode = templateProxyResponse.getStatusLine().getStatusCode();
+      int statusCode = templateProxyResponse.getCode();
       if (statusCode != HttpStatus.SC_CREATED) {
         // artifact was not created
         throw new CedarProcessingException("Error when creating artifact from template: " + statusCode);
@@ -178,7 +178,7 @@ public class CloneInstancesExecutorService {
         // artifact was created
         HttpEntity entity = templateProxyResponse.getEntity();
         Header locationHeader = templateProxyResponse.getFirstHeader(HttpHeaders.LOCATION);
-        String entityContent = EntityUtils.toString(entity, CharEncoding.UTF_8);
+        String entityContent = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         JsonNode jsonNode = JsonMapper.MAPPER.readTree(entityContent);
         String createdId = jsonNode.get("@id").asText();
         CedarArtifactId newInstanceId = CedarArtifactId.build(createdId, resourceType);
