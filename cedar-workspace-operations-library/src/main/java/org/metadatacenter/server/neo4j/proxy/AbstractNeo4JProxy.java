@@ -123,7 +123,11 @@ public abstract class AbstractNeo4JProxy {
     try {
       paramMapString = JsonMapper.PRETTY_MAPPER.writeValueAsString(log.getParameterMap());
     } catch (JsonProcessingException e) {
-      e.printStackTrace();
+      // Qualified because the CypherQueryLog parameter above shadows the logger field.
+      AbstractNeo4JProxy.log.error("Could not serialize the Cypher parameter map for the query log", e);
+      // A placeholder rather than null: paramMapString is passed to DigestUtils.md5Hex below, which
+      // throws on null, and recording a query must never be able to fail the query itself.
+      paramMapString = "<unserializable parameter map>";
     }
 
     LoggingContext loggingContext = ThreadLocalRequestIdHolder.getLoggingContext();
