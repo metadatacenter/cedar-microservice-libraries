@@ -39,7 +39,11 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
     } else if (exception instanceof NotFoundException) {
       return CedarResponse.notFound().build();
     } else if (exception instanceof NotSupportedException) {
-      return CedarResponse.httpVersionNotSupported().build();
+      // JAX-RS throws NotSupportedException when the request's Content-Type does not match the
+      // endpoint's @Consumes, which is 415 Unsupported Media Type. It has nothing to do with the
+      // HTTP protocol version: this previously answered 505, reporting a client mistake as a
+      // server fault (and as a retryable 5xx).
+      return CedarResponse.unsupportedMediaType().build();
     }
 
     LoggingContext loggingContext = ThreadLocalRequestIdHolder.getLoggingContext();

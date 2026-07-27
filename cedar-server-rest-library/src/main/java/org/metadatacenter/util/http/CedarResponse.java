@@ -223,6 +223,10 @@ public abstract class CedarResponse {
     return newResponseBuilder().status(CedarResponseStatus.METHOD_NOT_ALLOWED);
   }
 
+  public static CedarResponseBuilder unsupportedMediaType() {
+    return newResponseBuilder().status(CedarResponseStatus.UNSUPPORTED_MEDIA_TYPE);
+  }
+
   public static CedarResponseBuilder httpVersionNotSupported() {
     return newResponseBuilder().status(CedarResponseStatus.HTTP_VERSION_NOT_SUPPORTED);
   }
