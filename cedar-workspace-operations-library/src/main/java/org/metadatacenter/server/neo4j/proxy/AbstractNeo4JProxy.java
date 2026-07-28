@@ -55,6 +55,19 @@ public abstract class AbstractNeo4JProxy {
     driver = GraphDatabase.driver(proxies.config.getUri(), AuthTokens.basic(proxies.config.getUserName(), proxies.config.getUserPassword()));
   }
 
+  /**
+   * Closes this proxy's Neo4j driver, releasing its connection pool and Netty event-loop threads.
+   * Each proxy opens its own driver, so a discarded proxy set holds a dozen of these; see
+   * {@link Neo4JProxies#close()} for why they must be reclaimed rather than left to garbage collection.
+   */
+  public void close() {
+    try {
+      driver.close();
+    } catch (RuntimeException e) {
+      log.warn("Error closing the Neo4j driver", e);
+    }
+  }
+
   private void reportQueryError(ClientException ex, CypherQuery q) {
     log.error("Error executing Cypher query:", ex);
     log.error(q.getOriginalQuery());

@@ -44,6 +44,13 @@ public final class CedarDataServices {
     if (instance.proxies != null && instance.cedarConfig == cedarConfig) {
       return;
     }
+    // A different config means the previous proxy set is being replaced. Close its drivers first, or
+    // each abandoned set leaks a dozen Neo4j connection pools and their Netty event-loop threads — in a
+    // shared test JVM that re-boots the app per class, that exhausts the process. Never runs in
+    // production, where the initializer runs once with a single config.
+    if (instance.proxies != null) {
+      instance.proxies.close();
+    }
     instance.cedarConfig = cedarConfig;
     instance.proxies = new Neo4JProxies(cedarConfig);
     instance.neoUserService = new UserServiceNeo4j(instance.proxies.user());

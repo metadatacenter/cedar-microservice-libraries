@@ -45,6 +45,28 @@ public class Neo4JProxies {
     this.categoryPermissionProxy = new Neo4JProxyCategoryPermission(this, cedarConfig);
   }
 
+  /**
+   * Closes every proxy's Neo4j driver. Each proxy opens its own driver, so a discarded proxy set holds
+   * a dozen connection pools and their Netty event-loop threads, and nothing reclaims them on garbage
+   * collection. In production this never runs — the application boots once — but a shared test JVM
+   * re-boots the application per class, and without closing the previous set the drivers pile up until
+   * the process cannot create another event loop and a later test class fails to start.
+   */
+  public void close() {
+    adminProxy.close();
+    folderProxy.close();
+    groupProxy.close();
+    userProxy.close();
+    permissionProxy.close();
+    artifactProxy.close();
+    resourceProxy.close();
+    filesystemResourceProxy.close();
+    graphProxy.close();
+    versionProxy.close();
+    categoryProxy.close();
+    categoryPermissionProxy.close();
+  }
+
   public Neo4JProxyAdmin admin() {
     return adminProxy;
   }
