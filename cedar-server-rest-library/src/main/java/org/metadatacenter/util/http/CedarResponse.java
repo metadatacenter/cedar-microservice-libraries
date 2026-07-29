@@ -10,13 +10,18 @@ import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.operation.CedarOperationDescriptor;
 import org.metadatacenter.server.result.BackendCallError;
 import org.metadatacenter.server.result.BackendCallResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 public abstract class CedarResponse {
+
+  private static final Logger log = LoggerFactory.getLogger(CedarResponse.class);
 
   private static CedarResponseBuilder newResponseBuilder() {
     return new CedarResponseBuilder();
@@ -94,10 +99,13 @@ public abstract class CedarResponse {
         r.put("statusCode", status.getStatusCode());
         r.put("operation", operation == null ? null : operation.asJson());
         if (exception != null) {
-          StackTraceElement[] stackTrace = exception.getStackTrace();
-          if (stackTrace != null) {
-            r.put("stackTrace", stackTrace);
-          }
+          // Never serialize the stack trace to the client: it leaks class names, source files, line
+          // numbers and internal architecture (including on unauthenticated routes). Log the exception
+          // server-side under a correlation id and return only that id, so an operator can find the
+          // full detail in the logs while the client gets nothing exploitable.
+          String errorId = UUID.randomUUID().toString();
+          log.error("Error response {} (status {}): {}", errorId, status, exception.getMessage(), exception);
+          r.put("errorId", errorId);
         }
 
         if (!r.isEmpty()) {
