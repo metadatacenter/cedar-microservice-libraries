@@ -44,6 +44,13 @@ public final class CedarDataServices {
     if (instance.proxies != null && instance.cedarConfig == cedarConfig) {
       return;
     }
+    // A different config means the previous proxy set is being replaced. Close its drivers first, or
+    // each abandoned set leaks a dozen Neo4j connection pools and their Netty event-loop threads — in a
+    // shared test JVM that re-boots the app per class, that exhausts the process. Never runs in
+    // production, where the initializer runs once with a single config.
+    if (instance.proxies != null) {
+      instance.proxies.close();
+    }
     instance.cedarConfig = cedarConfig;
     instance.proxies = new Neo4JProxies(cedarConfig);
     instance.neoUserService = new UserServiceNeo4j(instance.proxies.user());
@@ -51,9 +58,7 @@ public final class CedarDataServices {
 
   public static GroupServiceSession getGroupServiceSession(CedarRequestContext context) {
     if (instance.proxies == null) {
-      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-      System.exit(-2);
-      return null;
+      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     } else {
       return Neo4JUserSessionGroupService
           .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
@@ -63,9 +68,7 @@ public final class CedarDataServices {
 
   public static CategoryServiceSession getCategoryServiceSession(CedarRequestContext context) {
     if (instance.proxies == null) {
-      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-      System.exit(-2);
-      return null;
+      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     } else {
       return Neo4JUserSessionCategoryService
           .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
@@ -75,9 +78,7 @@ public final class CedarDataServices {
 
   public static GraphServiceSession getGraphServiceSession(CedarRequestContext context) {
     if (instance.proxies == null) {
-      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-      System.exit(-2);
-      return null;
+      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     } else {
       return Neo4JUserSessionGraphService
           .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
@@ -87,9 +88,7 @@ public final class CedarDataServices {
 
   public static ResourcePermissionServiceSession getResourcePermissionServiceSession(CedarRequestContext context) {
     if (instance.proxies == null) {
-      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-      System.exit(-2);
-      return null;
+      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     } else {
       return Neo4JUserSessionResourcePermissionService
           .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
@@ -99,9 +98,7 @@ public final class CedarDataServices {
 
   public static CategoryPermissionServiceSession getCategoryPermissionServiceSession(CedarRequestContext context) {
     if (instance.proxies == null) {
-      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-      System.exit(-2);
-      return null;
+      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     } else {
       return Neo4JUserSessionCategoryPermissionService
           .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
@@ -111,9 +108,7 @@ public final class CedarDataServices {
 
   public static VersionServiceSession getVersionServiceSession(CedarRequestContext context) {
     if (instance.proxies == null) {
-      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-      System.exit(-2);
-      return null;
+      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     } else {
       return Neo4JUserSessionVersionService
           .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
@@ -123,9 +118,7 @@ public final class CedarDataServices {
 
   public static AdminServiceSession getAdminServiceSession(CedarRequestContext context) {
     if (instance.proxies == null) {
-      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-      System.exit(-2);
-      return null;
+      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     } else {
       return Neo4JUserSessionAdminService
           .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
@@ -135,9 +128,7 @@ public final class CedarDataServices {
 
   public static FolderServiceSession getFolderServiceSession(CedarRequestContext context) {
     if (instance.proxies == null) {
-      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-      System.exit(-2);
-      return null;
+      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     } else {
       return Neo4JUserSessionFolderService.get(instance.cedarConfig, instance.proxies, context.getCedarUser(),
           context.getGlobalRequestIdHeader(),
@@ -147,9 +138,7 @@ public final class CedarDataServices {
 
   public static InclusionSubgraphServiceSession getInclusionSubgraphServiceSession(CedarRequestContext context) {
     if (instance.proxies == null) {
-      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-      System.exit(-2);
-      return null;
+      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     } else {
       return Neo4JUserSessionInclusionSubgraphService.get(instance.cedarConfig, instance.proxies, context.getCedarUser(),
           context.getGlobalRequestIdHeader(),
@@ -159,9 +148,7 @@ public final class CedarDataServices {
 
   public static UserServiceSession getUserServiceSession(CedarRequestContext context) {
     if (instance.proxies == null) {
-      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-      System.exit(-2);
-      return null;
+      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     } else {
       return Neo4JUserSessionUserService
           .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
@@ -172,9 +159,7 @@ public final class CedarDataServices {
   // DO NOT USE unless you need internal functionality
   public static Neo4JProxies getProxies() {
     if (instance.proxies == null) {
-      log.error("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-      System.exit(-2);
-      return null;
+      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     } else {
       return instance.proxies;
     }
@@ -182,9 +167,7 @@ public final class CedarDataServices {
 
   public static UserService getNeoUserService() {
     if (instance.neoUserService == null) {
-      log.error("You need to initialize neo user service: CedarDataServices.initializeNeoUserService()");
-      System.exit(-1);
-      return null;
+      throw new IllegalStateException("You need to initialize neo user service: CedarDataServices.initializeNeoUserService()");
     } else {
       return instance.neoUserService;
     }
@@ -192,10 +175,8 @@ public final class CedarDataServices {
 
   public static MongoClientFactory getMongoClientFactoryForDocuments() {
     if (instance.mongoClientFactoryForDocuments == null) {
-      log.error("You need to initialize mongoClientFactory: " +
+      throw new IllegalStateException("You need to initialize mongoClientFactory: " +
           "CedarDataServices.initializeMongoClientFactoryForDocuments(mongoConnection)");
-      System.exit(-1);
-      return null;
     } else {
       return instance.mongoClientFactoryForDocuments;
     }

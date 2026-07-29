@@ -45,11 +45,11 @@ public class ValuerecommenderReindexExecutorService {
     try {
       adminUser = userService.findUserByApiKey(adminUserApiKey);
     } catch (Exception e) {
-      log.error("Error while loading admin user by apiKey:" + adminUserApiKey);
+      // Never log the API key itself; log the failure with the exception instead.
+      log.error("Error while loading the admin user by its configured API key", e);
     }
     if (adminUser == null) {
-      log.error("Admin user not found by apiKey:" + adminUserApiKey);
-      log.error("Valuerecommender reindex will not be possible!");
+      log.error("Admin user not found by the configured API key; valuerecommender reindex will not be possible.");
     }
   }
 
