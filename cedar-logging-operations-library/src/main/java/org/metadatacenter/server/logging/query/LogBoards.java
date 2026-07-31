@@ -33,13 +33,25 @@ public final class LogBoards {
   private static final List<Filter> EXCLUDE_POLLING =
       List.of(new Filter("component", "notin", null, List.of("monitor", "messaging")));
 
+  /**
+   * @param endpoint set only for the handful of questions that cannot be a spec because they join the
+   *                 two log tables. The page GETs that path with the current range instead of POSTing
+   *                 {@code spec}, and renders the result with the same table — the response shape is
+   *                 identical, so "board" stays one concept in the UI.
+   */
   public record Board(String id,
                       String title,
                       String question,
                       String group,
                       int defaultRangeMinutes,
                       LogQuerySpec spec,
-                      String note) {
+                      String note,
+                      String endpoint) {
+
+    public Board(String id, String title, String question, String group, int defaultRangeMinutes,
+                 LogQuerySpec spec, String note) {
+      this(id, title, question, group, defaultRangeMinutes, spec, note, null);
+    }
   }
 
   private static final int DAY = 60 * 24;
@@ -168,7 +180,15 @@ public final class LogBoards {
             cypher(null, List.of("operation", "component"),
                 List.of("count", "sum:duration", "p95:duration"),
                 List.of(new Sort("count", "desc")), null, 100),
-            null)
+            null),
+
+        // ---- cross-table ---------------------------------------------------------------------
+        new Board("db-share", "Database share by handler",
+            "Which slow handlers are NOT database-bound?",
+            "Cross-table", WEEK, null,
+            "Joins the two log tables on (globalRequestId, component). A high total with a LOW share "
+                + "means the time is going somewhere other than Neo4j.",
+            "logs/db-share")
     );
   }
 
