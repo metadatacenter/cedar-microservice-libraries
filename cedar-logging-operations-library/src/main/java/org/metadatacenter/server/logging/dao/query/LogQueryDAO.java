@@ -17,6 +17,8 @@ import org.metadatacenter.server.logging.query.LogQueryResults.FacetResult;
 import org.metadatacenter.server.logging.query.LogQueryResults.FacetValue;
 import org.metadatacenter.server.logging.query.LogQueryResults.QueryResult;
 import org.metadatacenter.server.logging.query.LogQueryResults.TableCoverage;
+import org.metadatacenter.server.logging.query.LogQueryResults.TraceResult;
+import org.metadatacenter.server.logging.query.LogQueryResults.TraceSpan;
 import org.metadatacenter.server.logging.query.LogQuerySpec;
 
 import java.math.BigDecimal;
@@ -24,9 +26,12 @@ import java.math.BigInteger;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Executes {@link LogQueryBuilder} output against the raw log tables, and serves the two supporting
@@ -158,6 +163,127 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
     return new CoverageResult(tables, notes);
   }
 
+  // ---- trace -------------------------------------------------------------------------------------
+
+  /**
+   * Resolve one globalRequestId into a distributed trace: every component that handled the request,
+   * plus every Cypher query underneath it, ordered on a shared timeline.
+   *
+   * This is the one query that genuinely cannot be expressed by the generic engine — it spans both
+   * tables and computes cross-table totals — which is why it gets its own endpoint rather than
+   * bending the spec. Both tables are indexed on globalRequestId, so each half is an index lookup.
+   *
+   * Note that globalRequestId is intentionally NOT unique in log_request: a single browser request
+   * fans out across microservices and each logs its own row under the same id. That fan-out is
+   * exactly what makes this view worth having.
+   */
+  public TraceResult trace(String globalRequestId, int maxSpans) {
+    if (globalRequestId == null || globalRequestId.isBlank()) {
+      throw new IllegalArgumentException("A globalRequestId is required.");
+    }
+    long started = System.nanoTime();
+
+    List<Object[]> reqRows = traceRows(
+        "SELECT systemComponentName, className, methodName, httpMethod, path, status, "
+            + "COALESCE(startTime, requestTime), handlerDuration, localRequestId "
+            + "FROM log_request WHERE globalRequestId = :grid ORDER BY COALESCE(startTime, requestTime)",
+        globalRequestId, maxSpans + 1);
+
+    List<Object[]> cypherRows = traceRows(
+        "SELECT systemComponentName, operation, runnableHash, runnable, "
+            + "COALESCE(startTime, logTime), duration, localRequestId "
+            + "FROM log_cypher WHERE globalRequestId = :grid ORDER BY COALESCE(startTime, logTime)",
+        globalRequestId, maxSpans + 1);
+
+    boolean truncated = reqRows.size() > maxSpans || cypherRows.size() > maxSpans;
+    if (reqRows.size() > maxSpans) {
+      reqRows = reqRows.subList(0, maxSpans);
+    }
+    if (cypherRows.size() > maxSpans) {
+      cypherRows = cypherRows.subList(0, maxSpans);
+    }
+
+    List<TraceSpan> spans = new ArrayList<>();
+    Set<String> components = new LinkedHashSet<>();
+    long handlerNanos = 0;
+    long dbNanos = 0;
+
+    for (Object[] r : reqRows) {
+      String component = str(r[0]);
+      components.add(component);
+      handlerNanos += num(r[7]);
+      spans.add(new TraceSpan("request", component,
+          handler(str(r[1]), str(r[2])),
+          (str(r[3]) == null ? "" : str(r[3]) + " ") + (str(r[4]) == null ? "" : str(r[4])),
+          r[5] == null ? null : ((Number) r[5]).intValue(),
+          iso(r[6]), 0L, num(r[7]) / 1_000_000.0, str(r[8])));
+    }
+    for (Object[] r : cypherRows) {
+      components.add(str(r[0]));
+      dbNanos += num(r[5]);
+      spans.add(new TraceSpan("cypher", str(r[0]),
+          str(r[1]) + " " + shortHash(str(r[2])),
+          str(r[3]),
+          null, iso(r[4]), 0L, num(r[5]) / 1_000_000.0, str(r[6])));
+    }
+
+    spans.sort(Comparator.comparing(s -> s.startedAt() == null ? "" : s.startedAt()));
+
+    // Offsets are relative to the first span so the UI can draw a waterfall directly.
+    long t0 = spans.isEmpty() ? 0 : epochMillis(spans.get(0).startedAt());
+    double endMs = 0;
+    List<TraceSpan> offset = new ArrayList<>(spans.size());
+    for (TraceSpan s : spans) {
+      long off = s.startedAt() == null ? 0 : epochMillis(s.startedAt()) - t0;
+      endMs = Math.max(endMs, off + s.durationMs());
+      offset.add(new TraceSpan(s.kind(), s.component(), s.label(), s.detail(), s.status(),
+          s.startedAt(), off, s.durationMs(), s.localRequestId()));
+    }
+
+    double handlerMs = handlerNanos / 1_000_000.0;
+    double dbMs = dbNanos / 1_000_000.0;
+    List<String> notes = new ArrayList<>();
+    if (offset.isEmpty()) {
+      notes.add("No rows for this globalRequestId — it may have been pruned, or the id is wrong.");
+    }
+    if (truncated) {
+      notes.add("Trace truncated at " + maxSpans + " spans per table.");
+    }
+    notes.add("Handler time sums overlapping component spans, so it exceeds wall time by design.");
+
+    return new TraceResult(globalRequestId, offset, reqRows.size(), cypherRows.size(),
+        components.size(), handlerMs, dbMs,
+        handlerMs > 0 ? Math.min(100.0, dbMs / handlerMs * 100.0) : 0.0,
+        endMs, truncated, (System.nanoTime() - started) / 1_000_000L, notes);
+  }
+
+  @SuppressWarnings("unchecked")
+  private List<Object[]> traceRows(String sql, String globalRequestId, int limit) {
+    NativeQuery<?> q = currentSession().createNativeQuery(sql + " LIMIT :lim");
+    q.setParameter("grid", globalRequestId);
+    q.setParameter("lim", limit);
+    return (List<Object[]>) q.getResultList();
+  }
+
+  private static long epochMillis(String iso) {
+    try {
+      return Instant.parse(iso).toEpochMilli();
+    } catch (RuntimeException e) {
+      return 0L;
+    }
+  }
+
+  private static String handler(String cls, String mth) {
+    if (cls == null && mth == null) {
+      return null;
+    }
+    return (cls == null ? "?" : cls) + "." + (mth == null ? "?" : mth);
+  }
+
+  private static String shortHash(String h) {
+    return h == null ? "" : (h.length() > 10 ? h.substring(0, 10) : h);
+  }
+
   // ---- value normalization -----------------------------------------------------------------------
 
   /**
@@ -189,6 +315,11 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
 
   private static long num(Object o) {
     return o == null ? 0L : ((Number) o).longValue();
+  }
+
+  private static String str(Object o) {
+    Object v = normalize(o);
+    return v == null ? null : String.valueOf(v);
   }
 
   private static String iso(Object o) {

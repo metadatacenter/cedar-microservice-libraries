@@ -62,4 +62,47 @@ public final class LogQueryResults {
 
   public record CoverageResult(List<TableCoverage> tables, List<String> notes) {
   }
+
+  // ---- trace ---------------------------------------------------------------------------------
+
+  /**
+   * One span in a distributed trace: either a component's handling of the request, or a single Cypher
+   * query underneath it. {@code offsetMs} is relative to the earliest span, so the UI can draw a
+   * waterfall without doing date arithmetic.
+   */
+  public record TraceSpan(String kind,
+                          String component,
+                          String label,
+                          String detail,
+                          Integer status,
+                          String startedAt,
+                          long offsetMs,
+                          double durationMs,
+                          String localRequestId) {
+  }
+
+  /**
+   * A whole request across the fleet. globalRequestId is deliberately non-unique in log_request — one
+   * browser request fans out across components — so this resolves an id to every component that
+   * handled it plus every query they ran.
+   *
+   * @param handlerMs   summed handler time across components (spans overlap, so this is not wall time)
+   * @param dbMs        summed Cypher time
+   * @param dbSharePct  dbMs as a percentage of handlerMs — a handler that is slow with a low share is
+   *                    slow for reasons other than the database
+   * @param spanMs      wall time from the first span's start to the last span's end
+   */
+  public record TraceResult(String globalRequestId,
+                            List<TraceSpan> spans,
+                            int requestCount,
+                            int cypherCount,
+                            int componentCount,
+                            double handlerMs,
+                            double dbMs,
+                            double dbSharePct,
+                            double spanMs,
+                            boolean truncated,
+                            long elapsedMs,
+                            List<String> notes) {
+  }
 }
