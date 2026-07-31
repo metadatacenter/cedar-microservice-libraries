@@ -78,11 +78,18 @@ class LogQueryBuilderTest {
     assertTrue(e.getMessage().contains("cursor is only valid with the default sort"));
   }
 
+  /** Metrics with no groupBy is the totals shape behind a board's KPI tiles: one row, no GROUP BY. */
   @Test
-  void metricsWithoutGroupByAreRejected() {
-    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> LogQueryBuilder.build(spec(null, List.of("count"), null)));
-    assertTrue(e.getMessage().contains("Metrics require groupBy"));
+  void metricsWithoutGroupByProduceTotals() {
+    BuiltQuery q = LogQueryBuilder.build(spec(null, List.of("count", "p95:handlerDuration"), null));
+
+    assertTrue(q.grouped());
+    assertFalse(q.keysetPageable());
+    assertFalse(q.sql().contains("GROUP BY"), "totals over the whole range have no grouping");
+    assertTrue(q.sql().contains("COUNT(*) AS `count`"));
+    assertTrue(q.sql().contains("ROW_NUMBER() OVER ( ORDER BY handlerDuration)"),
+        "an empty PARTITION BY still ranks the whole set");
+    assertEquals(2, q.columns().size());
   }
 
   // ---- grouped mode -----------------------------------------------------------------------------
@@ -194,11 +201,11 @@ class LogQueryBuilderTest {
   }
 
   @Test
-  void havingWithoutGroupByIsRejected() {
+  void havingWithoutMetricsIsRejected() {
     LogQuerySpec s = new LogQuerySpec("request", FROM, TO, null, null, null, null, null, null,
         List.of(new LogQuerySpec.Having("count", "gt", "1")));
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> LogQueryBuilder.build(s));
-    assertTrue(e.getMessage().contains("Having requires groupBy"));
+    assertTrue(e.getMessage().contains("Having needs metrics"));
   }
 
   @Test
