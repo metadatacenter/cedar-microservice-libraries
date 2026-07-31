@@ -32,6 +32,9 @@ import java.util.Map;
         @Index(columnList = "methodName", name = "IDX_log_request_methodName"),
         @Index(columnList = "className", name = "IDX_log_request_className"),
         @Index(columnList = "httpMethod", name = "IDX_log_request_httpMethod"),
+        @Index(columnList = "status", name = "IDX_log_request_status"),
+        @Index(columnList = "apiKeyHash", name = "IDX_log_request_apiKeyHash"),
+        @Index(columnList = "aggregatedAt", name = "IDX_log_request_aggregatedAt"),
     })
 public class ApplicationRequestLog {
 
@@ -68,8 +71,15 @@ public class ApplicationRequestLog {
   @Column(length = 32)
   private String jwtTokenHash;
 
+  @Column(length = 32)
+  private String apiKeyHash;
+
   @Column(length = 9)
   private String authSource;
+
+  // HTTP response status code. Nullable: unknown for legacy rows and for requests that never
+  // produced a response-filter END event (e.g. the process died mid-request).
+  private Integer status;
 
   private Instant requestTime;
 
@@ -100,6 +110,10 @@ public class ApplicationRequestLog {
 
   @Lob
   private String errorPack;
+
+  // Set by the aggregation job (not the logging path) once this row has been folded into the hourly
+  // rollups. The prune job deletes only rows where this is non-null and past the retention window.
+  private Instant aggregatedAt;
 
   public static ApplicationRequestLog fromAppRequestFilter(AppLogMessage appLog) {
     ApplicationRequestLog l = new ApplicationRequestLog();
@@ -132,6 +146,7 @@ public class ApplicationRequestLog {
     userId = appLog.getParamAsString(AppLogParam.USER_ID);
     clientSessionId = appLog.getParamAsString(AppLogParam.CLIENT_SESSION_ID);
     jwtTokenHash = appLog.getParamAsString(AppLogParam.JWT_TOKEN_HASH);
+    apiKeyHash = appLog.getParamAsString(AppLogParam.API_KEY_HASH);
     authSource = appLog.getParamAsString(AppLogParam.AUTH_SOURCE);
     startTime = appLog.getLogTime();
   }
@@ -139,6 +154,12 @@ public class ApplicationRequestLog {
   public void mergeEndLog(AppLogMessage appLog) {
     type = AppLogType.REQUEST_HANDLER.getValue();
     subType = AppLogSubType.FULL.getValue();
+    // HTTP status is only known at response time (the response-filter END event). A real status is
+    // always > 0, so treat a missing/zero param as "unknown" and leave the field null.
+    int responseStatus = appLog.getParamAsInt(AppLogParam.STATUS);
+    if (responseStatus > 0) {
+      status = responseStatus;
+    }
     endTime = appLog.getLogTime();
     if (startTime != null && endTime != null) {
       handlerDuration = Duration.between(startTime, endTime).toNanos();

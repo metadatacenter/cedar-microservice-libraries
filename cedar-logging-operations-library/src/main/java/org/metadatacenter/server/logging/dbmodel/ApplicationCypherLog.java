@@ -25,7 +25,8 @@ import java.util.Map;
         @Index(columnList = "className", name = "IDX_log_cypher_className"),
         @Index(columnList = "operation", name = "IDX_log_cypher_operation"),
         @Index(columnList = "runnableHash", name = "IDX_log_cypher_runnableHash"),
-        @Index(columnList = "parametersHash", name = "IDX_log_cypher_parametersHash")
+        @Index(columnList = "parametersHash", name = "IDX_log_cypher_parametersHash"),
+        @Index(columnList = "aggregatedAt", name = "IDX_log_cypher_aggregatedAt")
     })
 public class ApplicationCypherLog {
 
@@ -80,6 +81,10 @@ public class ApplicationCypherLog {
 
   @Column(length = 32)
   private String parametersHash;
+
+  // Set by the aggregation job (not the logging path) once this row has been folded into the hourly
+  // rollups. The prune job deletes only rows where this is non-null and past the retention window.
+  private Instant aggregatedAt;
 
   public static ApplicationCypherLog fromAppCypherLog(AppLogMessage appLog) {
     ApplicationCypherLog l = new ApplicationCypherLog();

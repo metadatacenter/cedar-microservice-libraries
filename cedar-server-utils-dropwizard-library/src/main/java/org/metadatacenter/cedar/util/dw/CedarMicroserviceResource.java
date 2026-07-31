@@ -24,6 +24,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.UriInfo;
 
+import static org.metadatacenter.constant.HttpConstants.HTTP_AUTH_HEADER_APIKEY_PREFIX;
 import static org.metadatacenter.constant.HttpConstants.HTTP_AUTH_HEADER_BEARER_PREFIX;
 
 @Produces(MediaType.APPLICATION_JSON)
@@ -66,9 +67,17 @@ public abstract class CedarMicroserviceResource {
 
     String authHeader = sc.getAuthorizationHeader();
     String jwtTokenHash = null;
-    if (authHeader != null && (authHeader.regionMatches(true, 0, HTTP_AUTH_HEADER_BEARER_PREFIX, 0, HTTP_AUTH_HEADER_BEARER_PREFIX.length()))) {
-      String headerValue = authHeader.substring(HTTP_AUTH_HEADER_BEARER_PREFIX.length());
-      jwtTokenHash = DigestUtils.md5Hex(headerValue);
+    String apiKeyHash = null;
+    if (authHeader != null) {
+      if (authHeader.regionMatches(true, 0, HTTP_AUTH_HEADER_BEARER_PREFIX, 0, HTTP_AUTH_HEADER_BEARER_PREFIX.length())) {
+        String headerValue = authHeader.substring(HTTP_AUTH_HEADER_BEARER_PREFIX.length());
+        jwtTokenHash = DigestUtils.md5Hex(headerValue);
+      } else if (authHeader.regionMatches(true, 0, HTTP_AUTH_HEADER_APIKEY_PREFIX, 0, HTTP_AUTH_HEADER_APIKEY_PREFIX.length())) {
+        // Hash the API key (never store the key itself) so individual keys are distinguishable now
+        // that users can hold several keys and rotate them - userId alone no longer identifies a key.
+        String headerValue = authHeader.substring(HTTP_AUTH_HEADER_APIKEY_PREFIX.length());
+        apiKeyHash = DigestUtils.md5Hex(headerValue);
+      }
     }
 
     AppLogger.message(AppLogType.REQUEST_HANDLER, AppLogSubType.START, sc.getGlobalRequestIdHeader(),
@@ -79,6 +88,7 @@ public abstract class CedarMicroserviceResource {
         .param(AppLogParam.USER_ID, sc.getCedarUser() != null ? sc.getCedarUser().getId() : null)
         .param(AppLogParam.CLIENT_SESSION_ID, sc.getClientSessionIdHeader())
         .param(AppLogParam.JWT_TOKEN_HASH, jwtTokenHash)
+        .param(AppLogParam.API_KEY_HASH, apiKeyHash)
         .param(AppLogParam.AUTH_SOURCE, sc.getCedarUser() != null ? sc.getCedarUser().getAuthSource() : null)
         .enqueue();
 

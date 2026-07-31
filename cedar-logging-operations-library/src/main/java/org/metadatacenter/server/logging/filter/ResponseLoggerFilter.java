@@ -1,6 +1,7 @@
 package org.metadatacenter.server.logging.filter;
 
 import org.metadatacenter.server.logging.AppLogger;
+import org.metadatacenter.server.logging.model.AppLogParam;
 import org.metadatacenter.server.logging.model.AppLogSubType;
 import org.metadatacenter.server.logging.model.AppLogType;
 
@@ -21,6 +22,10 @@ public class ResponseLoggerFilter implements ContainerResponseFilter {
       throws IOException {
     String globalRequestId = requestContext.getHeaderString(GLOBAL_REQUEST_ID_KEY);
     String localRequestId = requestContext.getHeaderString(LOCAL_REQUEST_ID_KEY);
-    AppLogger.message(AppLogType.REQUEST_FILTER, AppLogSubType.END, globalRequestId, localRequestId).enqueue();
+    // The HTTP status is only available here, at response time (post exception-mapping), so it is
+    // carried on the END event and merged into the request row by ApplicationRequestLog.mergeEndLog.
+    AppLogger.message(AppLogType.REQUEST_FILTER, AppLogSubType.END, globalRequestId, localRequestId)
+        .param(AppLogParam.STATUS, responseContext.getStatus())
+        .enqueue();
   }
 }
