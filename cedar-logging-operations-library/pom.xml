@@ -36,6 +36,13 @@
       <artifactId>javassist</artifactId>
     </dependency>
 
+    <!-- LogQueryBuilder is a pure spec->SQL function, so its contract is unit-testable with no DB. -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+
   </dependencies>
 
 </project>
