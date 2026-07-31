@@ -12,6 +12,7 @@ import org.metadatacenter.server.logging.query.LogQueryColumns.Kind;
 import org.metadatacenter.server.logging.query.LogQueryColumns.TableDef;
 import org.metadatacenter.server.logging.query.LogQueryResults.ColumnInfo;
 import org.metadatacenter.server.logging.query.LogQueryResults.ColumnMeta;
+import org.metadatacenter.server.logging.query.LogQueryResults.ColumnType;
 import org.metadatacenter.server.logging.query.LogQueryResults.CoverageResult;
 import org.metadatacenter.server.logging.query.LogQueryResults.FacetResult;
 import org.metadatacenter.server.logging.query.LogQueryResults.FacetValue;
@@ -251,9 +252,11 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
     }
     notes.add("Handler time sums overlapping component spans, so it exceeds wall time by design.");
 
+    // Unclamped for the same reason as dbTimeShare: a share over 100% is a real signal about how the
+    // request was logged, not something to hide behind a ceiling.
     return new TraceResult(globalRequestId, offset, reqRows.size(), cypherRows.size(),
         components.size(), handlerMs, dbMs,
-        handlerMs > 0 ? Math.min(100.0, dbMs / handlerMs * 100.0) : 0.0,
+        handlerMs > 0 ? dbMs / handlerMs * 100.0 : 0.0,
         endMs, truncated, (System.nanoTime() - started) / 1_000_000L, notes);
   }
 
@@ -282,6 +285,91 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
 
   private static String shortHash(String h) {
     return h == null ? "" : (h.length() > 10 ? h.substring(0, 10) : h);
+  }
+
+  // ---- db-time share -----------------------------------------------------------------------------
+
+  /**
+   * Per handler: total handler time vs the Cypher time underneath it, joined on globalRequestId.
+   * <p>
+   * The question this answers is "which slow handlers are NOT database-bound" — a handler with a high
+   * total and a low share is spending its time somewhere else (BioPortal, OpenSearch, serialization),
+   * and no single-table query can tell you that. Returns a {@link QueryResult} so the existing
+   * ColumnMeta-driven table renders it exactly like a board.
+   * <p>
+   * Cypher time is pre-aggregated per (globalRequestId, component) and joined on both columns, so a
+   * component is only charged for the queries it actually ran during that request. The remaining
+   * imprecision is stated in the notes rather than hidden: if one component logs several request rows
+   * under the same globalRequestId, that request's DB time is counted against each of them.
+   */
+  public QueryResult dbTimeShare(Instant from, Instant to, int limit) {
+    String sql =
+        "SELECT CONCAT(COALESCE(r.className,'?'),'.',COALESCE(r.methodName,'?')) AS h, "
+            + "r.systemComponentName AS c, COUNT(*) AS n, SUM(r.handlerDuration) AS hd, "
+            + "COALESCE(SUM(q.dbNanos),0) AS db "
+            + "FROM log_request r LEFT JOIN ("
+            + "  SELECT globalRequestId, systemComponentName, SUM(duration) AS dbNanos FROM log_cypher"
+            + "  WHERE logTime >= :from AND logTime < :to AND globalRequestId IS NOT NULL"
+            + "  GROUP BY globalRequestId, systemComponentName"
+            + ") q ON q.globalRequestId = r.globalRequestId AND q.systemComponentName = r.systemComponentName "
+            + "WHERE r.requestTime >= :from AND r.requestTime < :to "
+            + "GROUP BY h, c ORDER BY hd DESC LIMIT :lim";
+
+    NativeQuery<?> query = currentSession().createNativeQuery(sql);
+    query.setParameter("from", Timestamp.from(from));
+    query.setParameter("to", Timestamp.from(to));
+    query.setParameter("lim", limit);
+
+    long started = System.nanoTime();
+    List<?> raw = query.getResultList();
+    long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
+
+    List<ColumnMeta> columns = List.of(
+        new ColumnMeta("handler", "Handler", ColumnType.STRING, null),
+        new ColumnMeta("component", "Component", ColumnType.STRING, null),
+        new ColumnMeta("count", "Requests", ColumnType.NUMBER, null),
+        new ColumnMeta("sum:handlerDuration", "Total handler", ColumnType.NANOS, "nanos"),
+        new ColumnMeta("sum:duration", "Of which database", ColumnType.NANOS, "nanos"),
+        new ColumnMeta("dbSharePct", "% in Neo4j", ColumnType.NUMBER, "database share of handler time"));
+
+    List<Map<String, Object>> rows = new ArrayList<>();
+    for (Object o : raw) {
+      Object[] c = (Object[]) o;
+      long handlerNanos = num(c[3]);
+      long dbNanos = num(c[4]);
+      Map<String, Object> row = new LinkedHashMap<>();
+      row.put("handler", str(c[0]));
+      row.put("component", str(c[1]));
+      row.put("count", num(c[2]));
+      row.put("sum:handlerDuration", handlerNanos);
+      row.put("sum:duration", dbNanos);
+      // NOT clamped to 100: a share above 100% is real information, not a rendering glitch. It means
+      // one component logged several request rows under the same globalRequestId, so that request's
+      // DB time was counted against each of them. Clamping would silently disguise over-attribution
+      // as "entirely database-bound".
+      row.put("dbSharePct", handlerNanos > 0
+          ? Math.round(dbNanos * 1000.0 / handlerNanos) / 10.0 : 0.0);
+      rows.add(row);
+    }
+
+    boolean overAttributed = rows.stream()
+        .anyMatch(r -> r.get("dbSharePct") instanceof Number n && n.doubleValue() > 100.0);
+
+    List<String> notes = new ArrayList<>();
+    notes.add("Database time is joined on (globalRequestId, component), so each component is charged "
+        + "only for the queries it ran.");
+    notes.add("A high total with a LOW share means the handler is slow for reasons other than Neo4j.");
+    if (overAttributed) {
+      notes.add("Some shares exceed 100%: those handlers log several request rows under one "
+          + "globalRequestId, so the request's database time is counted against each row. Treat their "
+          + "share as an upper bound.");
+    }
+    boolean truncated = rows.size() >= limit;
+    if (truncated) {
+      notes.add("Truncated at " + limit + " handlers.");
+    }
+    return new QueryResult(columns, rows, rows.size(), truncated, null, elapsedMs, true,
+        "log_request ⨝ log_cypher", notes);
   }
 
   // ---- value normalization -----------------------------------------------------------------------
