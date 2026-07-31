@@ -102,7 +102,10 @@ public final class LogQueryBuilder {
     StringBuilder where = new StringBuilder(table.timeColumn() + " >= :from AND " + table.timeColumn() + " < :to");
     appendFilters(spec, table, where, params, notes);
 
-    return spec.isGrouped()
+    // Metrics without groupBy is the totals shape (one row, no GROUP BY) — that is what the KPI tiles
+    // on a board are. Only a spec with neither is a raw-row query.
+    boolean aggregate = spec.isGrouped() || (spec.metrics() != null && !spec.metrics().isEmpty());
+    return aggregate
         ? grouped(spec, table, where.toString(), params, from, to, notes)
         : raw(spec, table, where, params, from, to, notes);
   }
@@ -111,11 +114,9 @@ public final class LogQueryBuilder {
 
   private static BuiltQuery raw(LogQuerySpec spec, TableDef table, StringBuilder where,
                                 Map<String, Object> params, Instant from, Instant to, List<String> notes) {
-    if (spec.metrics() != null && !spec.metrics().isEmpty()) {
-      throw new IllegalArgumentException("Metrics require groupBy; raw-row mode returns columns, not aggregates.");
-    }
     if (spec.having() != null && !spec.having().isEmpty()) {
-      throw new IllegalArgumentException("Having requires groupBy; it filters aggregated groups, not rows.");
+      throw new IllegalArgumentException(
+          "Having needs metrics; it filters aggregated groups, not raw rows.");
     }
     int limit = clampLimit(spec.limit(), MAX_RAW_LIMIT);
 
@@ -160,7 +161,9 @@ public final class LogQueryBuilder {
 
   private static BuiltQuery grouped(LogQuerySpec spec, TableDef table, String where,
                                     Map<String, Object> params, Instant from, Instant to, List<String> notes) {
-    List<String> dims = new ArrayList<>(new LinkedHashSet<>(spec.groupBy()));
+    // groupBy may be null/empty — that is the totals shape (metrics over the whole range, one row)
+    List<String> dims = spec.groupBy() == null
+        ? new ArrayList<>() : new ArrayList<>(new LinkedHashSet<>(spec.groupBy()));
     for (String key : dims) {
       ColumnDef def = table.column(key);
       if (!def.groupable()) {
