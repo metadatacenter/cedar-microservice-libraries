@@ -178,4 +178,29 @@ public class LogAggregationService {
   public int pruneCypher(Instant cutoff, int batchSize) {
     return rollupDAO.pruneCypher(cutoff, batchSize);
   }
+
+  // ---- outlier retention (kept forever, so forensics survive the prune) --------------------------
+
+  private static final int TOP_SLOW_PER_DAY = 50;
+  private static final int TOP_ERR_PER_DAY = 50;
+  private static final int TOP_SLOW_HISTORY = 500;
+  private static final int TOP_ERR_HISTORY = 500;
+
+  /** After a settled request day is fully aggregated, keep that day's slowest + error instances. */
+  @UnitOfWork
+  public void captureLiveRequestDayOutliers(Instant dayStart, Instant dayEnd) {
+    rollupDAO.captureLiveRequestOutliers(dayStart, dayEnd, TOP_SLOW_PER_DAY, TOP_ERR_PER_DAY);
+  }
+
+  @UnitOfWork
+  public void captureLiveCypherDayOutliers(Instant dayStart, Instant dayEnd) {
+    rollupDAO.captureCypherOutliers("log_cypher", dayStart, dayEnd, TOP_SLOW_PER_DAY);
+  }
+
+  /** Once, at backfill completion (before the *_pre284 tables are dropped): keep history's worst. */
+  @UnitOfWork
+  public void captureHistoryOutliers() {
+    rollupDAO.captureHistoryRequestOutliers(TOP_SLOW_HISTORY, TOP_ERR_HISTORY);
+    rollupDAO.captureCypherOutliers(SRC_CYPHER_HIST, null, null, TOP_SLOW_HISTORY);
+  }
 }

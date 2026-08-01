@@ -289,6 +289,68 @@ public class AggregationRollupDAO extends AbstractDAO<AggRequestHourly> {
         .setParameter("cutoff", Timestamp.from(cutoff)).setParameter("lim", limit).executeUpdate();
   }
 
+  // ---- outlier retention (top-N slow / error INSTANCES, kept forever) ----------------------------
+  // Server-side INSERT ... SELECT so only the N chosen rows' LOBs move. Ordered by the indexed
+  // duration column. The row's own timestamp is kept; no dayUtc needed.
+
+  private static final String REQ_OUT_COLS =
+      "(requestTime, systemComponentName, httpMethod, path, className, methodName, userId, authSource, "
+          + "apiKeyHash, status, durationNanos, kind, errorPack)";
+  private static final String CYP_OUT_COLS =
+      "(logTime, systemComponentName, operation, runnableHash, durationNanos, runnable, interpolated, "
+          + "parameters, className, methodName)";
+
+  /** Live per-day capture over log_request (has status + apiKeyHash). Idempotent: clears the day first. */
+  public void captureLiveRequestOutliers(Instant from, Instant to, int topSlow, int topErrors) {
+    Timestamp ds = Timestamp.from(from), de = Timestamp.from(to);
+    currentSession().createNativeMutationQuery(
+            "DELETE FROM agg_request_outlier WHERE requestTime >= :ds AND requestTime < :de")
+        .setParameter("ds", ds).setParameter("de", de).executeUpdate();
+    currentSession().createNativeMutationQuery("INSERT INTO agg_request_outlier " + REQ_OUT_COLS
+            + " SELECT requestTime, systemComponentName, httpMethod, path, className, methodName, userId, "
+            + "authSource, apiKeyHash, status, handlerDuration, 'SLOW', errorPack FROM log_request "
+            + "WHERE requestTime >= :ds AND requestTime < :de ORDER BY handlerDuration DESC LIMIT :n")
+        .setParameter("ds", ds).setParameter("de", de).setParameter("n", topSlow).executeUpdate();
+    currentSession().createNativeMutationQuery("INSERT INTO agg_request_outlier " + REQ_OUT_COLS
+            + " SELECT requestTime, systemComponentName, httpMethod, path, className, methodName, userId, "
+            + "authSource, apiKeyHash, status, handlerDuration, 'ERROR', errorPack FROM log_request "
+            + "WHERE requestTime >= :ds AND requestTime < :de AND errorPack IS NOT NULL "
+            + "ORDER BY handlerDuration DESC LIMIT :n")
+        .setParameter("ds", ds).setParameter("de", de).setParameter("n", topErrors).executeUpdate();
+  }
+
+  /** One-shot capture over log_request_pre284 (no status/apiKeyHash → NULL). */
+  public void captureHistoryRequestOutliers(int topSlow, int topErrors) {
+    currentSession().createNativeMutationQuery("INSERT INTO agg_request_outlier " + REQ_OUT_COLS
+            + " SELECT requestTime, systemComponentName, httpMethod, path, className, methodName, userId, "
+            + "authSource, NULL, NULL, handlerDuration, 'SLOW', errorPack FROM log_request_pre284 "
+            + "ORDER BY handlerDuration DESC LIMIT :n")
+        .setParameter("n", topSlow).executeUpdate();
+    currentSession().createNativeMutationQuery("INSERT INTO agg_request_outlier " + REQ_OUT_COLS
+            + " SELECT requestTime, systemComponentName, httpMethod, path, className, methodName, userId, "
+            + "authSource, NULL, NULL, handlerDuration, 'ERROR', errorPack FROM log_request_pre284 "
+            + "WHERE errorPack IS NOT NULL ORDER BY handlerDuration DESC LIMIT :n")
+        .setParameter("n", topErrors).executeUpdate();
+  }
+
+  /** Cypher outliers; {@code from}/{@code to} null = whole table (used for *_pre284). */
+  public void captureCypherOutliers(String table, Instant from, Instant to, int topSlow) {
+    boolean bounded = from != null && to != null;
+    if (bounded) {
+      currentSession().createNativeMutationQuery(
+              "DELETE FROM agg_cypher_outlier WHERE logTime >= :ds AND logTime < :de")
+          .setParameter("ds", Timestamp.from(from)).setParameter("de", Timestamp.from(to)).executeUpdate();
+    }
+    String where = bounded ? " WHERE logTime >= :ds AND logTime < :de" : "";
+    var q = currentSession().createNativeMutationQuery("INSERT INTO agg_cypher_outlier " + CYP_OUT_COLS
+        + " SELECT logTime, systemComponentName, operation, runnableHash, duration, runnable, interpolated, "
+        + "parameters, className, methodName FROM " + safe(table) + where + " ORDER BY duration DESC LIMIT :n");
+    if (bounded) {
+      q.setParameter("ds", Timestamp.from(from)).setParameter("de", Timestamp.from(to));
+    }
+    q.setParameter("n", topSlow).executeUpdate();
+  }
+
   private static String statusClass(Integer status, boolean hasError) {
     if (status == null) {
       return hasError ? "err" : "unknown";
