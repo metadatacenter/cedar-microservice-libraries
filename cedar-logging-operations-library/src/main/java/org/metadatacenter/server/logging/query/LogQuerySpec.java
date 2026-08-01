@@ -14,6 +14,11 @@ import java.util.List;
  * <p>
  * {@code groupBy} empty means raw-row mode (keyset-paged, newest first); non-empty means an
  * aggregate/pivot. Nulls are tolerated everywhere and normalized by {@link LogQueryBuilder}.
+ * <p>
+ * {@code source} selects {@code raw} (the log tables: exact, row-level, but only as far back as the
+ * retention window) or {@code rollup} (the hourly agg_* tables: cheap, kept forever, hourly grain and
+ * histogram-approximate percentiles). The rest of the spec is identical either way — that is the
+ * point.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record LogQuerySpec(String table,
@@ -25,12 +30,19 @@ public record LogQuerySpec(String table,
                            List<Sort> orderBy,
                            Integer limit,
                            String cursor,
-                           List<Having> having) {
+                           List<Having> having,
+                           String source) {
 
-  /** Convenience for the common case of no HAVING (keeps call sites readable). */
+  /** Convenience for the common case of no HAVING and the raw source (keeps call sites readable). */
   public LogQuerySpec(String table, String from, String to, List<Filter> filters, List<String> groupBy,
                       List<String> metrics, List<Sort> orderBy, Integer limit, String cursor) {
-    this(table, from, to, filters, groupBy, metrics, orderBy, limit, cursor, null);
+    this(table, from, to, filters, groupBy, metrics, orderBy, limit, cursor, null, null);
+  }
+
+  public LogQuerySpec(String table, String from, String to, List<Filter> filters, List<String> groupBy,
+                      List<String> metrics, List<Sort> orderBy, Integer limit, String cursor,
+                      List<Having> having) {
+    this(table, from, to, filters, groupBy, metrics, orderBy, limit, cursor, having, null);
   }
 
   /**

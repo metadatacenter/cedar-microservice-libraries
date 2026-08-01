@@ -4,6 +4,7 @@ import io.dropwizard.hibernate.AbstractDAO;
 import org.hibernate.SessionFactory;
 import org.hibernate.query.NativeQuery;
 import org.metadatacenter.server.logging.dbmodel.ApplicationRequestLog;
+import org.metadatacenter.server.logging.agg.LatencyHistogram;
 import org.metadatacenter.server.logging.query.LogQueryBuilder;
 import org.metadatacenter.server.logging.query.LogQueryBuilder.BuiltQuery;
 import org.metadatacenter.server.logging.query.LogQueryColumns;
@@ -66,12 +67,28 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
     long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
 
     List<ColumnMeta> columns = built.columns();
+    int sqlValues = built.sqlValueCount();
+    List<Double> fractions = built.percentileFractions();
+
     List<Map<String, Object>> rows = new ArrayList<>(raw.size());
     for (Object r : raw) {
       Object[] cells = (r instanceof Object[] arr) ? arr : new Object[]{r};
       Map<String, Object> row = new LinkedHashMap<>();
-      for (int i = 0; i < columns.size() && i < cells.length; i++) {
+      for (int i = 0; i < sqlValues && i < cells.length; i++) {
         row.put(columns.get(i).key(), normalize(cells[i]));
+      }
+      // Rollup percentiles have no SQL column: the query trails 15 merged histogram buckets, and the
+      // ceilings are interpolated here — the same merge-then-percentile contract the rollups were
+      // designed around (LatencyHistogram).
+      if (!fractions.isEmpty() && cells.length >= sqlValues + LatencyHistogram.BUCKETS) {
+        long[] hist = new long[LatencyHistogram.BUCKETS];
+        for (int b = 0; b < LatencyHistogram.BUCKETS; b++) {
+          hist[b] = num(cells[sqlValues + b]);
+        }
+        for (int p = 0; p < fractions.size(); p++) {
+          row.put(columns.get(sqlValues + p).key(),
+              LatencyHistogram.percentileNanos(hist, fractions.get(p)));
+        }
       }
       rows.add(row);
     }
@@ -92,8 +109,8 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
       notes.add("Result truncated at the limit of " + built.limit()
           + (nextCursor != null ? " — page with the returned cursor." : "."));
     }
-    return new QueryResult(columns, rows, rows.size(), truncated, nextCursor, elapsedMs, true,
-        built.table().sqlTable(), notes);
+    return new QueryResult(columns, rows, rows.size(), truncated, nextCursor, elapsedMs,
+        !built.approximate(), built.table().sqlTable(), notes);
   }
 
   // ---- facets ------------------------------------------------------------------------------------

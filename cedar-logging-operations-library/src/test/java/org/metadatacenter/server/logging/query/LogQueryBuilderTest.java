@@ -344,6 +344,121 @@ class LogQueryBuilderTest {
     assertTrue(q.sql().contains("ORDER BY `count` DESC"));
   }
 
+  // ---- rollup source ----------------------------------------------------------------------------
+
+  private static LogQuerySpec rollup(List<String> groupBy, List<String> metrics) {
+    return new LogQuerySpec("request", FROM, TO, null, groupBy, metrics, null, null, null, null, "rollup");
+  }
+
+  @Test
+  void rollupMetricsMapOntoThePreFoldedColumns() {
+    BuiltQuery q = LogQueryBuilder.build(rollup(List.of("handler"),
+        List.of("count", "sum:handlerDuration", "max:handlerDuration", "avg:handlerDuration")));
+
+    assertTrue(q.sql().contains("FROM agg_request_hourly"));
+    assertTrue(q.sql().contains("SUM(reqCount) AS `count`"), "a rollup row already holds a count");
+    assertTrue(q.sql().contains("SUM(sumHandlerNanos) AS `sum_handlerDuration`"));
+    assertTrue(q.sql().contains("MAX(maxHandlerNanos) AS `max_handlerDuration`"));
+    assertTrue(q.sql().contains("SUM(sumHandlerNanos) / NULLIF(SUM(reqCount), 0)"));
+    assertFalse(q.approximate(), "no percentile requested → nothing approximate");
+  }
+
+  @Test
+  void rollupPercentilesComeFromTheMergedHistogramNotAWindow() {
+    BuiltQuery q = LogQueryBuilder.build(rollup(List.of("component"),
+        List.of("count", "p50:handlerDuration", "p95:handlerDuration")));
+
+    assertFalse(q.sql().contains("ROW_NUMBER()"), "the rollup has no rows to rank");
+    assertTrue(q.sql().contains("SUM(h0)") && q.sql().contains("SUM(h14)"), "15 merged buckets trail the select");
+    assertTrue(q.approximate());
+    // dims + count are SQL-backed; the two percentiles are computed from the histogram afterwards
+    assertEquals(2, q.sqlValueCount());
+    assertEquals(List.of(0.5, 0.95), q.percentileFractions());
+    assertEquals(4, q.columns().size());
+    assertTrue(q.notes().stream().anyMatch(n -> n.contains("approximate")));
+  }
+
+  @Test
+  void rollupRejectsRawRowMode() {
+    LogQuerySpec s = new LogQuerySpec("request", FROM, TO, null, null, null, null, null, null, null, "rollup");
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> LogQueryBuilder.build(s));
+    assertTrue(e.getMessage().contains("no raw rows"));
+  }
+
+  @Test
+  void rollupRejectsDistinctBecauseRowsAreGone() {
+    // use a column the rollup DOES keep, so the failure is about distinct rather than the allowlist
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> LogQueryBuilder.build(rollup(List.of("component"), List.of("distinct:component"))));
+    assertTrue(e.getMessage().contains("folded rows away"));
+  }
+
+  @Test
+  void rollupRejectsAMinItNeverKept() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> LogQueryBuilder.build(rollup(List.of("component"), List.of("min:preHandlerDuration"))));
+    assertTrue(e.getMessage().contains("only a running total"));
+  }
+
+  /**
+   * Only one measure per rollup table carries a histogram, so asking for a percentile on any other
+   * measure is caught by the histogram-availability check before the same-column rule can apply.
+   */
+  @Test
+  void rollupRejectsPercentilesOnAMeasureWithNoHistogram() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> LogQueryBuilder.build(rollup(List.of("component"),
+            List.of("p95:handlerDuration", "p95:preHandlerDuration"))));
+    assertTrue(e.getMessage().contains("No rollup histogram for 'preHandlerDuration'"));
+  }
+
+  @Test
+  void rollupHasNoMinuteGrain() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> LogQueryBuilder.build(rollup(List.of("tsMinute"), List.of("count"))));
+    assertTrue(e.getMessage().contains("Unknown column 'tsMinute'"));
+  }
+
+  @Test
+  void rollupDropsDimensionsTheFoldNeverKept() {
+    // userId lives in agg_request_user_hourly, not the endpoint rollup — so it must not silently work
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> LogQueryBuilder.build(rollup(List.of("userId"), List.of("count"))));
+    assertTrue(e.getMessage().contains("Unknown column 'userId'"));
+  }
+
+  @Test
+  void sameSpecRunsAgainstEitherSource() {
+    List<String> groupBy = List.of("handler");
+    List<String> metrics = List.of("count", "sum:handlerDuration");
+    BuiltQuery raw = LogQueryBuilder.build(spec(groupBy, metrics, null));
+    BuiltQuery roll = LogQueryBuilder.build(rollup(groupBy, metrics));
+
+    assertEquals(raw.columns().size(), roll.columns().size(), "same grammar → same shape");
+    assertTrue(raw.sql().contains("FROM log_request"));
+    assertTrue(roll.sql().contains("FROM agg_request_hourly"));
+  }
+
+  @Test
+  void cypherRollupUsesItsOwnCountAndMeasure() {
+    BuiltQuery q = LogQueryBuilder.build(new LogQuerySpec("cypher", FROM, TO, null,
+        List.of("runnableHash"), List.of("count", "sum:duration", "p95:duration"),
+        null, null, null, null, "rollup"));
+
+    assertTrue(q.sql().contains("FROM agg_cypher_hourly"));
+    assertTrue(q.sql().contains("SUM(execCount) AS `count`"));
+    assertTrue(q.sql().contains("SUM(sumNanos) AS `sum_duration`"));
+    assertTrue(q.approximate());
+  }
+
+  @Test
+  void unknownSourceIsRejected() {
+    LogQuerySpec s = new LogQuerySpec("request", FROM, TO, null, List.of("component"), List.of("count"),
+        null, null, null, null, "warehouse");
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> LogQueryBuilder.build(s));
+    assertTrue(e.getMessage().contains("Unknown source 'warehouse'"));
+  }
+
   // ---- native-query hygiene ---------------------------------------------------------------------
 
   /**
