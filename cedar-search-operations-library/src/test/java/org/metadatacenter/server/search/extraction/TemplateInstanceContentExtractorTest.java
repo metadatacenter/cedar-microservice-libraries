@@ -11,14 +11,13 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
+import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.search.InfoField;
 
-import java.lang.reflect.Field;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -41,13 +40,10 @@ class TemplateInstanceContentExtractorTest {
   private CedarRequestContext requestContext;
 
   @BeforeEach
-  void setUp() throws Exception {
-    extractor = new TemplateInstanceContentExtractor(mock(CedarConfig.class));
+  void setUp() {
     extractionUtils = mock(ExtractionUtils.class);
+    extractor = new TemplateInstanceContentExtractor(extractionUtils);
     requestContext = mock(CedarRequestContext.class);
-    Field field = TemplateInstanceContentExtractor.class.getDeclaredField("extractionUtils");
-    field.setAccessible(true);
-    field.set(extractor, extractionUtils);
   }
 
   static Stream<Arguments> literalValues() {
@@ -147,6 +143,54 @@ class TemplateInstanceContentExtractorTest {
         output.stream().map(InfoField::getFieldPath).toList());
     assertEquals(List.of("Ada", "London", "one", "two", "2024-01-01", "2025-02-02"),
         output.stream().map(InfoField::getFieldValue).toList());
+  }
+
+  @Test
+  void actualInstanceShapePreservesValuesWhenTemplateMultiplicityHasChanged() throws Exception {
+    ObjectNode template = MAPPER.createObjectNode();
+    template.set("declared-repeated-field", field("field-r", "Repeated field", null, true));
+    template.set("declared-single-field", field("field-s", "Single field", null, false));
+    ObjectNode repeatedElement = element("element-r", "Repeated element", true);
+    ((ObjectNode) repeatedElement.get("items")).set("value", field("field-er", "Repeated element value", null,
+        false));
+    template.set("declared-repeated-element", repeatedElement);
+    ObjectNode singleElement = element("element-s", "Single element", false);
+    singleElement.set("value", field("field-es", "Single element value", null, false));
+    template.set("declared-single-element", singleElement);
+
+    ObjectNode instance = basedOnInstance();
+    instance.putObject("declared-repeated-field").put("@value", "stored-single");
+    ArrayNode storedRepeated = instance.putArray("declared-single-field");
+    storedRepeated.addObject().put("@value", "stored-repeat-1");
+    storedRepeated.addObject().put("@value", "stored-repeat-2");
+    instance.putObject("declared-repeated-element").putObject("value").put("@value", "element-single");
+    ArrayNode storedElements = instance.putArray("declared-single-element");
+    storedElements.addObject().putObject("value").put("@value", "element-repeat-1");
+    storedElements.addObject().putObject("value").put("@value", "element-repeat-2");
+    stubArtifacts(template, instance);
+
+    List<InfoField> output = generateInstanceFields(false);
+
+    assertEquals(List.of("stored-single", "stored-repeat-1", "stored-repeat-2", "element-single",
+            "element-repeat-1", "element-repeat-2"),
+        output.stream().map(InfoField::getFieldValue).toList());
+  }
+
+  static Stream<Arguments> emptyOrMalformedFieldValues() {
+    return Stream.of(
+        Arguments.of(MAPPER.createObjectNode()),
+        Arguments.of(MAPPER.createObjectNode().put("@value", "")),
+        Arguments.of(MAPPER.getNodeFactory().nullNode()),
+        Arguments.of(MAPPER.getNodeFactory().textNode("not-a-field-object")));
+  }
+
+  @ParameterizedTest
+  @MethodSource("emptyOrMalformedFieldValues")
+  void emptyOrMalformedFieldValuesAreNotAddedToTheSearchIndex(JsonNode storedValue) throws Exception {
+    ObjectNode instance = basedOnInstance().set("answer", storedValue);
+    stubArtifacts(templateWith("answer", field("field-answer", "Answer", null, false)), instance);
+
+    assertEquals(List.of(), generateInstanceFields(false));
   }
 
   @Test
@@ -269,9 +313,9 @@ class TemplateInstanceContentExtractorTest {
   }
 
   private static FileSystemResource resource(CedarResourceType type, String id) {
-    FileSystemResource resource = mock(FileSystemResource.class);
-    when(resource.getType()).thenReturn(type);
-    when(resource.getId()).thenReturn(id);
+    FolderServerFolder resource = new FolderServerFolder();
+    resource.setType(type);
+    resource.setId(id);
     return resource;
   }
 

@@ -41,7 +41,11 @@ public class TemplateInstanceContentExtractor {
   private HashMap<String, HashMap<String, TemplateNode>> templateNodesCache;
 
   public TemplateInstanceContentExtractor(CedarConfig cedarConfig) {
-    this.extractionUtils = new ExtractionUtils(cedarConfig);
+    this(new ExtractionUtils(cedarConfig));
+  }
+
+  TemplateInstanceContentExtractor(ExtractionUtils extractionUtils) {
+    this.extractionUtils = extractionUtils;
     this.templateContentExtractor = new TemplateContentExtractor();
     this.templateNodesCache = new HashMap<>();
   }
@@ -246,45 +250,46 @@ public class TemplateInstanceContentExtractor {
       TemplateNode templateNode = null;
       if (templateNodesMap.containsKey(tmpPathDotNotation)) {
         templateNode = templateNodesMap.get(tmpPathDotNotation);
-        // Not an array
-        if (!templateNode.isArray()) {
-          // Template Element
-          if (templateNode.isTemplateElementNode()) {
-            getFieldValues(currentNodeMap.getValue(), templateNodesMap, tmpPath, results);
-          }
-          // Template Field
-          else if (templateNode.isTemplateFieldNode()) {
-            // Extract value and save it to the results
-            results.add(generateFieldValue(currentNodeMap.getValue(), tmpPath));
-          } else {
-            throw new CedarProcessingException("Unrecognized node type. The template node must be either a " +
-                "Template Field or a Template Element. Node type: " + templateNode.getName());
-          }
-        }
-        // Array
-        else {
-          // Array of template elements
-          if (templateNode.isTemplateElementNode()) {
-            for (JsonNode node : currentNodeMap.getValue()) {
-              getFieldValues(node, templateNodesMap, tmpPath, results);
+        JsonNode storedValue = currentNodeMap.getValue();
+        // Stored instance shape is authoritative here. It may legitimately differ from the current template after
+        // a field or element changes between single and repeated cardinality.
+        if (templateNode.isTemplateElementNode()) {
+          if (storedValue.isArray()) {
+            for (JsonNode node : storedValue) {
+              if (node.isObject()) {
+                getFieldValues(node, templateNodesMap, tmpPath, results);
+              }
             }
+          } else if (storedValue.isObject()) {
+            getFieldValues(storedValue, templateNodesMap, tmpPath, results);
           }
-          // Array of template fields
-          else if (templateNode.isTemplateFieldNode()) {
-            for (JsonNode node : currentNodeMap.getValue()) {
-              // Extract value and save it to the results
-              results.add(generateFieldValue(node, tmpPath));
+        } else if (templateNode.isTemplateFieldNode()) {
+          if (storedValue.isArray()) {
+            for (JsonNode node : storedValue) {
+              addFieldValueIfPresent(node, tmpPath, results);
             }
           } else {
-            throw new CedarProcessingException("Unrecognized node type. The template node must be either a " +
-                "Template Field or a Template Element. Node type: " + templateNode.getName());
+            addFieldValueIfPresent(storedValue, tmpPath, results);
           }
+        } else {
+          throw new CedarProcessingException("Unrecognized node type. The template node must be either a " +
+              "Template Field or a Template Element. Node type: " + templateNode.getName());
         }
       } else {
         // Node not found in the map of template nodes. It is not a relevant node (e.g. @context) so we ignore it.
       }
     }
     return results;
+  }
+
+  private void addFieldValueIfPresent(JsonNode storedValue, List<String> fieldPath, List<FieldValue> results) {
+    if (!storedValue.isObject()) {
+      return;
+    }
+    FieldValue fieldValue = generateFieldValue(storedValue, fieldPath);
+    if (fieldValue.getFieldValue() != null || fieldValue.getFieldValueUri() != null) {
+      results.add(fieldValue);
+    }
   }
 
   private String getPathDotNotation(List<String> path) {
