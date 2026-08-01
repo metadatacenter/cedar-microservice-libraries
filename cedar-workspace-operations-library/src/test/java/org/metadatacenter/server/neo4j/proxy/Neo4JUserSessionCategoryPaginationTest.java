@@ -38,6 +38,22 @@ class Neo4JUserSessionCategoryPaginationTest {
     assertTrue(query.contains("ORDER BY category.<PROP.NAME_LOWER>, category.<PROP.ID>"));
   }
 
+  @Test
+  void singleCategoryPathIsOrderedFromLeafOutwardForPrependingIntoRootFirstOrder() {
+    String query = CypherQueryBuilderCategory.getCategoryPath();
+
+    assertTrue(query.contains("MATCH path="));
+    assertTrue(query.contains("ORDER BY length(path)"));
+  }
+
+  @Test
+  void attachedCategoryPathsStayGroupedByLeafAndOrderedOutward() {
+    String query = CypherQueryBuilderCategory.getCategoryPathsByArtifactId();
+
+    assertTrue(query.contains("MATCH path="));
+    assertTrue(query.contains("ORDER BY directcategory.<PROP.ID>, length(path)"));
+  }
+
   private static FolderServerCategory category(int index) {
     FolderServerCategory category = new FolderServerCategory();
     category.setId("category-" + index);
