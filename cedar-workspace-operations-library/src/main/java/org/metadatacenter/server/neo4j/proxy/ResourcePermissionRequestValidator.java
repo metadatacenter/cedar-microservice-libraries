@@ -112,7 +112,17 @@ public class ResourcePermissionRequestValidator {
 
   private void validateAndSetUsers() {
     List<ResourcePermissionUserPermissionPair> userPermissions = request.getUserPermissions();
+    if (userPermissions == null) {
+      return;
+    }
     for (ResourcePermissionUserPermissionPair pair : userPermissions) {
+      if (pair == null) {
+        callResult.addError(INVALID_ARGUMENT)
+            .errorKey(CedarErrorKey.MISSING_PARAMETER)
+            .parameter("paramName", "userPermission")
+            .message("The user permission entry is missing from the request");
+        continue;
+      }
       ResourcePermissionUser permissionUser = pair.getUser();
       if (permissionUser == null) {
         callResult.addError(INVALID_ARGUMENT)
@@ -145,7 +155,17 @@ public class ResourcePermissionRequestValidator {
 
   private void validateAndSetGroups() {
     List<ResourcePermissionGroupPermissionPair> groupPermissions = request.getGroupPermissions();
+    if (groupPermissions == null) {
+      return;
+    }
     for (ResourcePermissionGroupPermissionPair pair : groupPermissions) {
+      if (pair == null) {
+        callResult.addError(INVALID_ARGUMENT)
+            .errorKey(CedarErrorKey.MISSING_PARAMETER)
+            .parameter("paramName", "groupPermission")
+            .message("The group permission entry is missing from the request");
+        continue;
+      }
       ResourcePermissionGroup permissionGroup = pair.getGroup();
       if (permissionGroup == null) {
         callResult.addError(INVALID_ARGUMENT)

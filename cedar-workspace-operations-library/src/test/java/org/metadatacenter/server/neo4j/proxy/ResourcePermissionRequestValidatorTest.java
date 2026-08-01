@@ -18,6 +18,7 @@ import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.permission.resource.*;
 import org.metadatacenter.server.security.model.user.CedarUserExtract;
 
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -156,6 +157,38 @@ class ResourcePermissionRequestValidatorTest {
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
         new ResourcePermissionUser(OWNER_ID), FilesystemResourcePermission.READ));
     assertError(f.validate(request), CedarErrorKey.INVALID_DATA);
+  }
+
+  @Test
+  void explicitNullPermissionCollectionsAreTreatedAsNoAdditionalGrants() {
+    Fixture f = new Fixture();
+    ResourcePermissionsRequest request = f.validRequest();
+    request.setUserPermissions(null);
+    request.setGroupPermissions(null);
+
+    ResourcePermissionRequestValidator validator = f.validate(request);
+
+    assertTrue(validator.getCallResult().isOk());
+    assertTrue(validator.getPermissions().getUserPermissions().isEmpty());
+    assertTrue(validator.getPermissions().getGroupPermissions().isEmpty());
+  }
+
+  @Test
+  void nullUserPermissionEntryProducesAValidationError() {
+    Fixture f = new Fixture();
+    ResourcePermissionsRequest request = f.validRequest();
+    request.setUserPermissions(Collections.singletonList(null));
+
+    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
+  }
+
+  @Test
+  void nullGroupPermissionEntryProducesAValidationError() {
+    Fixture f = new Fixture();
+    ResourcePermissionsRequest request = f.validRequest();
+    request.setGroupPermissions(Collections.singletonList(null));
+
+    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
   }
 
   @Test
