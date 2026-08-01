@@ -61,7 +61,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
       sb.append(getPublicationStatusConditions(" AND ", "resource"));
     }
     sb.append(
-        " RETURN count(resource)"
+        " RETURN count(DISTINCT resource)"
     );
     return sb.toString();
   }
