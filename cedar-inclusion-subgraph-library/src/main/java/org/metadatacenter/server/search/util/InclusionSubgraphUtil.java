@@ -133,7 +133,9 @@ public class InclusionSubgraphUtil {
       templates.put(templateId, t);
       if (requestTemplates != null && requestTemplates.containsKey(templateId)) {
         InclusionSubgraphTemplate inclusionSubgraphTemplate = requestTemplates.get(templateId);
-        t.setOperation(inclusionSubgraphTemplate.getOperation());
+        if (inclusionSubgraphTemplate != null) {
+          t.setOperation(inclusionSubgraphTemplate.getOperation());
+        }
       }
     }
     return templates;
@@ -151,8 +153,11 @@ public class InclusionSubgraphUtil {
       elements.put(elementId, e);
       if (requestElements != null && requestElements.containsKey(elementId)) {
         InclusionSubgraphElement inclusionSubgraphElement = requestElements.get(elementId);
-        e.setOperation(inclusionSubgraphElement.getOperation());
-        if (inclusionSubgraphElement.getOperation() == InclusionSubgraphNodeOperation.UPDATE) {
+        if (inclusionSubgraphElement != null) {
+          e.setOperation(inclusionSubgraphElement.getOperation());
+        }
+        if (inclusionSubgraphElement != null &&
+            inclusionSubgraphElement.getOperation() == InclusionSubgraphNodeOperation.UPDATE) {
           e.setElements(computeAffectedElements(elementId, inclusionSubgraphElement.getElements(),
               inclusionSubgraphSession));
           e.setTemplates(computeAffectedTemplates(elementId, inclusionSubgraphElement.getTemplates(),
@@ -248,7 +253,7 @@ public class InclusionSubgraphUtil {
     if (requiredValue == null) {
       return;
     }
-    if (!root.has(VALUE_CONSTRAINTS)) {
+    if (!root.has(VALUE_CONSTRAINTS) || !root.get(VALUE_CONSTRAINTS).isObject()) {
       root.putObject(VALUE_CONSTRAINTS);
     }
     ObjectNode valueConstraints = (ObjectNode) root.get(VALUE_CONSTRAINTS);
@@ -256,7 +261,7 @@ public class InclusionSubgraphUtil {
   }
 
   private static Boolean getCurrentRequiredValue(ObjectNode root) {
-    if (!root.has(VALUE_CONSTRAINTS)) {
+    if (!root.has(VALUE_CONSTRAINTS) || !root.get(VALUE_CONSTRAINTS).isObject()) {
       return null;
     }
     ObjectNode valueConstraints = (ObjectNode) root.get(VALUE_CONSTRAINTS);
@@ -270,7 +275,7 @@ public class InclusionSubgraphUtil {
     if (!newDocument.has(SCHEMA_ORG_NAME) || !newDocument.has(SCHEMA_ORG_DESCRIPTION)) {
       return;
     }
-    if (!root.has(UI)) {
+    if (!root.has(UI) || !root.get(UI).isObject()) {
       return;
     }
 

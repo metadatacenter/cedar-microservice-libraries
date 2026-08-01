@@ -9,9 +9,12 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.core.CedarConstants;
+import org.metadatacenter.model.folderserver.basic.FolderServerElement;
+import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.model.request.InclusionSubgraphNodeOperation;
 import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphElement;
+import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphRequest;
 import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphResponse;
 import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphTemplate;
 import org.metadatacenter.model.request.inclusionsubgraph.InclusionSubgraphTodoElement;
@@ -31,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class InclusionSubgraphUtilTest {
 
@@ -175,6 +179,97 @@ class InclusionSubgraphUtilTest {
         result.getTodoList().stream().map(InclusionSubgraphUtilTest::edge).toList());
   }
 
+  @Test
+  void affectedTreeExpandsOnlySelectedElementBranchesAndProducesExecutableUpdatePlan() {
+    String rootId = "https://repo.metadatacenter.org/fields/root";
+    String selectedId = "https://repo.metadatacenter.org/elements/selected";
+    String ignoredId = "https://repo.metadatacenter.org/elements/ignored";
+    String nestedId = "https://repo.metadatacenter.org/elements/nested";
+    String nestedTemplateId = "https://repo.metadatacenter.org/templates/nested";
+    String rootTemplateId = "https://repo.metadatacenter.org/templates/root";
+    InclusionSubgraphElement selected = element(selectedId, InclusionSubgraphNodeOperation.UPDATE);
+    selected.setElements(linkedMap(nestedId, element(nestedId, InclusionSubgraphNodeOperation.UPDATE)));
+    selected.setTemplates(linkedMap(nestedTemplateId,
+        template(nestedTemplateId, InclusionSubgraphNodeOperation.UPDATE)));
+    InclusionSubgraphRequest request = request(rootId);
+    request.setElements(linkedMap(selectedId, selected));
+    request.setTemplates(linkedMap(rootTemplateId,
+        template(rootTemplateId, InclusionSubgraphNodeOperation.UPDATE)));
+    InclusionSubgraphServiceSession session = mock(InclusionSubgraphServiceSession.class);
+    when(session.listIncludingElements(any()))
+        .thenReturn(List.of(folderElement(selectedId), folderElement(ignoredId)), List.of(folderElement(nestedId)),
+            List.of());
+    when(session.listIncludingTemplates(any()))
+        .thenReturn(List.of(), List.of(folderTemplate(nestedTemplateId)), List.of(folderTemplate(rootTemplateId)));
+
+    InclusionSubgraphResponse affected = InclusionSubgraphUtil.buildAffectedTree(request, session);
+    InclusionSubgraphTodoList plan = InclusionSubgraphUtil.updateResources(affected);
+
+    assertEquals(List.of(rootId + "->" + selectedId, selectedId + "->" + nestedId,
+            selectedId + "->" + nestedTemplateId, rootId + "->" + rootTemplateId),
+        plan.getTodoList().stream().map(InclusionSubgraphUtilTest::edge).toList());
+    assertTrue(affected.getElements().containsKey(ignoredId));
+  }
+
+  @Test
+  void nullRequestOverridesAreIgnoredWithoutAbortingTheAffectedTree() {
+    String rootId = "https://repo.metadatacenter.org/fields/root";
+    String elementId = "https://repo.metadatacenter.org/elements/includer";
+    String templateId = "https://repo.metadatacenter.org/templates/includer";
+    InclusionSubgraphRequest request = request(rootId);
+    request.setElements(linkedMap(elementId, null));
+    request.setTemplates(linkedMap(templateId, null));
+    InclusionSubgraphServiceSession session = mock(InclusionSubgraphServiceSession.class);
+    when(session.listIncludingElements(any())).thenReturn(List.of(folderElement(elementId)));
+    when(session.listIncludingTemplates(any())).thenReturn(List.of(folderTemplate(templateId)));
+
+    InclusionSubgraphResponse affected = InclusionSubgraphUtil.buildAffectedTree(request, session);
+
+    assertTrue(affected.getElements().containsKey(elementId));
+    assertTrue(affected.getTemplates().containsKey(templateId));
+    assertTrue(InclusionSubgraphUtil.updateResources(affected).getTodoList().isEmpty());
+  }
+
+  static Stream<Arguments> malformedConstraintContainers() {
+    ObjectNode malformedOld = component("field-old", CedarConstants.TEMPLATE_FIELD_TYPE_URI);
+    malformedOld.put("_valueConstraints", "invalid");
+    ObjectNode ordinaryReplacement = component("field-new", CedarConstants.TEMPLATE_FIELD_TYPE_URI);
+
+    ObjectNode oldRequired = component("field-old", CedarConstants.TEMPLATE_FIELD_TYPE_URI);
+    oldRequired.withObject("_valueConstraints").put("requiredValue", true);
+    ObjectNode malformedReplacement = component("field-new", CedarConstants.TEMPLATE_FIELD_TYPE_URI);
+    malformedReplacement.put("_valueConstraints", "invalid");
+    return Stream.of(
+        Arguments.of(malformedOld, ordinaryReplacement, false),
+        Arguments.of(oldRequired, malformedReplacement, true));
+  }
+
+  @ParameterizedTest
+  @MethodSource("malformedConstraintContainers")
+  void malformedConstraintContainersDoNotAbortComponentReplacement(ObjectNode old, ObjectNode replacement,
+                                                                    boolean expectedRequired) {
+    ObjectNode parent = artifact();
+    parent.withObject("properties").set("field", old);
+
+    assertTrue(InclusionSubgraphUtil.updateSubdocumentByAtId(parent, "field-old", replacement));
+    assertSame(replacement, parent.at("/properties/field"));
+    assertEquals(expectedRequired, replacement.path("_valueConstraints").path("requiredValue").asBoolean());
+  }
+
+  @Test
+  void malformedUiContainerDoesNotAbortComponentReplacement() {
+    ObjectNode parent = artifact();
+    parent.put("_ui", "invalid");
+    parent.withObject("properties").set("field", component("field-old", CedarConstants.TEMPLATE_FIELD_TYPE_URI));
+    ObjectNode replacement = component("field-new", CedarConstants.TEMPLATE_FIELD_TYPE_URI)
+        .put("schema:name", "Replacement")
+        .put("schema:description", "Replacement description");
+
+    assertTrue(InclusionSubgraphUtil.updateSubdocumentByAtId(parent, "field-old", replacement));
+    assertSame(replacement, parent.at("/properties/field"));
+    assertEquals("invalid", parent.path("_ui").asText());
+  }
+
   private static List<String> updateArcs(JsonNode artifact) {
     FolderServerResourceExtract resource = FolderServerResourceExtract.forType(CedarResourceType.TEMPLATE);
     resource.setId("template-1");
@@ -201,6 +296,26 @@ class InclusionSubgraphUtilTest {
     element.setId(id);
     element.setOperation(operation);
     return element;
+  }
+
+  private static InclusionSubgraphRequest request(String id) {
+    InclusionSubgraphRequest request = new InclusionSubgraphRequest();
+    request.setId(id);
+    return request;
+  }
+
+  private static FolderServerElement folderElement(String id) {
+    FolderServerElement element = new FolderServerElement();
+    element.setId(id);
+    element.setName(id);
+    return element;
+  }
+
+  private static FolderServerTemplate folderTemplate(String id) {
+    FolderServerTemplate template = new FolderServerTemplate();
+    template.setId(id);
+    template.setName(id);
+    return template;
   }
 
   private static InclusionSubgraphTemplate template(String id, InclusionSubgraphNodeOperation operation) {
