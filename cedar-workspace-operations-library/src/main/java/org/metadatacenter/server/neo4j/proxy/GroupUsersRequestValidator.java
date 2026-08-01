@@ -10,6 +10,8 @@ import org.metadatacenter.server.security.model.permission.resource.ResourcePerm
 import org.metadatacenter.server.security.model.user.CedarUserExtract;
 
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 public class GroupUsersRequestValidator {
 
@@ -33,7 +35,25 @@ public class GroupUsersRequestValidator {
     }
 
     if (callResult.isOk()) {
+      validateRequest();
+    }
+
+    if (callResult.isOk()) {
       validateAndSetUsers();
+    }
+  }
+
+  private void validateRequest() {
+    if (request == null) {
+      callResult.addError(CedarErrorType.INVALID_ARGUMENT)
+          .errorKey(CedarErrorKey.MISSING_PARAMETER)
+          .parameter("paramName", "request")
+          .message("The group users request is missing");
+    } else if (request.getUsers() == null) {
+      callResult.addError(CedarErrorType.INVALID_ARGUMENT)
+          .errorKey(CedarErrorKey.MISSING_PARAMETER)
+          .parameter("paramName", "users")
+          .message("The users list is missing from the request");
     }
   }
 
@@ -65,7 +85,15 @@ public class GroupUsersRequestValidator {
 
   private void validateAndSetUsers() {
     List<CedarGroupUserRequest> requestUsers = request.getUsers();
+    Set<String> userIds = new HashSet<>();
     for (CedarGroupUserRequest u : requestUsers) {
+      if (u == null) {
+        callResult.addError(CedarErrorType.INVALID_ARGUMENT)
+            .errorKey(CedarErrorKey.MISSING_PARAMETER)
+            .parameter("paramName", "userEntry")
+            .message("A user entry is missing from the request");
+        continue;
+      }
       ResourcePermissionUser groupUser = u.getUser();
       if (groupUser == null) {
         callResult.addError(CedarErrorType.INVALID_ARGUMENT)
@@ -73,8 +101,24 @@ public class GroupUsersRequestValidator {
             .parameter("paramName", "userNode")
             .message("The user resource is missing from the request");
       } else {
+        String userId = groupUser.getId();
+        if (userId == null || userId.isBlank()) {
+          callResult.addError(CedarErrorType.INVALID_ARGUMENT)
+              .errorKey(CedarErrorKey.MISSING_PARAMETER)
+              .parameter("paramName", "userId")
+              .message("The user id is missing from the request");
+          continue;
+        }
+        if (!userIds.add(userId)) {
+          callResult.addError(CedarErrorType.INVALID_ARGUMENT)
+              .errorKey(CedarErrorKey.UNIQUE_CONSTRAINT_COLLISION)
+              .parameter("propertyName", "userId")
+              .parameter("userId", userId)
+              .message("Each user should be listed only once in the request");
+          continue;
+        }
         users.addUser(new CedarGroupUser(
-            new CedarUserExtract(groupUser.getId(), null, null, null), u.isAdministrator(), u.isMember())
+            new CedarUserExtract(userId, null, null, null), u.isAdministrator(), u.isMember())
         );
       }
     }
