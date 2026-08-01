@@ -20,4 +20,27 @@ class CypherResourceQuerySemanticsTest {
     assertTrue(lookup.contains("RETURN DISTINCT(resource)"), lookup);
     assertTrue(count.contains("RETURN count(DISTINCT resource)"), count);
   }
+
+  @Test
+  void everyOffsetPaginatedResourceQueryEndsItsOrderingWithUniqueIdentity() {
+    List<String> resourceQueries = List.of(
+        CypherQueryBuilderResource.getSharedWithMeLookupQuery(
+            ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, List.of("name")),
+        CypherQueryBuilderResource.getAllLookupQuery(
+            ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, List.of("name"), true),
+        CypherQueryBuilderResource.getSearchIsBasedOnLookupQuery(List.of("name"), true),
+        CypherQueryBuilderResource.getSpecialFoldersLookupQuery(List.of("name"), true),
+        CypherQueryBuilderResource.getSpecialFoldersLookupQuery(List.of("name"), false),
+        CypherQueryBuilderFilesystemResource.getAllResourcesLookupQuery(List.of("name")),
+        CypherQueryBuilderFilesystemResource.getSharedWithEverybodyLookupQuery(
+            ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, List.of("name")));
+
+    for (String query : resourceQueries) {
+      assertTrue(query.matches("(?s).*ORDER BY.*resource\\.<PROP\\.ID>\\s*SKIP \\$offset.*"), query);
+    }
+
+    String folderContents = CypherQueryBuilderFolderContent.getFolderContentsFilteredLookupQuery(
+        List.of("name"), ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL);
+    assertTrue(folderContents.matches("(?s).*ORDER BY.*child\\.<PROP\\.ID>\\s*SKIP \\$offset.*"), folderContents);
+  }
 }

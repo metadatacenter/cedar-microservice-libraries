@@ -35,6 +35,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,");
     sb.append(getOrderByExpression("resource", sortList));
     sb.append(", resource.<PROP.VERSION> DESC");
+    sb.append(", resource.<PROP.ID>");
     sb.append(" SKIP $offset");
     sb.append(" LIMIT $limit");
     return sb.toString();
@@ -87,6 +88,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     }
     sb.append(" RETURN resource");
     sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,").append(getOrderByExpression("resource", sortList));
+    sb.append(", resource.<PROP.ID>");
     sb.append(" SKIP $offset");
     sb.append(" LIMIT $limit");
     return sb.toString();
@@ -155,6 +157,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     }
     sb.append(" RETURN resource");
     sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,").append(getOrderByExpression("resource", sortList));
+    sb.append(", resource.<PROP.ID>");
     sb.append(" SKIP $offset");
     sb.append(" LIMIT $limit");
     return sb.toString();
@@ -232,7 +235,8 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
           RETURN DISTINCT resource
 
           ORDER BY resource.<PROP.NODE_SORT_ORDER>,
-                   %s
+                   %s,
+                   resource.<PROP.ID>
           SKIP $offset
           LIMIT $limit
           """.formatted(getOrderByExpression("resource", sortList));
@@ -244,7 +248,8 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
           RETURN DISTINCT resource
 
           ORDER BY resource.<PROP.NODE_SORT_ORDER>,
-                   %s
+                   %s,
+                   resource.<PROP.ID>
           SKIP $offset
           LIMIT $limit
           """.formatted(getOrderByExpression("resource", sortList));
