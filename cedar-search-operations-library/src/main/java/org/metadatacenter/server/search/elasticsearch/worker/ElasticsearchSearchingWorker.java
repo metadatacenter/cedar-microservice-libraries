@@ -43,7 +43,7 @@ public class ElasticsearchSearchingWorker {
     return findAllValuesForField(fieldName, qb);
   }
 
-  public List<String> findAllValuesForField(String fieldName, QueryBuilder queryBuilder) {
+  public List<String> findAllValuesForField(String fieldName, QueryBuilder queryBuilder) throws CedarProcessingException {
     List<String> fieldValues = new ArrayList<>();
 
     SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder()
@@ -71,7 +71,7 @@ public class ElasticsearchSearchingWorker {
         response = client.scroll(scrollRequest, RequestOptions.DEFAULT);
       } while (response.getHits().getHits().length != 0);
     } catch (IOException e) {
-      log.error("Error while searching all values", e);
+      throw new CedarProcessingException("Error while scrolling all values for field " + fieldName, e);
     }
 
     return fieldValues;

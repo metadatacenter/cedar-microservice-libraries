@@ -6,6 +6,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.metadatacenter.config.OpensearchConfig;
+import org.metadatacenter.exception.CedarProcessingException;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchScrollRequest;
@@ -20,6 +21,8 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doReturn;
@@ -86,19 +89,23 @@ class ElasticsearchSearchingWorkerTest {
   }
 
   @Test
-  void initialIoFailureProducesEmptyResultRatherThanEscaping() throws Exception {
+  void initialIoFailureEscapesInsteadOfLookingLikeAnEmptyIndex() throws Exception {
     doThrow(new IOException("offline")).when(client).search(any(SearchRequest.class), any(RequestOptions.class));
 
-    assertEquals(List.of(), worker.findAllValuesForField("info.id"));
+    CedarProcessingException error = assertThrows(CedarProcessingException.class,
+        () -> worker.findAllValuesForField("info.id"));
+    assertTrue(error.getMessage().contains("scrolling all values"));
   }
 
   @Test
-  void scrollIoFailureRetainsValuesAlreadyRetrieved() throws Exception {
+  void laterScrollIoFailureEscapesInsteadOfReturningAConvincingPartialList() throws Exception {
     doReturn(response("scroll-1", Map.of("info", Map.of("id", "kept")))).when(client)
         .search(any(SearchRequest.class), any(RequestOptions.class));
     doThrow(new IOException("offline")).when(client).scroll(any(SearchScrollRequest.class), any(RequestOptions.class));
 
-    assertEquals(List.of("kept"), worker.findAllValuesForField("info.id"));
+    CedarProcessingException error = assertThrows(CedarProcessingException.class,
+        () -> worker.findAllValuesForField("info.id"));
+    assertTrue(error.getMessage().contains("scrolling all values"));
   }
 
   @SafeVarargs
