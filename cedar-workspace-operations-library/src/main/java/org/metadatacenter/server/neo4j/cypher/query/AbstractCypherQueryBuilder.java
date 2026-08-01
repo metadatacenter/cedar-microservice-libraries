@@ -280,11 +280,13 @@ public abstract class AbstractCypherQueryBuilder {
           "(" +
           nodeAlias + ".<PROP.IS_LATEST_DRAFT_VERSION> = true" +
           " OR " +
-          nodeAlias + ".<PROP.IS_LATEST_DRAFT_VERSION> IS NULL" +
-          " OR " +
           nodeAlias + ".<PROP.IS_LATEST_PUBLISHED_VERSION> = true" +
           " OR " +
+          "(" +
+          nodeAlias + ".<PROP.IS_LATEST_DRAFT_VERSION> IS NULL" +
+          " AND " +
           nodeAlias + ".<PROP.IS_LATEST_PUBLISHED_VERSION> IS NULL" +
+          ")" +
           ")";
     } else {
       return "";
