@@ -45,6 +45,9 @@ public class CategoryPermissionRequestValidator {
       validateWritePermission();
     }
     if (callResult.isOk()) {
+      validateRequest();
+    }
+    if (callResult.isOk()) {
       validateAndSetOwner();
     }
     if (callResult.isOk()) {
@@ -86,6 +89,15 @@ public class CategoryPermissionRequestValidator {
     }
   }
 
+  private void validateRequest() {
+    if (request == null) {
+      callResult.addError(INVALID_ARGUMENT)
+          .errorKey(CedarErrorKey.MISSING_PARAMETER)
+          .parameter("paramName", "request")
+          .message("The category permissions request is missing");
+    }
+  }
+
   private void validateAndSetOwner() {
     CategoryPermissionUser owner = request.getOwner();
     if (owner == null) {
@@ -109,7 +121,17 @@ public class CategoryPermissionRequestValidator {
 
   private void validateAndSetUsers() {
     List<CategoryPermissionUserPermissionPair> userPermissions = request.getUserPermissions();
+    if (userPermissions == null) {
+      return;
+    }
     for (CategoryPermissionUserPermissionPair pair : userPermissions) {
+      if (pair == null) {
+        callResult.addError(INVALID_ARGUMENT)
+            .errorKey(CedarErrorKey.MISSING_PARAMETER)
+            .parameter("paramName", "userPermission")
+            .message("The user permission entry is missing from the request");
+        continue;
+      }
       CategoryPermissionUser permissionUser = pair.getUser();
       if (permissionUser == null) {
         callResult.addError(INVALID_ARGUMENT)
@@ -142,7 +164,17 @@ public class CategoryPermissionRequestValidator {
 
   private void validateAndSetGroups() {
     List<CategoryPermissionGroupPermissionPair> groupPermissions = request.getGroupPermissions();
+    if (groupPermissions == null) {
+      return;
+    }
     for (CategoryPermissionGroupPermissionPair pair : groupPermissions) {
+      if (pair == null) {
+        callResult.addError(INVALID_ARGUMENT)
+            .errorKey(CedarErrorKey.MISSING_PARAMETER)
+            .parameter("paramName", "groupPermission")
+            .message("The group permission entry is missing from the request");
+        continue;
+      }
       CategoryPermissionGroup permissionGroup = pair.getGroup();
       if (permissionGroup == null) {
         callResult.addError(INVALID_ARGUMENT)

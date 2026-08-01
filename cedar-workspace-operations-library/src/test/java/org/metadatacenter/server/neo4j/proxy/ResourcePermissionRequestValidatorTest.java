@@ -65,6 +65,12 @@ class ResourcePermissionRequestValidatorTest {
   }
 
   @Test
+  void missingRequestBodyReturnsStructuredMissingParameter() {
+    Fixture f = new Fixture();
+    assertError(f.validate(null), CedarErrorKey.MISSING_PARAMETER);
+  }
+
+  @Test
   void ownerMustResolveToAKnownUser() {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();

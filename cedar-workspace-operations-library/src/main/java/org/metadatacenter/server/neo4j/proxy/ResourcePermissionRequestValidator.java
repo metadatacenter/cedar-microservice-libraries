@@ -47,6 +47,9 @@ public class ResourcePermissionRequestValidator {
       validateWritePermission();
     }
     if (callResult.isOk()) {
+      validateRequest();
+    }
+    if (callResult.isOk()) {
       validateAndSetOwner();
     }
     if (callResult.isOk()) {
@@ -86,6 +89,15 @@ public class ResourcePermissionRequestValidator {
           .errorKey(CedarErrorKey.NO_WRITE_ACCESS_TO_RESOURCE)
           .message("The current user has no write access to the resource")
           .parameter("nodeId", resourceId);
+    }
+  }
+
+  private void validateRequest() {
+    if (request == null) {
+      callResult.addError(INVALID_ARGUMENT)
+          .errorKey(CedarErrorKey.MISSING_PARAMETER)
+          .parameter("paramName", "request")
+          .message("The resource permissions request is missing");
     }
   }
 

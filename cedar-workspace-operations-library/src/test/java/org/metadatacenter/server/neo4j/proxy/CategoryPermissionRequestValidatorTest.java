@@ -16,6 +16,7 @@ import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.permission.category.*;
 import org.metadatacenter.server.security.model.user.CedarUserExtract;
 
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -59,6 +60,12 @@ class CategoryPermissionRequestValidatorTest {
   void ownerIsRequired() {
     Fixture f = new Fixture();
     assertError(f.validate(new CategoryPermissionRequest()), CedarErrorKey.MISSING_PARAMETER);
+  }
+
+  @Test
+  void missingRequestBodyReturnsStructuredMissingParameter() {
+    Fixture f = new Fixture();
+    assertError(f.validate(null), CedarErrorKey.MISSING_PARAMETER);
   }
 
   @Test
@@ -148,6 +155,38 @@ class CategoryPermissionRequestValidatorTest {
     request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
         new CategoryPermissionUser(OWNER_ID), CategoryPermission.ATTACH));
     assertError(f.validate(request), CedarErrorKey.INVALID_DATA);
+  }
+
+  @Test
+  void explicitNullPermissionCollectionsAreTreatedAsNoAdditionalGrants() {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.setUserPermissions(null);
+    request.setGroupPermissions(null);
+
+    CategoryPermissionRequestValidator validator = f.validate(request);
+
+    assertTrue(validator.getCallResult().isOk());
+    assertTrue(validator.getPermissions().getUserPermissions().isEmpty());
+    assertTrue(validator.getPermissions().getGroupPermissions().isEmpty());
+  }
+
+  @Test
+  void nullUserPermissionEntryProducesAValidationError() {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.setUserPermissions(Collections.singletonList(null));
+
+    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
+  }
+
+  @Test
+  void nullGroupPermissionEntryProducesAValidationError() {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.setGroupPermissions(Collections.singletonList(null));
+
+    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
   }
 
   @Test
