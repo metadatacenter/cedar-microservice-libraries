@@ -37,7 +37,7 @@ public class ModelUtil {
     JsonPointerValuePair r = new JsonPointerValuePair();
     r.setPointer(pointer);
     JsonNode titleNode = jsonNode.at(r.getPointer());
-    if (titleNode != null && !titleNode.isMissingNode()) {
+    if (titleNode != null && titleNode.isTextual()) {
       r.setValue(titleNode.textValue().trim());
     }
     return r;
@@ -102,13 +102,8 @@ public class ModelUtil {
   private static void generateFieldIdIfTemporaryOrMissing(JsonNode fieldCandidate, ProvenanceInfo pi, ProvenanceUtil
       provenanceUtil, LinkedDataUtil linkedDataUtil) {
     provenanceUtil.addProvenanceInfo(fieldCandidate, pi);
-    if (fieldCandidate.get("@id") != null) {
-      String id = fieldCandidate.get("@id").asText();
-      if (id == null || id.indexOf(CedarConstants.TEMP_ID_PREFIX) == 0) {
-        ((ObjectNode) fieldCandidate).remove("@id");
-        ((ObjectNode) fieldCandidate).put("@id", generateNewFieldId(linkedDataUtil));
-      }
-    } else {
+    JsonNode idNode = fieldCandidate.get("@id");
+    if (idNode == null || !idNode.isTextual() || idNode.textValue().startsWith(CedarConstants.TEMP_ID_PREFIX)) {
       ((ObjectNode) fieldCandidate).put("@id", generateNewFieldId(linkedDataUtil));
     }
   }
@@ -131,6 +126,5 @@ public class ModelUtil {
     return doiInRequest;
   }
 }
-
 
 
