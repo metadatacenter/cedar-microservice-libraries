@@ -53,7 +53,16 @@ public class IndexUtils {
    * This method retrieves all the resources from the Neo4j Server that are expected to be in the search index.
    * Those resources that don't have to be in the index, such as the "/" folder and the "Lost+Found" folder are ignored.
    */
-  public List<FileSystemResource> findAllResources(CedarRequestContext context) {
+  public List<FileSystemResource> findAllResources(CedarRequestContext context) throws CedarProcessingException {
+    return findAllResources(offset -> findAllNodes(context, Optional.empty(), limit, offset));
+  }
+
+  @FunctionalInterface
+  interface ResourcePageSource {
+    FolderServerNodeListResponse load(int offset) throws CedarException;
+  }
+
+  List<FileSystemResource> findAllResources(ResourcePageSource pageSource) throws CedarProcessingException {
     log.info("Retrieving all resources.");
     List<FileSystemResource> resources = new ArrayList<>();
     boolean finished = false;
@@ -63,34 +72,36 @@ public class IndexUtils {
     while (!finished) {
       log.info("Reading resources");
 
-      FolderServerNodeListResponse pagedNodes = null;
+      FolderServerNodeListResponse pagedNodes;
       try {
-        pagedNodes = findAllNodes(context, Optional.empty(), limit, offset);
+        pagedNodes = pageSource.load(offset);
       } catch (CedarException e) {
-        log.error("Error while reading nodes", e);
+        throw new CedarProcessingException("Error while reading resource page at offset " + offset, e);
       }
-      int count = 0;
-      long totalCount = 0;
-      long currentOffset = 0;
-      if (pagedNodes != null) {
-        count = pagedNodes.getResources().size();
-        totalCount = pagedNodes.getTotalCount();
-        countSoFar += count;
-        log.info("Retrieved " + countSoFar + "/" + totalCount + " resources");
-        currentOffset = pagedNodes.getCurrentOffset();
-        for (FolderServerResourceExtract folderServerNodeExtract : pagedNodes.getResources()) {
-          FileSystemResource folderServerNode = FileSystemResource.fromNodeExtract(folderServerNodeExtract);
-          if (needsIndexing(folderServerNode)) {
-            resources.add(folderServerNode);
-          } else {
-            log.info("The resource '" + folderServerNode.getName() + "' has been ignored");
-          }
+      if (pagedNodes == null || pagedNodes.getResources() == null) {
+        throw new CedarProcessingException("Resource page was absent at offset " + offset);
+      }
+      int count = pagedNodes.getResources().size();
+      long totalCount = pagedNodes.getTotalCount();
+      long currentOffset = pagedNodes.getCurrentOffset();
+      if (count == 0 && currentOffset < totalCount) {
+        throw new CedarProcessingException("Resource pagination made no progress at offset " + currentOffset +
+            " of " + totalCount);
+      }
+      countSoFar += count;
+      log.info("Retrieved " + countSoFar + "/" + totalCount + " resources");
+      for (FolderServerResourceExtract folderServerNodeExtract : pagedNodes.getResources()) {
+        FileSystemResource folderServerNode = FileSystemResource.fromNodeExtract(folderServerNodeExtract);
+        if (needsIndexing(folderServerNode)) {
+          resources.add(folderServerNode);
+        } else {
+          log.info("The resource '" + folderServerNode.getName() + "' has been ignored");
         }
       }
       if (currentOffset + count >= totalCount) {
         finished = true;
       } else {
-        offset = offset + count;
+        offset += count;
       }
     }
     return resources;

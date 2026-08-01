@@ -8,15 +8,22 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
+import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
+import org.metadatacenter.model.folderserver.extract.FolderServerTemplateExtract;
+import org.metadatacenter.model.response.FolderServerNodeListResponse;
 import org.metadatacenter.server.search.elasticsearch.service.ElasticsearchManagementService;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
@@ -124,5 +131,55 @@ class IndexUtilsTest {
 
     verify(managementService).createSearchIndex(anyString());
     verify(managementService).addAlias(anyString(), org.mockito.ArgumentMatchers.eq("cedar-search"));
+  }
+
+  @Test
+  void allResourceLoaderAccumulatesConcretePagesInRepositoryOrder() throws Exception {
+    List<Integer> offsets = new ArrayList<>();
+
+    List<FileSystemResource> resources = indexUtils.findAllResources(offset -> {
+      offsets.add(offset);
+      return offset == 0
+          ? page(3, 0, template("template-1"), template("template-2"))
+          : page(3, 2, template("template-3"));
+    });
+
+    assertEquals(List.of("template-1", "template-2", "template-3"),
+        resources.stream().map(FileSystemResource::getId).toList());
+    assertEquals(List.of(0, 2), offsets);
+  }
+
+  @Test
+  void resourcePageReadFailureEscapesInsteadOfPromotingPartialIndex() {
+    assertThrows(CedarProcessingException.class, () -> indexUtils.findAllResources(offset -> {
+      if (offset == 0) {
+        return page(3, 0, template("template-1"), template("template-2"));
+      }
+      throw new CedarProcessingException("neo4j offline");
+    }));
+  }
+
+  @Test
+  void emptyPageBeforeReportedTotalEscapesInsteadOfSpinningForever() {
+    CedarProcessingException error = assertThrows(CedarProcessingException.class,
+        () -> indexUtils.findAllResources(offset -> page(3, offset)));
+
+    assertTrue(error.getMessage().contains("made no progress"));
+  }
+
+  private static FolderServerNodeListResponse page(long total, int offset,
+                                                   FolderServerResourceExtract... resources) {
+    FolderServerNodeListResponse page = new FolderServerNodeListResponse();
+    page.setTotalCount(total);
+    page.setCurrentOffset(offset);
+    page.setResources(List.of(resources));
+    return page;
+  }
+
+  private static FolderServerTemplateExtract template(String id) {
+    FolderServerTemplateExtract template = new FolderServerTemplateExtract();
+    template.setId(id);
+    template.setName(id);
+    return template;
   }
 }
