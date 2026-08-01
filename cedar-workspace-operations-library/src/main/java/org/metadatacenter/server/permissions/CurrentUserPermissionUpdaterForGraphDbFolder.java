@@ -24,19 +24,19 @@ public class CurrentUserPermissionUpdaterForGraphDbFolder extends CurrentUserPer
   public void update(CurrentUserResourcePermissions currentUserResourcePermissions) {
     CedarFilesystemResourceId id = folder.getResourceId();
     if (permissionSession.userHasWriteAccessToResource(id)) {
-      folder.getCurrentUserPermissions().setCanWrite(true);
-      folder.getCurrentUserPermissions().setCanDelete(true);
-      folder.getCurrentUserPermissions().setCanRead(true);
+      currentUserResourcePermissions.setCanWrite(true);
+      currentUserResourcePermissions.setCanDelete(true);
+      currentUserResourcePermissions.setCanRead(true);
       if (!folder.isRoot() && !folder.isSystem() && !folder.isUserHome()) {
-        folder.getCurrentUserPermissions().setCanShare(true);
+        currentUserResourcePermissions.setCanShare(true);
       }
-      folder.getCurrentUserPermissions().setCanMakeOpen(!folder.isOpen());
-      folder.getCurrentUserPermissions().setCanMakeNotOpen(folder.isOpen());
+      currentUserResourcePermissions.setCanMakeOpen(!folder.isOpen());
+      currentUserResourcePermissions.setCanMakeNotOpen(folder.isOpen());
     } else if (permissionSession.userHasReadAccessToResource(id)) {
-      folder.getCurrentUserPermissions().setCanRead(true);
+      currentUserResourcePermissions.setCanRead(true);
     }
     if (permissionSession.userCanChangeOwnerOfResource(id)) {
-      folder.getCurrentUserPermissions().setCanChangeOwner(true);
+      currentUserResourcePermissions.setCanChangeOwner(true);
     }
   }
 }
