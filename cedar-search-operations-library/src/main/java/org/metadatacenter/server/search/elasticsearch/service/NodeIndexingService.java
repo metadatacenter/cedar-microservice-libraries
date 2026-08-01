@@ -155,7 +155,7 @@ public class NodeIndexingService extends AbstractIndexingService {
     return indexWorker.addToIndex(jsonResource);
   }
 
-  public void indexBatch(List<IndexingDocumentDocument> currentBatch) {
+  public void indexBatch(List<IndexingDocumentDocument> currentBatch) throws CedarProcessingException {
     indexWorker.addBatch(currentBatch);
   }
 

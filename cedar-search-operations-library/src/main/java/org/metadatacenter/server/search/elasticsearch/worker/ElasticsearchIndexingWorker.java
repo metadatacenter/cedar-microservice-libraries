@@ -147,32 +147,31 @@ public class ElasticsearchIndexingWorker {
     }
   }
 
-  public void addBatch(List<IndexingDocumentDocument> currentBatch) {
-    if (currentBatch != null) {
-      BulkRequest bulkRequest = new BulkRequest();
+  public void addBatch(List<IndexingDocumentDocument> currentBatch) throws CedarProcessingException {
+    if (currentBatch == null || currentBatch.isEmpty()) {
+      return;
+    }
+    BulkRequest bulkRequest = new BulkRequest();
 
-      for (IndexingDocumentDocument ir : currentBatch) {
-        JsonNode jsonResource = JsonMapper.MAPPER.convertValue(ir, JsonNode.class);
-
-        try {
-          IndexRequest indexRequest = new IndexRequest(indexName)
-              .source(JsonMapper.MAPPER.writeValueAsString(jsonResource), XContentType.JSON);
-          bulkRequest.add(indexRequest);
-        } catch (JsonProcessingException e) {
-          log.error("Error while serializing indexing document", e);
-        }
-      }
-
+    for (IndexingDocumentDocument ir : currentBatch) {
+      JsonNode jsonResource = JsonMapper.MAPPER.convertValue(ir, JsonNode.class);
       try {
-        BulkResponse bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT);
-        if (bulkResponse.hasFailures()) {
-          // process failures by iterating through each bulk response item
-          log.error("Failure when processing bulk request:");
-          log.error(bulkResponse.buildFailureMessage());
-        }
-      } catch (IOException e) {
-        log.error("Error executing bulk request", e);
+        IndexRequest indexRequest = new IndexRequest(indexName)
+            .source(JsonMapper.MAPPER.writeValueAsString(jsonResource), XContentType.JSON);
+        bulkRequest.add(indexRequest);
+      } catch (JsonProcessingException e) {
+        throw new CedarProcessingException("Error while serializing indexing document", e);
       }
+    }
+
+    try {
+      BulkResponse bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT);
+      if (bulkResponse.hasFailures()) {
+        throw new CedarProcessingException("Failure when processing bulk request: " +
+            bulkResponse.buildFailureMessage());
+      }
+    } catch (IOException e) {
+      throw new CedarProcessingException("Error executing bulk request", e);
     }
   }
 }
