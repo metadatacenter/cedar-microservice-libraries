@@ -565,12 +565,15 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
         QueryBuilder userIdQuery = QueryBuilders.termQuery(USERS, CedarNodeMaterializedPermissions.getKey(user.getId(), permission));
         BoolQueryBuilder permissionQuery = QueryBuilders.boolQuery();
 
-        QueryBuilder everybodyReadQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION, NodeSharePermission.READ.getValue());
-        QueryBuilder everybodyWriteQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION, NodeSharePermission.WRITE.getValue());
-
         permissionQuery.should(userIdQuery);
-        permissionQuery.should(everybodyReadQuery);
-        permissionQuery.should(everybodyWriteQuery);
+        if (permission == FilesystemResourcePermission.READ) {
+          permissionQuery.should(QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION,
+              NodeSharePermission.READ.getValue()));
+        }
+        if (permission == FilesystemResourcePermission.READ || permission == FilesystemResourcePermission.WRITE) {
+          permissionQuery.should(QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION,
+              NodeSharePermission.WRITE.getValue()));
+        }
         mainQuery.must(permissionQuery);
       }
 
