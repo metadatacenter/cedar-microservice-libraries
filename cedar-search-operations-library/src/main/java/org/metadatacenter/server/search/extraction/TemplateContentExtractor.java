@@ -130,16 +130,18 @@ public class TemplateContentExtractor {
               JsonNode valueSetsArrayNode = valueConstraintsNode.get(VALUE_CONSTRAINTS_VALUE_SETS);
               if (valueSetsArrayNode != null) {
                 for (JsonNode valueSetNode : valueSetsArrayNode) {
-                  String valueSetURI = valueSetNode.get(VALUE_CONSTRAINTS_URI).asText();
-
-                  if (valueSetURI == null)
+                  JsonNode valueSetURINode = valueSetNode.get(VALUE_CONSTRAINTS_URI);
+                  if (valueSetURINode == null || valueSetURINode.isNull()) {
                     log.warn("Null value set URI value sets array in _valueConstraints node at path "
                       + currentPath + "; node=" + valueConstraintsNode);
-                  else if (valueSetURI.isEmpty())
+                    continue;
+                  }
+                  String valueSetURI = valueSetURINode.asText();
+                  if (valueSetURI.isEmpty())
                     log.warn("Empty value set URI value sets array in _valueConstraints node at path "
                       + currentPath + "; node=" + valueConstraintsNode);
                   else
-                  valueSetURIs.add(valueSetURI);
+                    valueSetURIs.add(valueSetURI);
                 }
               }
             }
