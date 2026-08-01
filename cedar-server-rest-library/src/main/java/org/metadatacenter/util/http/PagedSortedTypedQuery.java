@@ -26,7 +26,9 @@ public class PagedSortedTypedQuery extends PagedSortedQuery {
 
   public PagedSortedTypedQuery(PaginationConfig config) {
     super(config);
-
+    this.resourceTypesInput = Optional.empty();
+    this.versionInput = Optional.empty();
+    this.publicationStatusInput = Optional.empty();
     this.resourceTypeList = new ArrayList<>();
   }
 
