@@ -183,8 +183,17 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
         Arguments.of("disease:https://example.org/concept/A", List.of("infoFields.fieldValueUri", "https%3A%2F%2F")),
         Arguments.of("[pv]female", List.of("possibleValues.valueLabels", "possibleValues.valueConcepts")),
         Arguments.of("[pv]=female", List.of("possibleValues.valueLabels.keyword", "possibleValues.valueConcepts")),
+        Arguments.of("[PV]=Female", List.of("possibleValues.valueLabels.keyword", "Female")),
         Arguments.of("kidney AND liver", List.of("must", "kidney", "liver")),
-        Arguments.of("disease:\"colorectal cancer\"", List.of("nested", "colorectal cancer")));
+        Arguments.of("kidney NOT liver", List.of("must_not", "kidney", "liver")),
+        Arguments.of("disease:\"colorectal cancer\"", List.of("nested", "colorectal cancer")),
+        Arguments.of("disease:\"stage: II\"", List.of("nested", "stage: II")),
+        Arguments.of("\"study title\":\"colorectal cancer\"", List.of("study title", "colorectal cancer")),
+        Arguments.of("(disease:*)", List.of("nested", "infoFields.fieldName")),
+        Arguments.of("*:*", List.of("nested", "query_string", "*")),
+        Arguments.of("disease:influ*", List.of("infoFields.fieldValue", "influ*")),
+        Arguments.of("disease:colo?", List.of("infoFields.fieldValue", "colo?")),
+        Arguments.of("disease:https://example.org/A?x=1#part", List.of("infoFields.fieldValueUri", "x%3D1%23part")));
   }
 
   @ParameterizedTest
@@ -196,6 +205,17 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
     for (String expected : expectedFragments) {
       assertTrue(query.contains(expected), () -> "Missing '" + expected + "' in " + query);
     }
+  }
+
+  @Test
+  void malformedLuceneSyntaxReturnsProcessingErrorWithoutCallingSearchBackend() {
+    org.metadatacenter.exception.CedarProcessingException error = org.junit.jupiter.api.Assertions.assertThrows(
+        org.metadatacenter.exception.CedarProcessingException.class,
+        () -> executeSearch("disease:\"unterminated", null, ResourceVersionFilter.ALL,
+            ResourcePublicationStatusFilter.ALL, null, null, 10, 0));
+
+    assertTrue(error.getMessage().contains("Error processing query"), error.getMessage());
+    assertEquals(null, capturedRequest.get());
   }
 
   private SearchResponseResult executeSearch(String query, List<String> resourceTypes, ResourceVersionFilter version,
