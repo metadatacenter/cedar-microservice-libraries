@@ -63,13 +63,25 @@ public class InclusionSubgraphUtil {
 
   private static List<String> extractFirstLevelIncludedIds(JsonNode artifact) {
     List<String> linkIds = new ArrayList<>();
+    if (artifact == null) {
+      return linkIds;
+    }
     JsonNode properties = artifact.get(JsonSchemaConstants.PROPERTIES);
+    if (properties == null || !properties.isObject()) {
+      return linkIds;
+    }
     for (Iterator<String> it = properties.fieldNames(); it.hasNext(); ) {
       String fieldName = it.next();
       JsonNode embedded = null;
       if (!ModelUtil.isSpecialField(fieldName)) {
         JsonNode candidate = properties.get(fieldName);
+        if (candidate == null || !candidate.isObject()) {
+          continue;
+        }
         JsonNode typeNode = candidate.get(JsonSchemaConstants.TYPE);
+        if (typeNode == null || !typeNode.isTextual()) {
+          continue;
+        }
         String typeValue = typeNode.textValue();
         if (JsonSchemaConstants.TYPE_VALUE_OBJECT.equals(typeValue)) {
           // single embedded artifact
@@ -79,10 +91,14 @@ public class InclusionSubgraphUtil {
           embedded = candidate.get(JsonSchemaConstants.ITEMS);
         }
       }
-      if (embedded != null) {
+      if (embedded != null && embedded.isObject()) {
         JsonNode atTypeNode = embedded.get(LinkedData.TYPE);
-        String atType = atTypeNode.textValue();
         JsonNode atIdNode = embedded.get(LinkedData.ID);
+        if (atTypeNode == null || !atTypeNode.isTextual() || atIdNode == null || !atIdNode.isTextual()
+            || atIdNode.textValue().isBlank()) {
+          continue;
+        }
+        String atType = atTypeNode.textValue();
         String atId = atIdNode.textValue();
         if (CedarConstants.TEMPLATE_FIELD_TYPE_URI.equals(atType)) {
           linkIds.add(atId);
