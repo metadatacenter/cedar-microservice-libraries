@@ -111,9 +111,11 @@ public abstract class CedarUserRolePermissionUtil {
 
   public static void expandRolesIntoPermissions(CedarUser u) {
     Set<String> permissions = new HashSet<>();
-    for (CedarUserRole role : u.getRoles()) {
-      if (role != null) {
-        permissions.addAll(roleToPermissions.get(role));
+    if (u.getRoles() != null) {
+      for (CedarUserRole role : u.getRoles()) {
+        if (role != null) {
+          permissions.addAll(roleToPermissions.get(role));
+        }
       }
     }
     List<String> permissionList = new ArrayList<>(permissions);
