@@ -47,7 +47,8 @@ public abstract class NodeListUtil {
 
     List<FolderServerResourceExtract> resources = folderSession.findFolderContentsExtract(folderId, req);
 
-    boolean isOpenImplicitly = pathInfo.get(pathInfo.size() -1).getIsOpenImplicitly();
+    boolean isOpenImplicitly = pathInfo != null && !pathInfo.isEmpty()
+        && Boolean.TRUE.equals(pathInfo.get(pathInfo.size() - 1).getIsOpenImplicitly());
 
     for (FolderServerResourceExtract resourceExtract : resources) {
       TrustedByUtil.decorateWithTrustedBy(resourceExtract, pathInfo, cedarConfig.getTrustedFolders().getFoldersMap());

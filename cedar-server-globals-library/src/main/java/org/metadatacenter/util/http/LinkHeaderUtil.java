@@ -1,7 +1,5 @@
 package org.metadatacenter.util.http;
 
-import org.apache.hc.core5.http.NameValuePair;
-import org.apache.hc.core5.http.message.BasicNameValuePair;
 import org.apache.hc.core5.net.URIBuilder;
 import org.metadatacenter.constant.HttpConstants;
 import org.slf4j.Logger;
@@ -10,9 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public final class LinkHeaderUtil {
@@ -40,8 +36,8 @@ public final class LinkHeaderUtil {
   }
 
   public static Map<String, String> getPagingLinkHeaders(String baseUrl, Long total, Integer limit, Integer offset) {
-    if (limit == null) {
-      limit = 0;
+    if (limit == null || limit <= 0 || total == null || total < 0) {
+      return new HashMap<>();
     }
     if (offset == null) {
       offset = 0;
@@ -85,10 +81,8 @@ public final class LinkHeaderUtil {
     URI uri = null;
     try {
       URIBuilder ub = new URIBuilder(baseUrl);
-      List<NameValuePair> params = new ArrayList<>();
-      params.add(new BasicNameValuePair(PARAM_OFFSET, String.valueOf(offset)));
-      params.add(new BasicNameValuePair(PARAM_LIMIT, String.valueOf(limit)));
-      ub.addParameters(params);
+      ub.setParameter(PARAM_OFFSET, String.valueOf(offset));
+      ub.setParameter(PARAM_LIMIT, String.valueOf(limit));
       ub.setCharset(StandardCharsets.UTF_8);
       uri = ub.build();
     } catch (URISyntaxException e) {
