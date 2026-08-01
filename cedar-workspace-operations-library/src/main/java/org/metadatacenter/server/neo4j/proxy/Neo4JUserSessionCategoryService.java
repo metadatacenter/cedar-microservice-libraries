@@ -16,6 +16,7 @@ import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedCatego
 import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.*;
+import java.util.function.BiFunction;
 
 public class Neo4JUserSessionCategoryService extends AbstractNeo4JUserSession implements CategoryServiceSession {
 
@@ -73,7 +74,7 @@ public class Neo4JUserSessionCategoryService extends AbstractNeo4JUserSession im
 
   @Override
   public FolderServerCategoryExtractWithChildren getCategoryTree() {
-    List<FolderServerCategory> allCategories = getAllCategories(10000, 0);
+    List<FolderServerCategory> allCategories = loadAllCategories(this::getAllCategories);
     FolderServerCategory rootCategory = getRootCategory();
 
     //Map<String, FolderServerCategoryExtractWithChildren> categoryMap = new HashMap<>();
@@ -93,6 +94,20 @@ public class Neo4JUserSessionCategoryService extends AbstractNeo4JUserSession im
     injectChildrenRecursively(rootExtract, categoryChildMap);
 
     return rootExtract;
+  }
+
+  static List<FolderServerCategory> loadAllCategories(
+      BiFunction<Integer, Integer, List<FolderServerCategory>> pageFetcher) {
+    final int pageSize = 1000;
+    int offset = 0;
+    List<FolderServerCategory> categories = new ArrayList<>();
+    List<FolderServerCategory> page;
+    do {
+      page = pageFetcher.apply(pageSize, offset);
+      categories.addAll(page);
+      offset += page.size();
+    } while (page.size() == pageSize);
+    return categories;
   }
 
   private void injectChildrenRecursively(FolderServerCategoryExtractWithChildren extract, Map<String,
