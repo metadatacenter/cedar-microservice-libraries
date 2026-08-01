@@ -2,6 +2,7 @@ package org.metadatacenter.server.logging.query;
 
 import org.metadatacenter.server.logging.query.LogQueryColumns.ColumnDef;
 import org.metadatacenter.server.logging.query.LogQueryColumns.Kind;
+import org.metadatacenter.server.logging.query.LogQueryColumns.MeasureDef;
 import org.metadatacenter.server.logging.query.LogQueryColumns.TableDef;
 import org.metadatacenter.server.logging.query.LogQueryColumns.ValType;
 import org.metadatacenter.server.logging.query.LogQueryResults.ColumnMeta;
@@ -46,6 +47,8 @@ public final class LogQueryBuilder {
   public static final int MAX_GROUPED_LIMIT = 500;
   /** Guard against an accidentally unbounded scan; raw retention is 30d anyway. */
   public static final int MAX_SPAN_DAYS = 400;
+  /** Mirrors LatencyHistogram.BUCKETS; the merged h0..h14 columns trail a rollup percentile query. */
+  private static final int HISTOGRAM_BUCKETS = 15;
   private static final Duration DEFAULT_SPAN = Duration.ofHours(24);
 
   private static final Set<String> OPS = Set.of(
@@ -57,6 +60,14 @@ public final class LogQueryBuilder {
   }
 
   /** SQL plus everything the DAO and the UI need to interpret the result. */
+  /**
+   * @param sqlValueCount        how many leading result cells map 1:1 to {@code columns}. On the rollup
+   *                             source the trailing 15 cells are the merged histogram, which the DAO
+   *                             turns into the remaining percentile columns — they have no SQL column
+   *                             of their own.
+   * @param percentileFractions  the percentiles to read out of that histogram, in column order
+   * @param approximate          true when any value came from the histogram rather than the rows
+   */
   public record BuiltQuery(String sql,
                            Map<String, Object> params,
                            List<ColumnMeta> columns,
@@ -66,7 +77,18 @@ public final class LogQueryBuilder {
                            int limit,
                            Instant from,
                            Instant to,
-                           List<String> notes) {
+                           List<String> notes,
+                           int sqlValueCount,
+                           List<Double> percentileFractions,
+                           boolean approximate) {
+
+    /** Raw-source queries map every column to a SQL cell and are always exact. */
+    public BuiltQuery(String sql, Map<String, Object> params, List<ColumnMeta> columns, TableDef table,
+                      boolean grouped, boolean keysetPageable, int limit, Instant from, Instant to,
+                      List<String> notes) {
+      this(sql, params, columns, table, grouped, keysetPageable, limit, from, to, notes,
+          columns.size(), List.of(), false);
+    }
   }
 
   /** A parsed metric: {@code count}, {@code sum:duration}, {@code p95:handlerDuration}, … */
@@ -82,7 +104,7 @@ public final class LogQueryBuilder {
     if (spec == null) {
       throw new IllegalArgumentException("Missing query spec.");
     }
-    TableDef table = LogQueryColumns.table(spec.table() == null ? LogQueryColumns.T_REQUEST : spec.table());
+    TableDef table = LogQueryColumns.table(spec.table(), spec.source());
 
     Instant to = spec.to() == null ? Instant.now() : parseInstant(spec.to(), "to");
     Instant from = spec.from() == null ? to.minus(DEFAULT_SPAN) : parseInstant(spec.from(), "from");
@@ -114,6 +136,10 @@ public final class LogQueryBuilder {
 
   private static BuiltQuery raw(LogQuerySpec spec, TableDef table, StringBuilder where,
                                 Map<String, Object> params, Instant from, Instant to, List<String> notes) {
+    if (table.rollup()) {
+      throw new IllegalArgumentException("The rollup source has no raw rows — it stores hourly "
+          + "aggregates. Add groupBy/metrics, or switch source to 'raw'.");
+    }
     if (spec.having() != null && !spec.having().isEmpty()) {
       throw new IllegalArgumentException(
           "Having needs metrics; it filters aggregated groups, not raw rows.");
@@ -174,44 +200,100 @@ public final class LogQueryBuilder {
     }
 
     List<Metric> metrics = parseMetrics(spec.metrics(), table);
-    List<String> pctCols = new ArrayList<>();
+    int limit = clampLimit(spec.limit(), MAX_GROUPED_LIMIT);
+
+    // On the rollup source percentiles come from the merged histogram and are computed in Java, so
+    // they are not SQL columns at all; everything else aggregates in SQL as usual.
+    List<Metric> sqlMetrics = new ArrayList<>();
+    List<Metric> histMetrics = new ArrayList<>();
     for (Metric m : metrics) {
+      if (table.rollup() && PERCENTILES.contains(m.fn())) {
+        histMetrics.add(m);
+      } else {
+        sqlMetrics.add(m);
+      }
+    }
+    validateHistogramMetrics(table, histMetrics);
+    if (sqlMetrics.isEmpty()) {
+      sqlMetrics.add(new Metric("count", "count", null));   // always need at least one SQL measure
+    }
+
+    List<String> pctCols = new ArrayList<>();
+    for (Metric m : sqlMetrics) {
       if (PERCENTILES.contains(m.fn()) && !pctCols.contains(m.col())) {
         pctCols.add(m.col());
       }
     }
-    int limit = clampLimit(spec.limit(), MAX_GROUPED_LIMIT);
 
     List<ColumnMeta> columns = new ArrayList<>();
     for (String key : dims) {
       columns.add(meta(key, table.column(key)));
     }
-    for (Metric m : metrics) {
+    for (Metric m : sqlMetrics) {
       columns.add(metricMeta(m, table));
+    }
+    int sqlValueCount = columns.size();
+    List<Double> fractions = new ArrayList<>();
+    for (Metric m : histMetrics) {
+      columns.add(metricMeta(m, table));
+      fractions.add(Integer.parseInt(m.fn().substring(1)) / 100.0);
     }
 
     String sql = pctCols.isEmpty()
-        ? flatGrouped(table, dims, metrics, where, limit)
-        : windowedGrouped(table, dims, metrics, pctCols, where, limit);
+        ? flatGrouped(table, dims, sqlMetrics, where, limit, !histMetrics.isEmpty())
+        : windowedGrouped(table, dims, sqlMetrics, pctCols, where, limit);
     if (!pctCols.isEmpty()) {
       notes.add("Percentiles are exact (window function over the raw rows), not histogram estimates.");
     }
+    if (!histMetrics.isEmpty()) {
+      notes.add("Percentiles are approximate: interpolated from the 15-bucket rollup histogram.");
+    }
+    if (table.rollup()) {
+      notes.add("Rollup source: hourly grain, so sub-hour ranges are rounded to the hours they touch.");
+    }
 
-    String order = orderClause(spec, table, metricKeys(metrics), dims, false);
-    sql = sql.replace("/*HAVING*/", havingClause(spec, metricKeys(metrics), params))
+    String order = orderClause(spec, table, metricKeys(sqlMetrics), dims, false);
+    sql = sql.replace("/*HAVING*/", havingClause(spec, metricKeys(sqlMetrics), params))
         .replace("/*ORDER*/", order);
     params.put("lim", limit);
-    return new BuiltQuery(sql, params, columns, table, true, false, limit, from, to, notes);
+    return new BuiltQuery(sql, params, columns, table, true, false, limit, from, to, notes,
+        sqlValueCount, List.copyOf(fractions), !histMetrics.isEmpty());
   }
 
-  /** No percentiles: aggregate straight over the table. */
+  /**
+   * A rollup row carries exactly one histogram, so every percentile in a query has to describe the
+   * same measure — and that measure has to be one the aggregator actually folded a histogram for.
+   */
+  private static void validateHistogramMetrics(TableDef table, List<Metric> histMetrics) {
+    String target = null;
+    for (Metric m : histMetrics) {
+      if (!table.measure(m.col()).histogram()) {
+        throw new IllegalArgumentException("No rollup histogram for '" + m.col()
+            + "', so percentiles are unavailable on it. Use sum/min/max, or query the raw source.");
+      }
+      if (target == null) {
+        target = m.col();
+      } else if (!target.equals(m.col())) {
+        throw new IllegalArgumentException("Percentiles on the rollup source must all describe the same "
+            + "column (a rollup row stores one histogram); got '" + target + "' and '" + m.col() + "'.");
+      }
+    }
+  }
+
+  /** No SQL percentiles: aggregate straight over the table, optionally merging the histogram too. */
   private static String flatGrouped(TableDef table, List<String> dims, List<Metric> metrics,
-                                    String where, int limit) {
+                                    String where, int limit, boolean withHistogram) {
     StringBuilder select = new StringBuilder("SELECT ");
     for (String key : dims) {
       select.append(table.column(key).sql()).append(" AS ").append(quote(key)).append(", ");
     }
     appendMetricExprs(select, metrics, table, null);
+    if (withHistogram) {
+      // Merging histograms is a column-wise SUM; the interpolation happens in Java (LatencyHistogram).
+      for (int i = 0; i < HISTOGRAM_BUCKETS; i++) {
+        select.append(", SUM(h").append(i).append(")");
+      }
+    }
 
     StringBuilder sql = new StringBuilder(select).append(" FROM ").append(table.sqlTable())
         .append(" WHERE ").append(where);
@@ -293,7 +375,9 @@ public final class LogQueryBuilder {
       Metric m = metrics.get(i);
       String colRef = m.col() == null ? null : (ref == null ? table.column(m.col()).sql() : quote(ref.apply(m.col())));
       String expr;
-      if ("count".equals(m.fn())) {
+      if (table.rollup()) {
+        expr = rollupMetricExpr(table, m);
+      } else if ("count".equals(m.fn())) {
         expr = "COUNT(*)";
       } else if ("distinct".equals(m.fn())) {
         expr = "COUNT(DISTINCT " + colRef + ")";
@@ -377,6 +461,39 @@ public final class LogQueryBuilder {
         }
       }
     }
+  }
+
+  /**
+   * The same logical metric against pre-folded columns: a rollup row already holds the sum, the min,
+   * the max and the count for its key, so {@code sum:handlerDuration} is {@code SUM(sumHandlerNanos)}
+   * and {@code max:handlerDuration} is {@code MAX(maxHandlerNanos)} — folding folded values again.
+   */
+  private static String rollupMetricExpr(TableDef table, Metric m) {
+    if ("count".equals(m.fn())) {
+      return table.countExpr();
+    }
+    if ("distinct".equals(m.fn())) {
+      throw new IllegalArgumentException("distinct:" + m.col() + " needs row-level data; the rollup "
+          + "source has already folded rows away. Query the raw source for distinct counts.");
+    }
+    MeasureDef measure = table.measure(m.col());
+    return switch (m.fn()) {
+      case "sum" -> "SUM(" + measure.sumCol() + ")";
+      case "min" -> requireBound(measure.minCol(), m, "min") ;
+      case "max" -> requireBound(measure.maxCol(), m, "max");
+      // the rollup keeps a total and a count, so the mean is exact even though percentiles are not
+      case "avg" -> "SUM(" + measure.sumCol() + ") / NULLIF(" + table.countExpr() + ", 0)";
+      default -> throw new IllegalArgumentException(
+          "Metric '" + m.key() + "' is not available on the rollup source.");
+    };
+  }
+
+  private static String requireBound(String col, Metric m, String fn) {
+    if (col == null) {
+      throw new IllegalArgumentException("The rollup does not keep a " + fn + " for '" + m.col()
+          + "' — only a running total. Use sum/avg, or query the raw source.");
+    }
+    return fn.toUpperCase(Locale.ROOT) + "(" + col + ")";
   }
 
   // ---- having ------------------------------------------------------------------------------------

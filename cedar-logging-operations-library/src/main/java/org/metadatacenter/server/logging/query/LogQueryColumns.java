@@ -24,6 +24,10 @@ public final class LogQueryColumns {
   public static final String T_REQUEST = "request";
   public static final String T_CYPHER = "cypher";
 
+  public static final String SOURCE_RAW = "raw";
+  public static final String SOURCE_ROLLUP = "rollup";
+  private static final String ROLLUP_SUFFIX = "-rollup";
+
   /** How a column may be used. Filtering is allowed for every kind; the rest depends on this. */
   public enum Kind {
     /** Groupable and filterable: low cardinality, or a derived bucket. */
@@ -50,8 +54,34 @@ public final class LogQueryColumns {
     }
   }
 
+  /**
+   * How a logical measure is recovered from a rollup row. The raw tables store one duration per row;
+   * the rollups store it pre-folded, so {@code sum:handlerDuration} becomes {@code SUM(sumHandlerNanos)}
+   * and {@code max:handlerDuration} becomes {@code MAX(maxHandlerNanos)}. Percentiles come from the
+   * 15-bucket histogram (merged by column-wise SUM, then interpolated in Java) and are therefore
+   * approximate — which the result marks as {@code exact: false}.
+   */
+  public record MeasureDef(String key, String sumCol, String minCol, String maxCol, boolean histogram) {
+  }
+
   public record TableDef(String key, String sqlTable, String timeColumn, String idColumn,
-                         List<String> rowColumns, Map<String, ColumnDef> columns) {
+                         List<String> rowColumns, Map<String, ColumnDef> columns,
+                         boolean rollup, String countExpr, Map<String, MeasureDef> measures) {
+
+    /** Raw tables: one row per event, so counting is COUNT(*) and there are no pre-folded measures. */
+    public TableDef(String key, String sqlTable, String timeColumn, String idColumn,
+                    List<String> rowColumns, Map<String, ColumnDef> columns) {
+      this(key, sqlTable, timeColumn, idColumn, rowColumns, columns, false, "COUNT(*)", Map.of());
+    }
+
+    public MeasureDef measure(String key) {
+      MeasureDef m = measures.get(key);
+      if (m == null) {
+        throw new IllegalArgumentException("Column '" + key + "' is not an aggregatable measure on the "
+            + this.key + " source. Available: " + String.join(", ", measures.keySet()));
+      }
+      return m;
+    }
 
     /** Resolve a column or fail with a message naming the offender (becomes a 400). */
     public ColumnDef column(String key) {
@@ -110,6 +140,23 @@ public final class LogQueryColumns {
     return def;
   }
 
+  /**
+   * Resolve (table, source) to a definition. The caller's vocabulary stays {@code request|cypher} plus
+   * {@code raw|rollup}; which physical table that means is decided here, so the same spec can be run
+   * against either source by flipping one field.
+   */
+  public static TableDef table(String key, String source) {
+    String t = (key == null || key.isBlank()) ? T_REQUEST : key;
+    String s = (source == null || source.isBlank()) ? SOURCE_RAW : source.toLowerCase(java.util.Locale.ROOT);
+    if (SOURCE_ROLLUP.equals(s)) {
+      return table(t + ROLLUP_SUFFIX);
+    }
+    if (!SOURCE_RAW.equals(s)) {
+      throw new IllegalArgumentException("Unknown source '" + source + "'. Expected 'raw' or 'rollup'.");
+    }
+    return table(t);
+  }
+
   public static List<String> tableKeys() {
     return List.copyOf(TABLES.keySet());
   }
@@ -120,7 +167,67 @@ public final class LogQueryColumns {
     Map<String, TableDef> tables = new LinkedHashMap<>();
     tables.put(T_REQUEST, requestTable());
     tables.put(T_CYPHER, cypherTable());
+    tables.put(T_REQUEST + ROLLUP_SUFFIX, requestRollupTable());
+    tables.put(T_CYPHER + ROLLUP_SUFFIX, cypherRollupTable());
     return tables;
+  }
+
+  /**
+   * The hourly rollups: same query grammar, different source. They answer ranges beyond the raw
+   * retention window at a fraction of the cost, with hourly grain and approximate percentiles.
+   * Dimensions are limited to what was folded in — anything not in the rollup key is simply gone,
+   * which is why the allowlist here is deliberately shorter than the raw one.
+   */
+  private static TableDef requestRollupTable() {
+    Map<String, ColumnDef> c = new LinkedHashMap<>();
+    dim(c, "component", "systemComponentName", "Component", null);
+    dim(c, "className", "className", "Class", null);
+    dim(c, "methodName", "methodName", "Method name", null);
+    dim(c, "handler", HANDLER_SQL, "Handler", "derived: className.methodName");
+    dim(c, "httpMethod", "httpMethod", "Method", null);
+    dim(c, "statusClass", "statusClass", "Status class", "ok/4xx/5xx/err/unknown, folded at aggregation time");
+    dim(c, "authSource", "authSource", "Auth source", null);
+    rollupTimeBuckets(c);
+
+    num(c, "handlerDuration", "sumHandlerNanos", "Handler duration", "nanos");
+    num(c, "preHandlerDuration", "sumPreHandlerNanos", "Pre-handler duration", "nanos");
+    num(c, "errorCount", "errorCount", "Errors", null);
+    time(c, "hourUtc", "hourUtc", "Hour (UTC)");
+    text(c, "samplePath", "samplePath", "Sample path", "one representative path per rollup key");
+
+    Map<String, MeasureDef> m = new LinkedHashMap<>();
+    m.put("handlerDuration", new MeasureDef("handlerDuration", "sumHandlerNanos", "minHandlerNanos",
+        "maxHandlerNanos", true));
+    m.put("preHandlerDuration", new MeasureDef("preHandlerDuration", "sumPreHandlerNanos", null, null, false));
+    m.put("errorCount", new MeasureDef("errorCount", "errorCount", null, null, false));
+
+    return new TableDef(T_REQUEST + ROLLUP_SUFFIX, "agg_request_hourly", "hourUtc", "id",
+        List.of(), Map.copyOf(c), true, "SUM(reqCount)", Map.copyOf(m));
+  }
+
+  private static TableDef cypherRollupTable() {
+    Map<String, ColumnDef> c = new LinkedHashMap<>();
+    dim(c, "component", "systemComponentName", "Component", null);
+    dim(c, "operation", "operation", "Operation", null);
+    dim(c, "runnableHash", "runnableHash", "Query shape", "join agg_cypher_query_catalog for the text");
+    rollupTimeBuckets(c);
+
+    num(c, "duration", "sumNanos", "Duration", "nanos");
+    time(c, "hourUtc", "hourUtc", "Hour (UTC)");
+
+    Map<String, MeasureDef> m = new LinkedHashMap<>();
+    m.put("duration", new MeasureDef("duration", "sumNanos", "minNanos", "maxNanos", true));
+
+    return new TableDef(T_CYPHER + ROLLUP_SUFFIX, "agg_cypher_hourly", "hourUtc", "id",
+        List.of(), Map.copyOf(c), true, "SUM(execCount)", Map.copyOf(m));
+  }
+
+  /** Rollup grain is hourly, so there is no tsMinute — asking for one is rejected by name. */
+  private static void rollupTimeBuckets(Map<String, ColumnDef> c) {
+    dim(c, "tsHour", "hourUtc", "Hour", "rollup grain");
+    dim(c, "tsDay", "DATE(hourUtc)", "Day", "derived bucket");
+    dim(c, "hourOfDay", "HOUR(hourUtc)", "Hour of day", "derived: 0-23, for off-hours patterns");
+    dim(c, "dayOfWeek", "DAYOFWEEK(hourUtc)", "Day of week", "derived: 1=Sunday");
   }
 
   private static TableDef requestTable() {
