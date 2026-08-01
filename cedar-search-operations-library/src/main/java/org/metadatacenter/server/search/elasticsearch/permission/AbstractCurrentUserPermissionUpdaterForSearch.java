@@ -44,8 +44,11 @@ public abstract class AbstractCurrentUserPermissionUpdaterForSearch extends Curr
   protected boolean containsPermissions(List<String> users, FilesystemResourcePermission permission) {
     //TODO: Optimize this, use map instead
     String lookup = CedarNodeMaterializedPermissions.getKey(cedarUser.getId(), permission);
+    if (users == null) {
+      return false;
+    }
     for (String pair : users) {
-      if (pair.equals(lookup)) {
+      if (lookup.equals(pair)) {
         return true;
       }
     }
@@ -78,7 +81,7 @@ public abstract class AbstractCurrentUserPermissionUpdaterForSearch extends Curr
   public OutcomeWithReason resourceCanBePublished() {
     if (indexedDocument.getInfo().getPublicationStatus() != BiboStatus.DRAFT) {
       return OutcomeWithReason.negative(CedarErrorKey.PUBLISH_ONLY_DRAFT);
-    } else if (!indexedDocument.getInfo().isLatestVersion()) {
+    } else if (!Boolean.TRUE.equals(indexedDocument.getInfo().isLatestVersion())) {
       return OutcomeWithReason.negative(CedarErrorKey.VERSIONING_ONLY_ON_LATEST);
     }
     return OutcomeWithReason.positive();
@@ -87,7 +90,7 @@ public abstract class AbstractCurrentUserPermissionUpdaterForSearch extends Curr
   public OutcomeWithReason resourceCanBeDrafted() {
     if (indexedDocument.getInfo().getPublicationStatus() != BiboStatus.PUBLISHED) {
       return OutcomeWithReason.negative(CedarErrorKey.CREATE_DRAFT_ONLY_FROM_PUBLISHED);
-    } else if (!indexedDocument.getInfo().isLatestVersion()) {
+    } else if (!Boolean.TRUE.equals(indexedDocument.getInfo().isLatestVersion())) {
       return OutcomeWithReason.negative(CedarErrorKey.VERSIONING_ONLY_ON_LATEST);
     }
     return OutcomeWithReason.positive();
