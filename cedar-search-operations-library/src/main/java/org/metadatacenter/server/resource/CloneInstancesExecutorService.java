@@ -47,9 +47,9 @@ import jakarta.ws.rs.core.Response;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_IS_BASED_ON;
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_ORG_IDENTIFIER;
@@ -93,8 +93,7 @@ public class CloneInstancesExecutorService {
     if (numberOfInstances > 0) {
       List<FolderServerResourceExtract> instanceExtracts = findAllInstances(folderSession, oldTemplateId);
 
-      Map<String, List<FolderServerResourceExtract>> instancesByOwner = instanceExtracts.stream()
-          .collect(Collectors.groupingBy(FolderServerResourceExtract::getOwnedBy));
+      Map<String, List<FolderServerResourceExtract>> instancesByOwner = groupInstancesByOwner(instanceExtracts);
 
       for (Map.Entry<String, List<FolderServerResourceExtract>> entry : instancesByOwner.entrySet()) {
         CedarUserId ownerUser = CedarUserId.build(entry.getKey());
@@ -143,6 +142,20 @@ public class CloneInstancesExecutorService {
       offset += page.size();
     } while (page.size() == pageSize);
     return instances;
+  }
+
+  static Map<String, List<FolderServerResourceExtract>> groupInstancesByOwner(
+      List<FolderServerResourceExtract> instances) {
+    Map<String, List<FolderServerResourceExtract>> instancesByOwner = new LinkedHashMap<>();
+    for (FolderServerResourceExtract instance : instances) {
+      String owner = instance.getOwnedBy();
+      if (owner == null || owner.isBlank()) {
+        log.error("Instance has no owner and cannot be cloned: " + instance.getId());
+        continue;
+      }
+      instancesByOwner.computeIfAbsent(owner, ignored -> new ArrayList<>()).add(instance);
+    }
+    return instancesByOwner;
   }
 
 
