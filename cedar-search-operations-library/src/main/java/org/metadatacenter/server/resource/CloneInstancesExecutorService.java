@@ -46,6 +46,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -90,9 +91,7 @@ public class CloneInstancesExecutorService {
                                         String newFolderName) {
     long numberOfInstances = folderSession.getNumberOfInstances(oldTemplateId);
     if (numberOfInstances > 0) {
-      List<FolderServerResourceExtract> instanceExtracts =
-          folderSession.searchIsBasedOn(List.of(CedarResourceType.INSTANCE), oldTemplateId, 1000, 0,
-              List.of(QuerySortOptions.DEFAULT_SORT_FIELD.getName()));
+      List<FolderServerResourceExtract> instanceExtracts = findAllInstances(folderSession, oldTemplateId);
 
       Map<String, List<FolderServerResourceExtract>> instancesByOwner = instanceExtracts.stream()
           .collect(Collectors.groupingBy(FolderServerResourceExtract::getOwnedBy));
@@ -129,6 +128,21 @@ public class CloneInstancesExecutorService {
         }
       }
     }
+  }
+
+  static List<FolderServerResourceExtract> findAllInstances(FolderServiceSession folderSession,
+                                                            CedarTemplateId templateId) {
+    final int pageSize = 1000;
+    int offset = 0;
+    List<FolderServerResourceExtract> instances = new ArrayList<>();
+    List<FolderServerResourceExtract> page;
+    do {
+      page = folderSession.searchIsBasedOn(List.of(CedarResourceType.INSTANCE), templateId, pageSize, offset,
+          List.of(QuerySortOptions.DEFAULT_SORT_FIELD.getName()));
+      instances.addAll(page);
+      offset += page.size();
+    } while (page.size() == pageSize);
+    return instances;
   }
 
 
