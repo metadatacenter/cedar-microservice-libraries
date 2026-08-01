@@ -223,6 +223,28 @@ class TemplateInstanceContentExtractorTest {
     assertEquals("Known", output.get(0).getFieldName());
   }
 
+  @Test
+  void literalDotInFieldKeyDoesNotCollideWithNestedTemplatePath() throws Exception {
+    ObjectNode template = MAPPER.createObjectNode();
+    template.set("a.b", field("field-flat", "Flat dotted key", null, false));
+    ObjectNode nested = element("element-a", "A", false);
+    nested.set("b", field("field-nested", "Nested key", null, false));
+    template.set("a", nested);
+    ObjectNode instance = basedOnInstance();
+    instance.putObject("a.b").put("@value", "flat value");
+    instance.putObject("a").putObject("b").put("@value", "nested value");
+    stubArtifacts(template, instance);
+
+    List<InfoField> output = generateInstanceFields(false);
+
+    assertEquals(List.of("Flat dotted key", "Nested key"),
+        output.stream().map(InfoField::getFieldName).toList());
+    assertEquals(List.of("['a.b']", "['a']['b']"),
+        output.stream().map(InfoField::getFieldPath).toList());
+    assertEquals(List.of("flat value", "nested value"),
+        output.stream().map(InfoField::getFieldValue).toList());
+  }
+
   @ParameterizedTest
   @ValueSource(booleans = {false, true})
   void rejectsInstanceMissingOrBlankBasedOnTemplateIdentifierWithDomainError(boolean blankRatherThanMissing)

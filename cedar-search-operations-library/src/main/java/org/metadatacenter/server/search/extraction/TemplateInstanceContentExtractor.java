@@ -38,7 +38,7 @@ public class TemplateInstanceContentExtractor {
   /**
    * Cache of template nodes, which is used to avoid retrieving and parsing the same template multiple times.
    */
-  private HashMap<String, HashMap<String, TemplateNode>> templateNodesCache;
+  private Map<String, Map<List<String>, TemplateNode>> templateNodesCache;
 
   public TemplateInstanceContentExtractor(CedarConfig cedarConfig) {
     this(new ExtractionUtils(cedarConfig));
@@ -131,7 +131,7 @@ public class TemplateInstanceContentExtractor {
       }
       String templateId = templateIdNode.asText();
 
-      HashMap<String, TemplateNode> nodesMap = null;
+      Map<List<String>, TemplateNode> nodesMap;
       // If it's an index regeneration task the cache will be needed to avoid retrieving and parsing the same
       // template multiple times (once per template instance). If the cache contains the template nodes, return them
       if (isIndexRegenerationTask && templateNodesCache.containsKey(templateId)) {
@@ -143,7 +143,7 @@ public class TemplateInstanceContentExtractor {
         List<TemplateNode> templateNodes = templateContentExtractor.getTemplateNodes(template, CedarResourceType.TEMPLATE);
         nodesMap = new HashMap<>();
         for (TemplateNode node : templateNodes) {
-          nodesMap.put(node.generatePathDotNotation(), node);
+          nodesMap.put(List.copyOf(node.getPath()), node);
         }
         if (isIndexRegenerationTask) {
           templateNodesCache.put(templateId, nodesMap);
@@ -155,8 +155,8 @@ public class TemplateInstanceContentExtractor {
       for (FieldValue fieldValue : fieldValues) {
         String fieldName = null;
         String fieldPrefLabel = null;
-        if (nodesMap.containsKey(fieldValue.generatePathDotNotation())) {
-          TemplateNode templateNode = nodesMap.get(fieldValue.generatePathDotNotation());
+        if (nodesMap.containsKey(fieldValue.getFieldPath())) {
+          TemplateNode templateNode = nodesMap.get(fieldValue.getFieldPath());
           fieldName = templateNode.getName();
           fieldPrefLabel = templateNode.getPrefLabel();
         } else {
@@ -231,7 +231,7 @@ public class TemplateInstanceContentExtractor {
    * @return
    * @throws CedarProcessingException
    */
-  private List<FieldValue> getFieldValues(JsonNode currentNode, HashMap<String, TemplateNode> templateNodesMap,
+  private List<FieldValue> getFieldValues(JsonNode currentNode, Map<List<String>, TemplateNode> templateNodesMap,
                                           List<String> currentPath, List<FieldValue> results) throws CedarProcessingException {
 
     if (currentPath == null) {
@@ -246,10 +246,9 @@ public class TemplateInstanceContentExtractor {
       Map.Entry<String, JsonNode> currentNodeMap = jsonNodesIterator.next();
       List<String> tmpPath = new ArrayList<>(currentPath);
       tmpPath.add(currentNodeMap.getKey());
-      String tmpPathDotNotation = getPathDotNotation(tmpPath);
       TemplateNode templateNode = null;
-      if (templateNodesMap.containsKey(tmpPathDotNotation)) {
-        templateNode = templateNodesMap.get(tmpPathDotNotation);
+      if (templateNodesMap.containsKey(tmpPath)) {
+        templateNode = templateNodesMap.get(tmpPath);
         JsonNode storedValue = currentNodeMap.getValue();
         // Stored instance shape is authoritative here. It may legitimately differ from the current template after
         // a field or element changes between single and repeated cardinality.
@@ -290,10 +289,6 @@ public class TemplateInstanceContentExtractor {
     if (fieldValue.getFieldValue() != null || fieldValue.getFieldValueUri() != null) {
       results.add(fieldValue);
     }
-  }
-
-  private String getPathDotNotation(List<String> path) {
-    return String.join(".", path);
   }
 
   private FieldValue generateFieldValue(JsonNode fieldNode, List<String> fieldPath) {
