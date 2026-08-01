@@ -87,6 +87,47 @@ public class LogExplorerDAO extends AbstractDAO<ApplicationRequestLog> {
     return out;
   }
 
+  /** The retained slowest/error request instances (kept forever), newest-slowest first. */
+  @SuppressWarnings("unchecked")
+  public List<RequestRow> requestOutliers(String kind, int limit) {
+    StringBuilder sql = new StringBuilder(
+        "SELECT requestTime, systemComponentName, httpMethod, path, className, methodName, userId, "
+            + "authSource, apiKeyHash, status, durationNanos, errorPack FROM agg_request_outlier WHERE 1=1");
+    boolean hasKind = kind != null && !kind.isBlank();
+    if (hasKind) {
+      sql.append(" AND kind = :kind");
+    }
+    sql.append(" ORDER BY durationNanos DESC LIMIT :lim");
+    NativeQuery<?> q = currentSession().createNativeQuery(sql.toString());
+    if (hasKind) {
+      q.setParameter("kind", kind.trim().toUpperCase());
+    }
+    q.setParameter("lim", limit);
+    List<RequestRow> out = new ArrayList<>();
+    for (Object r : q.getResultList()) {
+      Object[] c = (Object[]) r;
+      out.add(new RequestRow(null, iso(c[0]), str(c[1]), str(c[2]), str(c[3]), handler(str(c[4]), str(c[5])),
+          str(c[6]), str(c[7]), str(c[8]), intOrNull(c[9]), num(c[10]), str(c[11])));
+    }
+    return out;
+  }
+
+  /** The retained slowest Cypher instances (kept forever), slowest first. */
+  @SuppressWarnings("unchecked")
+  public List<CypherRow> cypherOutliers(int limit) {
+    NativeQuery<?> q = currentSession().createNativeQuery(
+        "SELECT logTime, systemComponentName, operation, runnableHash, durationNanos, runnable, parameters, "
+            + "className, methodName FROM agg_cypher_outlier ORDER BY durationNanos DESC LIMIT :lim");
+    q.setParameter("lim", limit);
+    List<CypherRow> out = new ArrayList<>();
+    for (Object r : q.getResultList()) {
+      Object[] c = (Object[]) r;
+      out.add(new CypherRow(iso(c[0]), str(c[1]), str(c[2]), str(c[3]), num(c[4]), str(c[5]), str(c[6]),
+          handler(str(c[7]), str(c[8]))));
+    }
+    return out;
+  }
+
   private static String handler(String cls, String mth) {
     if (cls == null && mth == null) {
       return null;
