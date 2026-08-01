@@ -3,6 +3,8 @@ package org.metadatacenter.server.neo4j.proxy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.id.CedarFolderId;
@@ -78,6 +80,16 @@ class ResourcePermissionRequestValidatorTest {
     assertError(f.validate(request), CedarErrorKey.USER_NOT_FOUND);
   }
 
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {" ", "\t"})
+  void ownerRequiresANonBlankId(String ownerId) {
+    Fixture f = new Fixture();
+    ResourcePermissionsRequest request = f.validRequest();
+    request.setOwner(new ResourcePermissionUser(ownerId));
+    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
+  }
+
   @Test
   void userEntryRequiresAUser() {
     Fixture f = new Fixture();
@@ -105,6 +117,17 @@ class ResourcePermissionRequestValidatorTest {
     assertError(f.validate(request), CedarErrorKey.USER_NOT_FOUND);
   }
 
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {" ", "\t"})
+  void userEntryRequiresANonBlankId(String userId) {
+    Fixture f = new Fixture();
+    ResourcePermissionsRequest request = f.validRequest();
+    request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
+        new ResourcePermissionUser(userId), FilesystemResourcePermission.READ));
+    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
+  }
+
   @Test
   void groupEntryRequiresAGroup() {
     Fixture f = new Fixture();
@@ -130,6 +153,17 @@ class ResourcePermissionRequestValidatorTest {
     request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
         new ResourcePermissionGroup("https://repo.example/groups/missing"), FilesystemResourcePermission.READ));
     assertError(f.validate(request), CedarErrorKey.GROUP_NOT_FOUND);
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {" ", "\t"})
+  void groupEntryRequiresANonBlankId(String groupId) {
+    Fixture f = new Fixture();
+    ResourcePermissionsRequest request = f.validRequest();
+    request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
+        new ResourcePermissionGroup(groupId), FilesystemResourcePermission.READ));
+    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
   }
 
   @Test

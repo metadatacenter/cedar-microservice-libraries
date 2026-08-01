@@ -3,6 +3,8 @@ package org.metadatacenter.server.neo4j.proxy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.id.CedarCategoryId;
 import org.metadatacenter.id.CedarGroupId;
@@ -76,6 +78,16 @@ class CategoryPermissionRequestValidatorTest {
     assertError(f.validate(request), CedarErrorKey.USER_NOT_FOUND);
   }
 
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {" ", "\t"})
+  void ownerRequiresANonBlankId(String ownerId) {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.setOwner(new CategoryPermissionUser(ownerId));
+    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
+  }
+
   @Test
   void userEntryRequiresAUser() {
     Fixture f = new Fixture();
@@ -102,6 +114,17 @@ class CategoryPermissionRequestValidatorTest {
     assertError(f.validate(request), CedarErrorKey.USER_NOT_FOUND);
   }
 
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {" ", "\t"})
+  void userEntryRequiresANonBlankId(String userId) {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
+        new CategoryPermissionUser(userId), CategoryPermission.ATTACH));
+    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
+  }
+
   @Test
   void groupEntryRequiresAGroup() {
     Fixture f = new Fixture();
@@ -126,6 +149,17 @@ class CategoryPermissionRequestValidatorTest {
     request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
         new CategoryPermissionGroup("https://repo.example/groups/missing"), CategoryPermission.ATTACH));
     assertError(f.validate(request), CedarErrorKey.GROUP_NOT_FOUND);
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {" ", "\t"})
+  void groupEntryRequiresANonBlankId(String groupId) {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
+        new CategoryPermissionGroup(groupId), CategoryPermission.ATTACH));
+    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
   }
 
   @Test
