@@ -120,7 +120,12 @@ public class TemplateInstanceContentExtractor {
       List<InfoField> infoFields = new ArrayList<>();
       JsonNode templateInstance = extractionUtils.getArtifactById(folderServerNode.getId(),
           folderServerNode.getType(), requestContext);
-      String templateId = templateInstance.get(SCHEMA_IS_BASED_ON).asText();
+      JsonNode templateIdNode = templateInstance.get(SCHEMA_IS_BASED_ON);
+      if (templateIdNode == null || templateIdNode.isNull() || templateIdNode.asText().isBlank()) {
+        throw new CedarProcessingException(SCHEMA_IS_BASED_ON + " not found for template instance: "
+            + folderServerNode.getId());
+      }
+      String templateId = templateIdNode.asText();
 
       HashMap<String, TemplateNode> nodesMap = null;
       // If it's an index regeneration task the cache will be needed to avoid retrieving and parsing the same
