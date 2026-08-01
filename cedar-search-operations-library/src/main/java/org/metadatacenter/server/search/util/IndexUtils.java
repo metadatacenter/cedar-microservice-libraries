@@ -29,6 +29,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 public class IndexUtils {
 
@@ -122,7 +123,7 @@ public class IndexUtils {
     log.info("Found " + indexNames.size());
     for (String iName : indexNames) {
       log.info("Found index:" + iName);
-      if (iName.startsWith(aliasName)) {
+      if (isIndexForAlias(iName, aliasName)) {
         if (!iName.equals(newIndexName)) {
           log.info("Deleting existing index:" + iName);
           esManagementService.deleteIndex(iName);
@@ -144,7 +145,7 @@ public class IndexUtils {
     log.info("Found total of " + indexNames.size() + " indices");
     for (String iName : indexNames) {
       log.info("Looking at index:" + iName);
-      if (iName.startsWith(aliasName)) {
+      if (isIndexForAlias(iName, aliasName)) {
         log.info("Found CEDAR index:" + iName);
         cedarIndexCount++;
       }
@@ -159,6 +160,11 @@ public class IndexUtils {
       esManagementService.addAlias(newIndexName, aliasName);
     }
 
+  }
+
+  private boolean isIndexForAlias(String indexName, String aliasName) {
+    return indexName.equals(aliasName) ||
+        indexName.matches(Pattern.quote(aliasName) + "-\\d{4}-\\d{2}-\\d{2}t\\d{6}");
   }
 
   public ElasticsearchManagementService getEsManagementService() {
