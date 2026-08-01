@@ -32,6 +32,15 @@ public final class ArtifactReportUtil {
                                                              FolderServiceSession folderSession,
                                                              ResourcePermissionServiceSession permissionSession,
                                                              CategoryServiceSession categorySession) {
+    return getArtifactReport(c, cedarConfig, artifact, folderSession, permissionSession, categorySession,
+        GraphDbPermissionReader::decorateResourceWithCurrentUserPermissions);
+  }
+
+  static FolderServerArtifactReport getArtifactReport(CedarRequestContext c, CedarConfig cedarConfig, FolderServerArtifact artifact,
+                                                       FolderServiceSession folderSession,
+                                                       ResourcePermissionServiceSession permissionSession,
+                                                       CategoryServiceSession categorySession,
+                                                       PermissionDecorator permissionDecorator) {
     FolderServerArtifactReport resourceReport = null;
     if (artifact.getType() == CedarResourceType.INSTANCE) {
       resourceReport = FolderServerInstanceReport.fromResource(artifact);
@@ -49,11 +58,17 @@ public final class ArtifactReportUtil {
     }
 
     decorateResourceWithDerivedFrom(folderSession, permissionSession, resourceReport);
-    GraphDbPermissionReader.decorateResourceWithCurrentUserPermissions(c, permissionSession, cedarConfig, resourceReport);
+    permissionDecorator.decorate(c, permissionSession, cedarConfig, resourceReport);
 
     decorateResourceWithCategories(categorySession, resourceReport);
 
     return resourceReport;
+  }
+
+  @FunctionalInterface
+  interface PermissionDecorator {
+    void decorate(CedarRequestContext context, ResourcePermissionServiceSession permissionSession,
+                  CedarConfig cedarConfig, FolderServerArtifactReport resourceReport);
   }
 
   private static void decorateResourceWithNumberOfInstances(FolderServiceSession folderSession, FolderServerTemplateReport templateReport) {
