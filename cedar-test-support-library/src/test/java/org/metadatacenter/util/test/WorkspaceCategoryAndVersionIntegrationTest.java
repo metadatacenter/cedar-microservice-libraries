@@ -73,7 +73,7 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
     user1Context = CedarRequestContextFactory.fromUser(user1);
     user2Context = CedarRequestContextFactory.fromUser(user2);
 
-    user1HomeId = CedarDataServices.getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
+    user1HomeId = CedarDataServices.getInstance().getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
 
     // Seeding creates the root category the way provisioning does
     FolderServerCategory rootCategory = categoriesOf(user1Context).getRootCategory();
@@ -82,15 +82,15 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
   }
 
   private static FolderServiceSession foldersOf(CedarRequestContext context) {
-    return CedarDataServices.getFolderServiceSession(context);
+    return CedarDataServices.getInstance().getFolderServiceSession(context);
   }
 
   private static CategoryServiceSession categoriesOf(CedarRequestContext context) {
-    return CedarDataServices.getCategoryServiceSession(context);
+    return CedarDataServices.getInstance().getCategoryServiceSession(context);
   }
 
   private static CategoryPermissionServiceSession categoryPermissionsOf(CedarRequestContext context) {
-    return CedarDataServices.getCategoryPermissionServiceSession(context);
+    return CedarDataServices.getInstance().getCategoryPermissionServiceSession(context);
   }
 
   private static FolderServerCategory createCategoryAsUser1(CedarCategoryId parentId, String name) {

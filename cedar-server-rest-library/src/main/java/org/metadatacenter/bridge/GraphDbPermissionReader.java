@@ -56,7 +56,7 @@ public class GraphDbPermissionReader {
 
   public static void decorateResourceWithCurrentUserPermissions(CedarRequestContext context, ResourcePermissionServiceSession permissionSession,
                                                                 CedarConfig cedarConfig, FilesystemResourceWithCurrentUserPermissions resource) {
-    VersionServiceSession versionSession = CedarDataServices.getVersionServiceSession(context);
+    VersionServiceSession versionSession = CedarDataServices.getInstance().getVersionServiceSession(context);
     CurrentUserPermissionUpdater cupu = CurrentUserPermissionUpdaterForGraphDbResource.get(permissionSession, versionSession, cedarConfig, resource);
     cupu.update(resource.getCurrentUserPermissions());
   }

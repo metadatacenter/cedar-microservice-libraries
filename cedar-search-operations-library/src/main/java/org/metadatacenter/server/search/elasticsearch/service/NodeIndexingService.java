@@ -69,9 +69,9 @@ public class NodeIndexingService extends AbstractIndexingService {
 
     IndexingDocumentDocument ir = new IndexingDocumentDocument(node.getId());
     // Set node's path info
-    FolderServiceSession folderSession = CedarDataServices.getFolderServiceSession(requestContext);
+    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(requestContext);
     node.setPathInfo(PathInfoBuilder.getResourcePathExtract(requestContext, folderSession,
-        CedarDataServices.getResourcePermissionServiceSession(requestContext), node));
+        CedarDataServices.getInstance().getResourcePermissionServiceSession(requestContext), node));
     ir.setInfo(FolderServerNodeInfo.fromNode(node));
     ir.setMaterializedPermissions(permissions);
     ir.setMaterializedCategories(categories);
@@ -133,10 +133,10 @@ public class NodeIndexingService extends AbstractIndexingService {
   public IndexedDocumentId indexDocument(FileSystemResource resource, CedarRequestContext requestContext) throws CedarProcessingException {
     log.debug("Indexing resource (id = " + resource.getId() + ")");
     ResourcePermissionServiceSession permissionSession =
-        CedarDataServices.getResourcePermissionServiceSession(requestContext);
+        CedarDataServices.getInstance().getResourcePermissionServiceSession(requestContext);
     CedarNodeMaterializedPermissions permissions =
         permissionSession.getResourceMaterializedPermission(resource.getResourceId());
-    CategoryServiceSession categorySession = CedarDataServices.getCategoryServiceSession(requestContext);
+    CategoryServiceSession categorySession = CedarDataServices.getInstance().getCategoryServiceSession(requestContext);
     CedarNodeMaterializedCategories categories = new CedarNodeMaterializedCategories(resource.getId());
     if (resource.getType() != CedarResourceType.FOLDER) {
       categories = categorySession.getArtifactMaterializedCategories(CedarArtifactId.build(resource.getId(),

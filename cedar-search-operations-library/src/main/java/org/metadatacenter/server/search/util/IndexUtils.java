@@ -209,7 +209,7 @@ public class IndexUtils {
 
     List<String> sortList = pagedSortedQuery.getSortList();
 
-    FolderServiceSession folderSession = CedarDataServices.getFolderServiceSession(c);
+    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(c);
 
     // Retrieve all resources
     List<FolderServerResourceExtract> resources = folderSession.findAllNodes(limit, offset, sortList);

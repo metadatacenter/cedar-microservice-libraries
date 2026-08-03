@@ -58,8 +58,8 @@ public class RegenerateSearchIndexTask {
 
     boolean regenerate = true;
     try {
-      ResourcePermissionServiceSession permissionSession = CedarDataServices.getResourcePermissionServiceSession(requestContext);
-      CategoryServiceSession categorySession = CedarDataServices.getCategoryServiceSession(requestContext);
+      ResourcePermissionServiceSession permissionSession = CedarDataServices.getInstance().getResourcePermissionServiceSession(requestContext);
+      CategoryServiceSession categorySession = CedarDataServices.getInstance().getCategoryServiceSession(requestContext);
       // Get all resources
       log.info("Reading all resources from the existing search index.");
       List<FileSystemResource> resources = indexUtils.findAllResources(requestContext);

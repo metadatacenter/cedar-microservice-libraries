@@ -92,19 +92,19 @@ public final class EmbeddedCedarNeo4j {
     }
     seeded = true;
     CedarUser admin = TestAuthUtil.getAdminUser(cedarConfig);
-    CedarDataServices.getNeoUserService().createUser(admin);
+    CedarDataServices.getInstance().getNeoUserService().createUser(admin);
     CedarRequestContext adminContext = CedarRequestContextFactory.fromUser(admin);
-    CedarDataServices.getAdminServiceSession(adminContext).ensureGlobalObjectsExists();
+    CedarDataServices.getInstance().getAdminServiceSession(adminContext).ensureGlobalObjectsExists();
 
     seedUser(TestAuthUtil.getTestUser1(cedarConfig));
     seedUser(TestAuthUtil.getTestUser2(cedarConfig));
   }
 
   private static void seedUser(CedarUser user) throws Exception {
-    CedarDataServices.getNeoUserService().createUser(user);
+    CedarDataServices.getInstance().getNeoUserService().createUser(user);
     CedarRequestContext context = CedarRequestContextFactory.fromUser(user);
-    CedarDataServices.getUserServiceSession(context).addUserToEverybodyGroup(user.getResourceId());
-    CedarDataServices.getFolderServiceSession(context).ensureUserHomeExists();
+    CedarDataServices.getInstance().getUserServiceSession(context).addUserToEverybodyGroup(user.getResourceId());
+    CedarDataServices.getInstance().getFolderServiceSession(context).ensureUserHomeExists();
   }
 
 }

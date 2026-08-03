@@ -56,7 +56,7 @@ public class WorkspaceFolderMoveIntegrationTest {
     user1Context = CedarRequestContextFactory.fromUser(user1);
     user2Context = CedarRequestContextFactory.fromUser(user2);
 
-    FolderServiceSession user1Folders = CedarDataServices.getFolderServiceSession(user1Context);
+    FolderServiceSession user1Folders = CedarDataServices.getInstance().getFolderServiceSession(user1Context);
     FolderServerFolder home = user1Folders.findHomeFolderOf();
     user1HomeId = home.getResourceId();
     user1Folders.addPathAndParentId(home);
@@ -65,7 +65,7 @@ public class WorkspaceFolderMoveIntegrationTest {
   }
 
   private static FolderServiceSession foldersOf(CedarRequestContext context) {
-    return CedarDataServices.getFolderServiceSession(context);
+    return CedarDataServices.getInstance().getFolderServiceSession(context);
   }
 
   private static FolderServerFolder createFolderUnder(CedarFolderId parentId, String name) {
@@ -156,12 +156,12 @@ public class WorkspaceFolderMoveIntegrationTest {
     request.setOwner(new ResourcePermissionUser(user1.getId()));
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
         new ResourcePermissionUser(user2.getId()), FilesystemResourcePermission.READ));
-    BackendCallResult result = CedarDataServices.getResourcePermissionServiceSession(user1Context)
+    BackendCallResult result = CedarDataServices.getInstance().getResourcePermissionServiceSession(user1Context)
         .updateResourcePermissions(grantedRoot.getResourceId(), request);
     Assertions.assertFalse(result.isError(), "The permission update should succeed");
 
     ResourcePermissionServiceSession user2Permissions =
-        CedarDataServices.getResourcePermissionServiceSession(user2Context);
+        CedarDataServices.getInstance().getResourcePermissionServiceSession(user2Context);
     Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(child.getResourceId()),
         "Before the move, user2 should read the child through the grant on its parent");
 

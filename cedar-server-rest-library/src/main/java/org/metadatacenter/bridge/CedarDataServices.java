@@ -56,130 +56,113 @@ public final class CedarDataServices {
     instance.neoUserService = new UserServiceNeo4j(instance.proxies.user());
   }
 
-  public static GroupServiceSession getGroupServiceSession(CedarRequestContext context) {
-    if (instance.proxies == null) {
-      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-    } else {
-      return Neo4JUserSessionGroupService
-          .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
-              context.getLocalRequestIdHeader());
+  // The single, managed services object. Its accessors are instance methods so that a consumer
+  // receives this object and calls them explicitly, rather than reaching a global static from
+  // anywhere. Only a composition root — a server's Application, the test harness — should call this,
+  // once, and inject the result into the classes below it; those classes must never call it
+  // themselves. The one singleton persists because the Neo4j proxies and Mongo client it holds are
+  // genuinely process-level, and a shared test JVM depends on reusing them across app boots (see
+  // initializeNeo4jServices). What retired was the scattered static accessor, not this holder.
+  public static CedarDataServices getInstance() {
+    return instance;
+  }
+
+  private void requireNeo4j() {
+    if (proxies == null) {
+      throw new IllegalStateException(
+          "You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
     }
   }
 
-  public static CategoryServiceSession getCategoryServiceSession(CedarRequestContext context) {
-    if (instance.proxies == null) {
-      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-    } else {
-      return Neo4JUserSessionCategoryService
-          .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
-              context.getLocalRequestIdHeader());
-    }
+  public GroupServiceSession getGroupServiceSession(CedarRequestContext context) {
+    requireNeo4j();
+    return Neo4JUserSessionGroupService
+        .get(cedarConfig, proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
+            context.getLocalRequestIdHeader());
   }
 
-  public static GraphServiceSession getGraphServiceSession(CedarRequestContext context) {
-    if (instance.proxies == null) {
-      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-    } else {
-      return Neo4JUserSessionGraphService
-          .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
-              context.getLocalRequestIdHeader());
-    }
+  public CategoryServiceSession getCategoryServiceSession(CedarRequestContext context) {
+    requireNeo4j();
+    return Neo4JUserSessionCategoryService
+        .get(cedarConfig, proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
+            context.getLocalRequestIdHeader());
   }
 
-  public static ResourcePermissionServiceSession getResourcePermissionServiceSession(CedarRequestContext context) {
-    if (instance.proxies == null) {
-      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-    } else {
-      return Neo4JUserSessionResourcePermissionService
-          .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
-              context.getLocalRequestIdHeader());
-    }
+  public GraphServiceSession getGraphServiceSession(CedarRequestContext context) {
+    requireNeo4j();
+    return Neo4JUserSessionGraphService
+        .get(cedarConfig, proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
+            context.getLocalRequestIdHeader());
   }
 
-  public static CategoryPermissionServiceSession getCategoryPermissionServiceSession(CedarRequestContext context) {
-    if (instance.proxies == null) {
-      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-    } else {
-      return Neo4JUserSessionCategoryPermissionService
-          .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
-              context.getLocalRequestIdHeader());
-    }
+  public ResourcePermissionServiceSession getResourcePermissionServiceSession(CedarRequestContext context) {
+    requireNeo4j();
+    return Neo4JUserSessionResourcePermissionService
+        .get(cedarConfig, proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
+            context.getLocalRequestIdHeader());
   }
 
-  public static VersionServiceSession getVersionServiceSession(CedarRequestContext context) {
-    if (instance.proxies == null) {
-      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-    } else {
-      return Neo4JUserSessionVersionService
-          .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
-              context.getLocalRequestIdHeader());
-    }
+  public CategoryPermissionServiceSession getCategoryPermissionServiceSession(CedarRequestContext context) {
+    requireNeo4j();
+    return Neo4JUserSessionCategoryPermissionService
+        .get(cedarConfig, proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
+            context.getLocalRequestIdHeader());
   }
 
-  public static AdminServiceSession getAdminServiceSession(CedarRequestContext context) {
-    if (instance.proxies == null) {
-      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-    } else {
-      return Neo4JUserSessionAdminService
-          .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
-              context.getLocalRequestIdHeader());
-    }
+  public VersionServiceSession getVersionServiceSession(CedarRequestContext context) {
+    requireNeo4j();
+    return Neo4JUserSessionVersionService
+        .get(cedarConfig, proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
+            context.getLocalRequestIdHeader());
   }
 
-  public static FolderServiceSession getFolderServiceSession(CedarRequestContext context) {
-    if (instance.proxies == null) {
-      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-    } else {
-      return Neo4JUserSessionFolderService.get(instance.cedarConfig, instance.proxies, context.getCedarUser(),
-          context.getGlobalRequestIdHeader(),
-          context.getLocalRequestIdHeader());
-    }
+  public AdminServiceSession getAdminServiceSession(CedarRequestContext context) {
+    requireNeo4j();
+    return Neo4JUserSessionAdminService
+        .get(cedarConfig, proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
+            context.getLocalRequestIdHeader());
   }
 
-  public static InclusionSubgraphServiceSession getInclusionSubgraphServiceSession(CedarRequestContext context) {
-    if (instance.proxies == null) {
-      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-    } else {
-      return Neo4JUserSessionInclusionSubgraphService.get(instance.cedarConfig, instance.proxies, context.getCedarUser(),
-          context.getGlobalRequestIdHeader(),
-          context.getLocalRequestIdHeader());
-    }
+  public FolderServiceSession getFolderServiceSession(CedarRequestContext context) {
+    requireNeo4j();
+    return Neo4JUserSessionFolderService.get(cedarConfig, proxies, context.getCedarUser(),
+        context.getGlobalRequestIdHeader(),
+        context.getLocalRequestIdHeader());
   }
 
-  public static UserServiceSession getUserServiceSession(CedarRequestContext context) {
-    if (instance.proxies == null) {
-      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-    } else {
-      return Neo4JUserSessionUserService
-          .get(instance.cedarConfig, instance.proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
-              context.getLocalRequestIdHeader());
-    }
+  public InclusionSubgraphServiceSession getInclusionSubgraphServiceSession(CedarRequestContext context) {
+    requireNeo4j();
+    return Neo4JUserSessionInclusionSubgraphService.get(cedarConfig, proxies, context.getCedarUser(),
+        context.getGlobalRequestIdHeader(),
+        context.getLocalRequestIdHeader());
+  }
+
+  public UserServiceSession getUserServiceSession(CedarRequestContext context) {
+    requireNeo4j();
+    return Neo4JUserSessionUserService
+        .get(cedarConfig, proxies, context.getCedarUser(), context.getGlobalRequestIdHeader(),
+            context.getLocalRequestIdHeader());
   }
 
   // DO NOT USE unless you need internal functionality
-  public static Neo4JProxies getProxies() {
-    if (instance.proxies == null) {
-      throw new IllegalStateException("You need to initialize Neo4j services:CedarDataServices.initializeNeo4jServices(cedarConfig)");
-    } else {
-      return instance.proxies;
-    }
+  public Neo4JProxies getProxies() {
+    requireNeo4j();
+    return proxies;
   }
 
-  public static UserService getNeoUserService() {
-    if (instance.neoUserService == null) {
+  public UserService getNeoUserService() {
+    if (neoUserService == null) {
       throw new IllegalStateException("You need to initialize neo user service: CedarDataServices.initializeNeoUserService()");
-    } else {
-      return instance.neoUserService;
     }
+    return neoUserService;
   }
 
-  public static MongoClientFactory getMongoClientFactoryForDocuments() {
-    if (instance.mongoClientFactoryForDocuments == null) {
+  public MongoClientFactory getMongoClientFactoryForDocuments() {
+    if (mongoClientFactoryForDocuments == null) {
       throw new IllegalStateException("You need to initialize mongoClientFactory: " +
           "CedarDataServices.initializeMongoClientFactoryForDocuments(mongoConnection)");
-    } else {
-      return instance.mongoClientFactoryForDocuments;
     }
+    return mongoClientFactoryForDocuments;
   }
 
 }

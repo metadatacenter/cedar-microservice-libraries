@@ -39,16 +39,16 @@ public class SearchPermissionExecutorService {
 
   public SearchPermissionExecutorService(CedarConfig cedarConfig, IndexUtils indexUtils, NodeSearchingService nodeSearchingService,
                                          NodeIndexingService nodeIndexingService) {
-    UserService userService = CedarDataServices.getNeoUserService();
+    UserService userService = CedarDataServices.getInstance().getNeoUserService();
     this.nodeSearchingService = nodeSearchingService;
     this.nodeIndexingService = nodeIndexingService;
     this.indexUtils = indexUtils;
 
     this.cedarRequestContext = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
 
-    folderSession = CedarDataServices.getFolderServiceSession(cedarRequestContext);
-    permissionSession = CedarDataServices.getResourcePermissionServiceSession(cedarRequestContext);
-    categorySession = CedarDataServices.getCategoryServiceSession(cedarRequestContext);
+    folderSession = CedarDataServices.getInstance().getFolderServiceSession(cedarRequestContext);
+    permissionSession = CedarDataServices.getInstance().getResourcePermissionServiceSession(cedarRequestContext);
+    categorySession = CedarDataServices.getInstance().getCategoryServiceSession(cedarRequestContext);
   }
 
   // Main entry point

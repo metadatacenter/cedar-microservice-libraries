@@ -33,8 +33,8 @@ public class RegenerateInclusionSubgraphTask {
 
   public void regenerateInclusionSubgraph(CedarRequestContext cedarAdminRequestContext) throws CedarProcessingException {
 
-    FolderServiceSession folderSession = CedarDataServices.getFolderServiceSession(cedarAdminRequestContext);
-    InclusionSubgraphServiceSession inclusionSubgraphSession = CedarDataServices.getInclusionSubgraphServiceSession(cedarAdminRequestContext);
+    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(cedarAdminRequestContext);
+    InclusionSubgraphServiceSession inclusionSubgraphSession = CedarDataServices.getInstance().getInclusionSubgraphServiceSession(cedarAdminRequestContext);
 
     List<CedarResourceType> resourceTypeList = new ArrayList<>(List.of(CedarResourceType.TEMPLATE, CedarResourceType.ELEMENT));
     ResourceVersionFilter version = ResourceVersionFilter.ALL;

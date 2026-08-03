@@ -80,7 +80,7 @@ public class ArtifactLifecycleMatrixTest {
     CedarUser user2 = TestAuthUtil.getTestUser2(cedarConfig);
     user1Context = CedarRequestContextFactory.fromUser(user1);
     user2Context = CedarRequestContextFactory.fromUser(user2);
-    user1HomeId = CedarDataServices.getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
+    user1HomeId = CedarDataServices.getInstance().getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
   }
 
   /** Which lifecycle question is being asked. */
@@ -201,7 +201,7 @@ public class ArtifactLifecycleMatrixTest {
   }
 
   private OutcomeWithReason ask(Cell cell) {
-    VersionServiceSession versions = CedarDataServices.getVersionServiceSession(cell.asUser());
+    VersionServiceSession versions = CedarDataServices.getInstance().getVersionServiceSession(cell.asUser());
     return switch (cell.operation()) {
       // VERSION is asked about non-versioned artifacts too, since refusing those on type is one of
       // the rules under test. The general report factory covers instances as well as schema
@@ -223,7 +223,7 @@ public class ArtifactLifecycleMatrixTest {
     request.setOwner(new ResourcePermissionUser(user1.getId()));
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
         new ResourcePermissionUser(user2.getId()), permission));
-    BackendCallResult result = CedarDataServices.getResourcePermissionServiceSession(user1Context)
+    BackendCallResult result = CedarDataServices.getInstance().getResourcePermissionServiceSession(user1Context)
         .updateResourcePermissions(artifact.getResourceId(), request);
     Assertions.assertFalse(result.isError(),
         "granting " + permission + " should succeed: "
@@ -248,7 +248,7 @@ public class ArtifactLifecycleMatrixTest {
     if (supersedes != null) {
       template.setPreviousVersion(CedarUntypedSchemaArtifactId.build(supersedes.getId()));
     }
-    FolderServiceSession folders = CedarDataServices.getFolderServiceSession(user1Context);
+    FolderServiceSession folders = CedarDataServices.getInstance().getFolderServiceSession(user1Context);
     FolderServerArtifact created = folders.createResourceAsChildOfId(template, user1HomeId);
     Assertions.assertNotNull(created, "The template '" + name + "' should be created");
     return created;
@@ -259,7 +259,7 @@ public class ArtifactLifecycleMatrixTest {
     instance.setId(cedarConfig.getLinkedDataUtil().buildNewLinkedDataId(CedarResourceType.INSTANCE));
     instance.setName(name);
     instance.setDescription("Created by ArtifactLifecycleMatrixTest");
-    FolderServiceSession folders = CedarDataServices.getFolderServiceSession(user1Context);
+    FolderServiceSession folders = CedarDataServices.getInstance().getFolderServiceSession(user1Context);
     FolderServerArtifact created = folders.createResourceAsChildOfId(instance, user1HomeId);
     Assertions.assertNotNull(created, "The instance '" + name + "' should be created");
     return created;

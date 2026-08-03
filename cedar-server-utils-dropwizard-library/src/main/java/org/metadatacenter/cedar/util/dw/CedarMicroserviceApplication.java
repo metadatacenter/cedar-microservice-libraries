@@ -110,7 +110,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     //Initialize user service
     CedarDataServices.initializeNeo4jServices(cedarConfig);
-    userService = CedarDataServices.getNeoUserService();
+    userService = CedarDataServices.getInstance().getNeoUserService();
 
     //Initialize Keycloak
     KeycloakDeploymentProvider keycloakDeploymentProvider = new KeycloakDeploymentProvider();
@@ -119,7 +119,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     // verify a bearer token's signature instead of trusting its payload.
     IAuthorizationResolver authResolver = new AuthorizationKeycloakAndApiKeyResolver(keycloakDeployment);
     Authorization.setAuthorizationResolver(authResolver);
-    Authorization.setUserService(CedarDataServices.getNeoUserService());
+    Authorization.setUserService(CedarDataServices.getInstance().getNeoUserService());
 
     appLoggerQueueService = new AppLoggerQueueService(cedarConfig.getCacheConfig().getPersistent());
     AppLogger.initLoggerQueueService(appLoggerQueueService, SystemComponent.getFor(getServerName()));

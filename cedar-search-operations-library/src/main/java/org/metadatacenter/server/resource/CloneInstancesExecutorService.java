@@ -67,10 +67,10 @@ public class CloneInstancesExecutorService {
   protected static ValuerecommenderReindexQueueService valuerecommenderReindexQueueService;
 
   public CloneInstancesExecutorService(CedarConfig cedarConfig) {
-    UserService userService = CedarDataServices.getNeoUserService();
+    UserService userService = CedarDataServices.getInstance().getNeoUserService();
 
     cedarRequestContext = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
-    folderSession = CedarDataServices.getFolderServiceSession(cedarRequestContext);
+    folderSession = CedarDataServices.getInstance().getFolderServiceSession(cedarRequestContext);
     microserviceUrlUtil = cedarConfig.getMicroserviceUrlUtil();
     linkedDataUtil = cedarRequestContext.getLinkedDataUtil();
   }
@@ -166,7 +166,7 @@ public class CloneInstancesExecutorService {
                                                        CedarUserId userId) throws CedarException {
     CedarRequestContext c = this.cedarRequestContext;
 
-    FolderServiceSession folderSession = CedarDataServices.getFolderServiceSession(c);
+    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(c);
     CedarResourceType resourceType = CedarResourceType.INSTANCE;
 
     String originalDocument = null;
@@ -274,7 +274,7 @@ public class CloneInstancesExecutorService {
                                                              String description, String identifier,
                                                              CedarTemplateId newTemplateId, CedarUserId userId) throws CedarException {
 
-    FolderServiceSession folderSession = CedarDataServices.getFolderServiceSession(c);
+    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(c);
 
     if (CedarResourceTypeUtil.isNotValidForRestCall(resourceType)) {
       throw new CedarProcessingException("You passed an illegal resourceType:'" + resourceType.getValue() +

@@ -63,15 +63,15 @@ public class WorkspacePermissionIntegrationTest {
     user1Context = CedarRequestContextFactory.fromUser(user1);
     user2Context = CedarRequestContextFactory.fromUser(user2);
 
-    user1HomeId = CedarDataServices.getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
+    user1HomeId = CedarDataServices.getInstance().getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
   }
 
   private static FolderServiceSession foldersOf(CedarRequestContext context) {
-    return CedarDataServices.getFolderServiceSession(context);
+    return CedarDataServices.getInstance().getFolderServiceSession(context);
   }
 
   private static ResourcePermissionServiceSession permissionsOf(CedarRequestContext context) {
-    return CedarDataServices.getResourcePermissionServiceSession(context);
+    return CedarDataServices.getInstance().getResourcePermissionServiceSession(context);
   }
 
   /**
@@ -155,7 +155,7 @@ public class WorkspacePermissionIntegrationTest {
   public void groupWriteGrantResolvesThroughMembership() {
     FolderServerFolder folder = createFolderUnderUser1Home("Group Grant Folder");
 
-    GroupServiceSession user1Groups = CedarDataServices.getGroupServiceSession(user1Context);
+    GroupServiceSession user1Groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
     FolderServerGroup group = user1Groups.createGroup("workspace-integration-test-group",
         "Group for the group-resolved ACL test");
     Assertions.assertNotNull(group, "The group should be created");
