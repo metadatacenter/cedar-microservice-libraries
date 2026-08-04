@@ -93,7 +93,13 @@ public class ElasticsearchIndexingWorker {
 
       long removedCount = response.getDeleted();
       if (removedCount == 0) {
-        log.error("The " + documentType + " cid:" + resourceId.getId() + " was not removed from the " + indexName + " index");
+        // Expected, self-healing transient: delete-by-query matches on cid, and a doc
+        // indexed moments earlier may not be refreshed into the searchable index yet
+        // (OpenSearch ~1s refresh interval), so a remove during a rapid create→update
+        // finds nothing. The caller decides whether 0-removed is a real failure — the
+        // retry overload in NodeIndexingService treats it as retryable — so this is a
+        // warning here, not an error.
+        log.warn("The " + documentType + " cid:" + resourceId.getId() + " was not removed from the " + indexName + " index");
       } else {
         log.debug("Removed " + removedCount + " documents of type " + documentType + " cid:" + resourceId.getId() + " from the " + indexName + " index");
       }
