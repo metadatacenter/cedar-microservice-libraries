@@ -36,6 +36,18 @@
       <artifactId>cedar-model-validation-library</artifactId>
     </dependency>
 
+    <!-- ArtifactYamlTranscoder reads and renders artifacts to convert between their stored
+         JSON form and the YAML representation the REST layer negotiates. -->
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-artifact-library</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-yaml</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.apache.httpcomponents.client5</groupId>
       <artifactId>httpclient5-fluent</artifactId>
