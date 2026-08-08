@@ -39,6 +39,21 @@
       <scope>test</scope>
     </dependency>
 
+    <!--
+      A real redis-server for backend-free tests of the queue services. The binaries are bundled in
+      the jar for macOS arm64 and Linux amd64/arm64, so there is nothing to download and no Docker
+      involved, and the tests exercise real Redis semantics - blocking pops, list ordering, a server
+      that can be stopped and brought back - rather than a reimplementation of them. The bundled
+      server is Redis 6.2.6, one patch release behind the deployed 6.2.7
+      (cedar-docker-build/cedar-infra-redis-persistent).
+    -->
+    <dependency>
+      <groupId>com.github.codemonstur</groupId>
+      <artifactId>embedded-redis</artifactId>
+      <version>1.4.3</version>
+      <scope>test</scope>
+    </dependency>
+
   </dependencies>
 
 </project>
