@@ -15,7 +15,7 @@ import java.net.ServerSocket;
  * survives a round trip, whether a pool recovers after the server goes away and comes back. A
  * reimplementation would only prove the reimplementation agrees with itself.
  */
-final class EmbeddedRedis implements AutoCloseable {
+public final class EmbeddedRedis implements AutoCloseable {
 
   private final RedisServer server;
   private final int port;
@@ -25,7 +25,7 @@ final class EmbeddedRedis implements AutoCloseable {
     this.port = port;
   }
 
-  static EmbeddedRedis start() {
+  public static EmbeddedRedis start() {
     return startOn(freePort());
   }
 
@@ -34,7 +34,7 @@ final class EmbeddedRedis implements AutoCloseable {
    * the same address - the shape of a real outage, and the only way to check that a service
    * recovers from one rather than merely failing gracefully.
    */
-  static EmbeddedRedis startOn(int port) {
+  public static EmbeddedRedis startOn(int port) {
     try {
       RedisServer server = RedisServer.newRedisServer().port(port).build();
       server.start();
@@ -48,7 +48,7 @@ final class EmbeddedRedis implements AutoCloseable {
    * A port free at this instant. Nothing reserves it, so a caller should bind it promptly; that is
    * good enough here and avoids requiring a fixed port that a developer's machine may be using.
    */
-  static int freePort() {
+  public static int freePort() {
     try (ServerSocket socket = new ServerSocket(0)) {
       return socket.getLocalPort();
     } catch (IOException e) {
@@ -56,11 +56,11 @@ final class EmbeddedRedis implements AutoCloseable {
     }
   }
 
-  int port() {
+  public int port() {
     return port;
   }
 
-  void stop() {
+  public void stop() {
     try {
       server.stop();
     } catch (IOException e) {

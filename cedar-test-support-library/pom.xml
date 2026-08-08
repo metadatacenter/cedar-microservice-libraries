@@ -31,8 +31,6 @@
     <dependency>
       <groupId>org.neo4j.test</groupId>
       <artifactId>neo4j-harness</artifactId>
-      <!-- Tracks the deployed Neo4j server version (cedar-infra-neo4j), not the driver version -->
-      <version>5.3.0</version>
       <exclusions>
         <!-- Neo4j drags in slf4j-nop to silence its own logging. It was inert under slf4j 1.7
              (no 1.7-style StaticLoggerBinder), but with the slf4j 2.0 ServiceLoader binding that
@@ -55,7 +53,6 @@
     <dependency>
       <groupId>ch.vorburger.mariaDB4j</groupId>
       <artifactId>mariaDB4j</artifactId>
-      <version>3.2.0</version>
     </dependency>
 
     <!--
@@ -65,7 +62,6 @@
     <dependency>
       <groupId>de.flapdoodle.embed</groupId>
       <artifactId>de.flapdoodle.embed.mongo</artifactId>
-      <version>4.20.0</version>
     </dependency>
 
     <!--
@@ -76,7 +72,6 @@
     <dependency>
       <groupId>net.java.dev.jna</groupId>
       <artifactId>jna</artifactId>
-      <version>5.13.0</version>
     </dependency>
 
     <!--

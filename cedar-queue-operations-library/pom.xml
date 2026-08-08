@@ -43,17 +43,40 @@
       A real redis-server for backend-free tests of the queue services. The binaries are bundled in
       the jar for macOS arm64 and Linux amd64/arm64, so there is nothing to download and no Docker
       involved, and the tests exercise real Redis semantics - blocking pops, list ordering, a server
-      that can be stopped and brought back - rather than a reimplementation of them. The bundled
-      server is Redis 6.2.6, one patch release behind the deployed 6.2.7
-      (cedar-docker-build/cedar-infra-redis-persistent).
+      that can be stopped and brought back - rather than a reimplementation of them. The version, and
+      the note on how it tracks the deployed server, are in cedar-parent.
     -->
     <dependency>
       <groupId>com.github.codemonstur</groupId>
       <artifactId>embedded-redis</artifactId>
-      <version>1.4.3</version>
       <scope>test</scope>
     </dependency>
 
   </dependencies>
+
+  <build>
+    <plugins>
+      <!--
+        The queue services are spread across this library, the logging and value-recommender
+        libraries, and the submission server, and all of them need the same fixture: a real Redis
+        on a free port and the cache configuration pointed at it. Publishing the test classes as a
+        test-jar lets one copy serve all four, rather than a separate module (which the reactor
+        could not accept - the other libraries already depend on this one) or four copies that
+        drift. Consumers get EmbeddedRedis and QueueTestConfig; surefire only ever runs the tests
+        in its own module, so this library's tests do not re-run downstream.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 
 </project>
