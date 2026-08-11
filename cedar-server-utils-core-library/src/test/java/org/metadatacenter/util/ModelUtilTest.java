@@ -240,6 +240,22 @@ class ModelUtilTest {
   }
 
   @Test
+  void anUnchangedChildCanBeGivenProvenanceTheStoredArtifactLacks() throws Exception {
+    // The repair this has to allow: a stored child missing its author, supplied by a request that
+    // changes nothing else in that child. Dropping the value here left the artifact unrepairable.
+    String storedChild = STORED_CHILD.replaceAll(",\"pav:createdBy\":\"[^\"]*\"", "");
+    JsonNode stored = schemaWithProperty("field", storedChild);
+    JsonNode request = schemaWithProperty("field", STORED_CHILD);
+
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    JsonNode field = request.at("/properties/field");
+    assertEquals("https://users.example/author", field.get("pav:createdBy").textValue());
+    assertEquals("2020-06-01T00:00:00Z", field.get("pav:lastUpdatedOn").textValue(),
+        "the child is otherwise untouched, so its modification stamp does not move");
+  }
+
+  @Test
   void comparesMultiInstanceChildrenThroughTheirItems() throws Exception {
     String wrapped = "{\"type\":\"array\",\"minItems\":0,\"items\":" + STORED_CHILD + "}";
     JsonNode stored = schemaWithProperty("field", wrapped);

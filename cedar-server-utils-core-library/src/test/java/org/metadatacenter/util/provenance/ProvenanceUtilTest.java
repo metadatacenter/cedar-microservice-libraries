@@ -103,6 +103,57 @@ class ProvenanceUtilTest {
     assertEquals("https://users.example/author", request.get("pav:createdBy").textValue());
   }
 
+  // ── an untouched child ───────────────────────────────────────────────────
+
+  @Test
+  void anUntouchedChildTakesEveryProvenanceValueTheStoredArtifactRecords() throws Exception {
+    JsonNode request = JsonMapper.MAPPER.readTree("""
+        {"pav:createdOn":"2026-08-11T09:00:00Z","pav:createdBy":"https://users.example/impostor",
+         "pav:lastUpdatedOn":"2026-08-11T09:00:00Z","oslc:modifiedBy":"https://users.example/impostor"}
+        """);
+    JsonNode stored = JsonMapper.MAPPER.readTree("""
+        {"pav:createdOn":"2019-01-01T00:00:00Z","pav:createdBy":"https://users.example/author",
+         "pav:lastUpdatedOn":"2020-06-01T00:00:00Z","oslc:modifiedBy":"https://users.example/editor"}
+        """);
+
+    provenanceUtil.copyProvenance(request, stored);
+
+    assertEquals("2019-01-01T00:00:00Z", request.get("pav:createdOn").textValue());
+    assertEquals("https://users.example/author", request.get("pav:createdBy").textValue());
+    assertEquals("2020-06-01T00:00:00Z", request.get("pav:lastUpdatedOn").textValue());
+    assertEquals("https://users.example/editor", request.get("oslc:modifiedBy").textValue());
+  }
+
+  @Test
+  void anUntouchedChildKeepsAValueTheStoredArtifactDoesNotRecord() throws Exception {
+    JsonNode request = JsonMapper.MAPPER.readTree("""
+        {"pav:createdOn":"2019-01-01T00:00:00Z","pav:createdBy":"https://users.example/author",
+         "pav:lastUpdatedOn":"2020-06-01T00:00:00Z","oslc:modifiedBy":"https://users.example/editor"}
+        """);
+    JsonNode stored = JsonMapper.MAPPER.readTree("{\"pav:lastUpdatedOn\":\"2020-06-01T00:00:00Z\"}");
+
+    provenanceUtil.copyProvenance(request, stored);
+
+    assertEquals("2019-01-01T00:00:00Z", request.get("pav:createdOn").textValue(),
+        "a child missing its provenance must be repairable by supplying it");
+    assertEquals("https://users.example/author", request.get("pav:createdBy").textValue());
+    assertEquals("https://users.example/editor", request.get("oslc:modifiedBy").textValue());
+    assertEquals("2020-06-01T00:00:00Z", request.get("pav:lastUpdatedOn").textValue(),
+        "the one value the stored artifact does record still wins");
+  }
+
+  @Test
+  void anUntouchedChildKeepsAValueTheStoredArtifactRecordsAsNull() throws Exception {
+    JsonNode request = JsonMapper.MAPPER.readTree(
+        "{\"pav:createdBy\":\"https://users.example/author\"}");
+    JsonNode stored = JsonMapper.MAPPER.readTree("{\"pav:createdBy\":null}");
+
+    provenanceUtil.copyProvenance(request, stored);
+
+    assertEquals("https://users.example/author", request.get("pav:createdBy").textValue(),
+        "a stored null records nothing, so it must not overwrite a supplied value");
+  }
+
   @Test
   void ignoresATargetThatIsNotAnObject() throws Exception {
     JsonNode request = JsonMapper.MAPPER.readTree("[]");

@@ -47,6 +47,27 @@ public class ProvenanceUtil {
   }
 
   /**
+   * Takes all four provenance values from the stored artifact, for a child this write left untouched. Its
+   * dates then continue to describe the last write that changed it, rather than this one, and the request
+   * cannot restate a value the stored artifact already records.
+   * <p>
+   * A value the stored artifact does not record is left as the request supplied it, on the same reasoning
+   * as {@link #preserveCreationProvenance}: the point is to protect a recorded value from being rewritten,
+   * not to protect an absent one from being filled. Deleting the request's value instead made a child
+   * missing its provenance unrepairable, since supplying the key without otherwise changing the child put
+   * it on this path and the key was dropped again -- after validation had accepted the document with it.
+   */
+  public void copyProvenance(JsonNode target, JsonNode stored) {
+    if (target == null || stored == null || !target.isObject()) {
+      return;
+    }
+    ObjectNode resource = (ObjectNode) target;
+    for (String key : PROVENANCE_KEYS) {
+      copyIfPresent(resource, stored, key);
+    }
+  }
+
+  /**
    * Creation provenance belongs to whoever created the artifact, so an update takes it from what is stored
    * rather than from the request. Trusting the request let any caller with write access claim that another
    * user created the artifact, since an update stamps only the last-modified pair.
@@ -55,26 +76,6 @@ public class ProvenanceUtil {
    * supply creation provenance an older artifact never had, while denying it the ability to overwrite
    * creation provenance that is already recorded.
    */
-  /**
-   * Takes all four provenance values from the stored artifact, for a child this write left untouched. Its
-   * dates then continue to describe the last write that changed it, and the request cannot restate any of
-   * them.
-   */
-  public void copyProvenance(JsonNode target, JsonNode stored) {
-    if (target == null || stored == null || !target.isObject()) {
-      return;
-    }
-    ObjectNode resource = (ObjectNode) target;
-    for (String key : PROVENANCE_KEYS) {
-      JsonNode value = stored.get(key);
-      if (value == null) {
-        resource.remove(key);
-      } else {
-        resource.set(key, value.deepCopy());
-      }
-    }
-  }
-
   public void preserveCreationProvenance(JsonNode target, JsonNode stored) {
     if (target == null || stored == null || !target.isObject()) {
       return;
