@@ -11,8 +11,13 @@ import org.metadatacenter.server.model.provenance.ProvenanceInfo;
 import org.metadatacenter.util.json.JsonMapper;
 import org.metadatacenter.util.provenance.ProvenanceUtil;
 
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -77,39 +82,47 @@ public class ModelUtil {
 
   public static void ensureFieldIdsRecursively(JsonNode genericInstance, ProvenanceInfo pi, ProvenanceUtil provenanceUtil,
                                                LinkedDataUtil linkedDataUtil) {
-    JsonNode properties = genericInstance.get("properties");
-    if (properties != null) {
-      Iterator<Map.Entry<String, JsonNode>> it = properties.fields();
-      while (it.hasNext()) {
-        Map.Entry<String, JsonNode> entry = it.next();
-        JsonNode fieldCandidate = entry.getValue();
-        // If the entry is an object
-        if (fieldCandidate.isObject()
-            && fieldCandidate.get("type") != null
-            && !ModelUtil.isSpecialField(entry.getKey())) {
-          String type = fieldCandidate.get("type").asText();
-          if ("object".equals(type)) {
-            generateFieldIdIfTemporaryOrMissing(fieldCandidate, pi, provenanceUtil, linkedDataUtil);
-            // multiple instance
-          } else if ("array".equals(type)) {
-            // A malformed multi-instance child can carry no 'items'. Skip it rather than dereferencing
-            // null: enforceChildArtifactTypes rejects the artifact with a 400 that names the property.
-            JsonNode items = fieldCandidate.get("items");
-            if (items != null && items.isObject()) {
-              generateFieldIdIfTemporaryOrMissing(items, pi, provenanceUtil, linkedDataUtil);
-            }
-          }
-        }
-      }
-    }
+    // A malformed multi-instance child carrying no 'items' object is skipped rather than dereferenced:
+    // enforceChildArtifactTypes rejects the artifact with a 400 that names the property.
+    forEachChild(genericInstance,
+        (name, child) -> generateFieldIdIfTemporaryOrMissing(child, pi, provenanceUtil, linkedDataUtil));
   }
 
   private static void generateFieldIdIfTemporaryOrMissing(JsonNode fieldCandidate, ProvenanceInfo pi, ProvenanceUtil
       provenanceUtil, LinkedDataUtil linkedDataUtil) {
     provenanceUtil.addProvenanceInfo(fieldCandidate, pi);
-    JsonNode idNode = fieldCandidate.get("@id");
-    if (idNode == null || !idNode.isTextual() || idNode.textValue().startsWith(CedarConstants.TEMP_ID_PREFIX)) {
+    if (!hasUsableChildId(fieldCandidate)) {
       ((ObjectNode) fieldCandidate).put("@id", generateNewChildId(fieldCandidate, linkedDataUtil));
+    }
+  }
+
+  /**
+   * Whether a child's '@id' is an identifier at all: present, a string, and an absolute IRI.
+   * <p>
+   * One rule replaces the former test for the 'tmp-' prefix the Template Designer mints, because a
+   * temporary identifier is not absolute and so fails this on its own. Nothing about the prefix is
+   * special any more, which also catches what the prefix test let through: an empty string, a relative
+   * reference, and a value whose case or whitespace differs from what the frontend happens to write.
+   * <p>
+   * An absolute IRI under a base this repository does not own is still an identifier and is kept.
+   * Imported artifacts carry them, and minting over one would break whatever refers to it.
+   */
+  public static boolean hasUsableChildId(JsonNode fieldCandidate) {
+    JsonNode idNode = fieldCandidate.get("@id");
+    if (idNode == null || !idNode.isTextual()) {
+      return false;
+    }
+    return isAbsoluteIri(idNode.textValue());
+  }
+
+  private static boolean isAbsoluteIri(String value) {
+    if (value == null || value.isBlank()) {
+      return false;
+    }
+    try {
+      return new URI(value.trim()).isAbsolute();
+    } catch (URISyntaxException e) {
+      return false;
     }
   }
 
@@ -146,6 +159,71 @@ public class ModelUtil {
     return CedarResourceType.AtType.ELEMENT.equals(value)
         || CedarResourceType.AtType.FIELD.equals(value)
         || CedarResourceType.AtType.STATIC_FIELD.equals(value);
+  }
+
+  /**
+   * The names of any direct children whose identifier prefix contradicts their '@type' -- an element
+   * holding an identifier under 'template-fields', or a field holding one under 'template-elements'.
+   * <p>
+   * Writes now mint the correct prefix, but artifacts damaged before that keep what they have: the wrong
+   * IRI is well formed, so validation accepts it, and it is absolute, so it is never minted again. This
+   * reports them so a repair pass can find them; nothing here refuses a write over one, because the
+   * identifier is what other artifacts already refer to and choosing a replacement is not a decision the
+   * write path should make.
+   * <p>
+   * A child whose identifier carries neither prefix -- one under a foreign base, say -- is not reported,
+   * because there is nothing to contradict.
+   */
+  public static List<String> childrenWithMismatchedIdPrefix(JsonNode genericInstance) {
+    List<String> mismatched = new ArrayList<>();
+    forEachChild(genericInstance, (name, child) -> {
+      JsonNode idNode = child.get("@id");
+      if (idNode == null || !idNode.isTextual() || !hasRecognisedChildType(child)) {
+        return;
+      }
+      String id = idNode.textValue();
+      String expected = "/" + prefixOf(childResourceType(child)) + "/";
+      String other = "/" + prefixOf(childResourceType(child) == CedarResourceType.ELEMENT
+          ? CedarResourceType.FIELD : CedarResourceType.ELEMENT) + "/";
+      if (!id.contains(expected) && id.contains(other)) {
+        mismatched.add(name);
+      }
+    });
+    return mismatched;
+  }
+
+  private static String prefixOf(CedarResourceType resourceType) {
+    return resourceType.getPrefix();
+  }
+
+  /**
+   * The direct children of a template or element: the entries of 'properties' that are field or element
+   * schemas rather than the reserved keys, unwrapped from the array that carries a multi-instance one.
+   * Both the identifier logic and the checks over it walk the same shape, so they walk it once here.
+   */
+  public static void forEachChild(JsonNode genericInstance, BiConsumer<String, JsonNode> visitor) {
+    JsonNode properties = genericInstance == null ? null : genericInstance.get("properties");
+    if (properties == null || !properties.isObject()) {
+      return;
+    }
+    Iterator<Map.Entry<String, JsonNode>> it = properties.fields();
+    while (it.hasNext()) {
+      Map.Entry<String, JsonNode> entry = it.next();
+      JsonNode candidate = entry.getValue();
+      if (!candidate.isObject() || candidate.get("type") == null || isSpecialField(entry.getKey())) {
+        continue;
+      }
+      String type = candidate.get("type").asText();
+      JsonNode child = candidate;
+      if ("array".equals(type)) {
+        child = candidate.get("items");
+      } else if (!"object".equals(type)) {
+        continue;
+      }
+      if (child != null && child.isObject()) {
+        visitor.accept(entry.getKey(), child);
+      }
+    }
   }
 
   public static String extractDOIFromResourceContent(String content, CedarResourceType resourceType) throws CedarProcessingException {

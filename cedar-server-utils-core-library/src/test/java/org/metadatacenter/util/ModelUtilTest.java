@@ -13,6 +13,7 @@ import org.metadatacenter.server.model.provenance.ProvenanceInfo;
 import org.metadatacenter.util.json.JsonMapper;
 import org.metadatacenter.util.provenance.ProvenanceUtil;
 
+import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -258,6 +259,81 @@ class ModelUtilTest {
     JsonNode child = JsonMapper.MAPPER.readTree(candidate);
 
     assertFalse(ModelUtil.hasRecognisedChildType(child));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"https://repo.metadatacenter.org/template-fields/1",
+      "https://other.example/template-fields/1", "urn:uuid:0d1b0b0a-0000-4000-8000-000000000000"})
+  void treatsAnAbsoluteIriAsAUsableChildIdentifier(String id) throws Exception {
+    JsonNode child = JsonMapper.MAPPER.readTree("{\"@id\":\"" + id + "\"}");
+
+    assertTrue(ModelUtil.hasUsableChildId(child));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"tmp-1754932461238-4127", "TMP-123", " tmp-123", "", "   ",
+      "foo", "/template-fields/1", "not a uri at all"})
+  void treatsAnythingThatIsNotAnAbsoluteIriAsUnusable(String id) throws Exception {
+    JsonNode child = JsonMapper.MAPPER.readTree(JsonMapper.MAPPER.writeValueAsString(
+        JsonMapper.MAPPER.createObjectNode().put("@id", id)));
+
+    assertFalse(ModelUtil.hasUsableChildId(child));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"{}", "{\"@id\":null}", "{\"@id\":17}", "{\"@id\":{}}", "{\"@id\":[]}"})
+  void treatsAnAbsentOrNonStringIdentifierAsUnusable(String candidate) throws Exception {
+    assertFalse(ModelUtil.hasUsableChildId(JsonMapper.MAPPER.readTree(candidate)));
+  }
+
+  @Test
+  void mintsOverAMalformedIdentifierRatherThanKeepingIt() throws Exception {
+    JsonNode schema = schemaWithProperty("child", "{\"type\":\"object\",\"@id\":\"not-an-iri\",\"@type\":\""
+        + CedarResourceType.AtType.FIELD + "\"}");
+
+    ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals("generated-field-id", schema.at("/properties/child/@id").textValue());
+  }
+
+  @Test
+  void keepsAnIdentifierUnderAForeignBase() throws Exception {
+    JsonNode schema = schemaWithProperty("child", "{\"type\":\"object\","
+        + "\"@id\":\"https://other.example/template-fields/1\",\"@type\":\""
+        + CedarResourceType.AtType.FIELD + "\"}");
+
+    ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals("https://other.example/template-fields/1", schema.at("/properties/child/@id").textValue());
+    verify(linkedDataUtil, never()).buildNewLinkedDataId(CedarResourceType.FIELD);
+  }
+
+  @Test
+  void reportsAnElementChildHoldingAFieldIdentifier() throws Exception {
+    JsonNode schema = schemaWithProperty("child", "{\"type\":\"object\","
+        + "\"@id\":\"https://repo.metadatacenter.org/template-fields/1\",\"@type\":\""
+        + CedarResourceType.AtType.ELEMENT + "\"}");
+
+    assertEquals(List.of("child"), ModelUtil.childrenWithMismatchedIdPrefix(schema));
+  }
+
+  @Test
+  void reportsAFieldChildHoldingAnElementIdentifier() throws Exception {
+    JsonNode schema = schemaWithProperty("child", "{\"type\":\"object\","
+        + "\"@id\":\"https://repo.metadatacenter.org/template-elements/1\",\"@type\":\""
+        + CedarResourceType.AtType.FIELD + "\"}");
+
+    assertEquals(List.of("child"), ModelUtil.childrenWithMismatchedIdPrefix(schema));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"https://repo.metadatacenter.org/template-elements/1",
+      "urn:uuid:0d1b0b0a-0000-4000-8000-000000000000"})
+  void reportsNoMismatchWhenThePrefixAgreesOrIsAbsent(String id) throws Exception {
+    JsonNode schema = schemaWithProperty("child", "{\"type\":\"object\",\"@id\":\"" + id + "\",\"@type\":\""
+        + CedarResourceType.AtType.ELEMENT + "\"}");
+
+    assertTrue(ModelUtil.childrenWithMismatchedIdPrefix(schema).isEmpty());
   }
 
   @Test
