@@ -14,6 +14,7 @@ import org.metadatacenter.util.provenance.ProvenanceUtil;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -80,20 +81,73 @@ public class ModelUtil {
     return extractStringFromPointer(jsonNode, SCHEMA_IS_BASED_ON);
   }
 
+  /**
+   * Gives every direct child an identifier and provenance, for an artifact being created. Every child is
+   * new, so each receives a full creation record.
+   */
   public static void ensureFieldIdsRecursively(JsonNode genericInstance, ProvenanceInfo pi, ProvenanceUtil provenanceUtil,
                                                LinkedDataUtil linkedDataUtil) {
-    // A malformed multi-instance child carrying no 'items' object is skipped rather than dereferenced:
-    // enforceChildArtifactTypes rejects the artifact with a 400 that names the property.
-    forEachChild(genericInstance,
-        (name, child) -> generateFieldIdIfTemporaryOrMissing(child, pi, provenanceUtil, linkedDataUtil));
+    ensureFieldIdsRecursively(genericInstance, null, pi, provenanceUtil, linkedDataUtil);
   }
 
-  private static void generateFieldIdIfTemporaryOrMissing(JsonNode fieldCandidate, ProvenanceInfo pi, ProvenanceUtil
-      provenanceUtil, LinkedDataUtil linkedDataUtil) {
-    provenanceUtil.addProvenanceInfo(fieldCandidate, pi);
-    if (!hasUsableChildId(fieldCandidate)) {
-      ((ObjectNode) fieldCandidate).put("@id", generateNewChildId(fieldCandidate, linkedDataUtil));
-    }
+  /**
+   * Gives every direct child an identifier, and provenance describing what this write actually did to it.
+   * <p>
+   * Three cases, distinguished by comparing each child against the same property in the stored artifact.
+   * A child with no counterpart there is new and gets a full creation record. A child whose content
+   * differs keeps the creation record it already had and takes a fresh last-modified stamp. A child whose
+   * content is identical keeps all four values unchanged, so its dates continue to describe the last write
+   * that touched it rather than the last write that touched its parent.
+   * <p>
+   * This replaces stamping a creation record onto every child of every save, which reassigned the
+   * authorship of long-standing children to whoever saved the parent, and left every child's
+   * last-modified date reporting the parent's save. Editing a template usually does edit children, so the
+   * old behaviour was often approximately right about modification and never right about creation.
+   * <p>
+   * The comparison ignores the four provenance keys. Comparing them would make every child differ on the
+   * first write after this ships, and their values are the thing being decided.
+   *
+   * @param storedArtifact the artifact as currently stored, or null when this write creates it
+   */
+  public static void ensureFieldIdsRecursively(JsonNode genericInstance, JsonNode storedArtifact, ProvenanceInfo pi,
+                                               ProvenanceUtil provenanceUtil, LinkedDataUtil linkedDataUtil) {
+    Map<String, JsonNode> storedChildren = childrenByName(storedArtifact);
+    // A malformed multi-instance child carrying no 'items' object is skipped rather than dereferenced:
+    // enforceChildArtifactTypes rejects the artifact with a 400 that names the property.
+    forEachChild(genericInstance, (name, child) -> {
+      if (!hasUsableChildId(child)) {
+        ((ObjectNode) child).put("@id", generateNewChildId(child, linkedDataUtil));
+      }
+      JsonNode stored = storedChildren.get(name);
+      if (stored == null) {
+        provenanceUtil.addProvenanceInfo(child, pi);
+      } else if (childContentDiffers(child, stored)) {
+        provenanceUtil.preserveCreationProvenance(child, stored);
+        provenanceUtil.patchProvenanceInfo(child, pi);
+      } else {
+        provenanceUtil.copyProvenance(child, stored);
+      }
+    });
+  }
+
+  /** The direct children of an artifact, by the property that holds each one. */
+  public static Map<String, JsonNode> childrenByName(JsonNode genericInstance) {
+    Map<String, JsonNode> children = new HashMap<>();
+    forEachChild(genericInstance, children::put);
+    return children;
+  }
+
+  /**
+   * Whether two versions of the same child differ in anything but their provenance.
+   */
+  private static boolean childContentDiffers(JsonNode child, JsonNode stored) {
+    return !withoutProvenance(child).equals(withoutProvenance(stored));
+  }
+
+  private static JsonNode withoutProvenance(JsonNode child) {
+    ObjectNode copy = child.deepCopy();
+    copy.remove(ProvenanceUtil.PROVENANCE_KEYS);
+    return copy;
   }
 
   /**

@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.List;
 
 public class ProvenanceUtil {
 
@@ -17,6 +18,10 @@ public class ProvenanceUtil {
   public static final String PAV_CREATED_BY = "pav:createdBy";
   public static final String PAV_LAST_UPDATED_ON = "pav:lastUpdatedOn";
   public static final String OSLC_MODIFIED_BY = "oslc:modifiedBy";
+
+  /** The four keys this class writes, for callers that need to treat provenance as one unit. */
+  public static final List<String> PROVENANCE_KEYS =
+      List.of(PAV_CREATED_ON, PAV_CREATED_BY, PAV_LAST_UPDATED_ON, OSLC_MODIFIED_BY);
 
   private static final Logger log = LoggerFactory.getLogger(ProvenanceUtil.class);
 
@@ -50,6 +55,26 @@ public class ProvenanceUtil {
    * supply creation provenance an older artifact never had, while denying it the ability to overwrite
    * creation provenance that is already recorded.
    */
+  /**
+   * Takes all four provenance values from the stored artifact, for a child this write left untouched. Its
+   * dates then continue to describe the last write that changed it, and the request cannot restate any of
+   * them.
+   */
+  public void copyProvenance(JsonNode target, JsonNode stored) {
+    if (target == null || stored == null || !target.isObject()) {
+      return;
+    }
+    ObjectNode resource = (ObjectNode) target;
+    for (String key : PROVENANCE_KEYS) {
+      JsonNode value = stored.get(key);
+      if (value == null) {
+        resource.remove(key);
+      } else {
+        resource.set(key, value.deepCopy());
+      }
+    }
+  }
+
   public void preserveCreationProvenance(JsonNode target, JsonNode stored) {
     if (target == null || stored == null || !target.isObject()) {
       return;

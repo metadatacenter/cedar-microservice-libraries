@@ -142,7 +142,7 @@ class ModelUtilTest {
   }
 
   @Test
-  void preservesPermanentFieldIdWhileStillAddingProvenance() throws Exception {
+  void preservesPermanentFieldIdAndTreatsTheChildAsNewWhenNothingIsStored() throws Exception {
     JsonNode schema = schemaWithProperty("field", "{\"type\":\"object\",\"@id\":\"https://repo.example/fields/1\"}");
 
     ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
@@ -151,6 +151,104 @@ class ModelUtilTest {
     assertEquals("https://repo.example/fields/1", field.get("@id").textValue());
     assertCreationProvenance(field);
     verify(linkedDataUtil, never()).buildNewLinkedDataId(CedarResourceType.FIELD);
+  }
+
+  // ── child provenance against a stored artifact ───────────────────────────
+
+  private static final String STORED_CHILD = "{\"type\":\"object\",\"@id\":\"https://repo.example/fields/1\","
+      + "\"schema:name\":\"Original\","
+      + "\"pav:createdOn\":\"2019-01-01T00:00:00Z\",\"pav:createdBy\":\"https://users.example/author\","
+      + "\"pav:lastUpdatedOn\":\"2020-06-01T00:00:00Z\",\"oslc:modifiedBy\":\"https://users.example/editor\"}";
+
+  @Test
+  void anUnchangedChildKeepsEveryProvenanceValueItHad() throws Exception {
+    JsonNode stored = schemaWithProperty("field", STORED_CHILD);
+    JsonNode request = schemaWithProperty("field", STORED_CHILD);
+
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    JsonNode field = request.at("/properties/field");
+    assertEquals("2019-01-01T00:00:00Z", field.get("pav:createdOn").textValue());
+    assertEquals("https://users.example/author", field.get("pav:createdBy").textValue());
+    assertEquals("2020-06-01T00:00:00Z", field.get("pav:lastUpdatedOn").textValue());
+    assertEquals("https://users.example/editor", field.get("oslc:modifiedBy").textValue());
+  }
+
+  @Test
+  void anUnchangedChildIsUnaffectedByProvenanceTheRequestRestates() throws Exception {
+    JsonNode stored = schemaWithProperty("field", STORED_CHILD);
+    JsonNode request = schemaWithProperty("field", STORED_CHILD.replace(
+        "\"pav:createdBy\":\"https://users.example/author\"",
+        "\"pav:createdBy\":\"https://users.example/impostor\""));
+
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals("https://users.example/author",
+        request.at("/properties/field/pav:createdBy").textValue());
+  }
+
+  @Test
+  void aChangedChildKeepsItsCreationRecordAndTakesAFreshModificationStamp() throws Exception {
+    JsonNode stored = schemaWithProperty("field", STORED_CHILD);
+    JsonNode request = schemaWithProperty("field", STORED_CHILD.replace("Original", "Renamed"));
+
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    JsonNode field = request.at("/properties/field");
+    assertEquals("2019-01-01T00:00:00Z", field.get("pav:createdOn").textValue());
+    assertEquals("https://users.example/author", field.get("pav:createdBy").textValue());
+    assertEquals(provenance.getLastUpdatedOn(), field.get("pav:lastUpdatedOn").textValue());
+    assertEquals(provenance.getLastUpdatedBy(), field.get("oslc:modifiedBy").textValue());
+  }
+
+  @Test
+  void aChildWithNoStoredCounterpartGetsAFullCreationRecord() throws Exception {
+    JsonNode stored = schemaWithProperty("field", STORED_CHILD);
+    JsonNode request = JsonMapper.MAPPER.readTree("{\"properties\":{\"field\":" + STORED_CHILD + ",\"added\":"
+        + "{\"type\":\"object\",\"@id\":\"https://repo.example/fields/2\"}}}");
+
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertCreationProvenance(request.at("/properties/added"));
+  }
+
+  @Test
+  void aSiblingIsNotStampedBecauseAnotherChildChanged() throws Exception {
+    String other = STORED_CHILD.replace("fields/1", "fields/2").replace("Original", "Untouched");
+    JsonNode stored = JsonMapper.MAPPER.readTree(
+        "{\"properties\":{\"field\":" + STORED_CHILD + ",\"other\":" + other + "}}");
+    JsonNode request = JsonMapper.MAPPER.readTree(
+        "{\"properties\":{\"field\":" + STORED_CHILD.replace("Original", "Renamed") + ",\"other\":" + other + "}}");
+
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals(provenance.getLastUpdatedOn(), request.at("/properties/field/pav:lastUpdatedOn").textValue());
+    assertEquals("2020-06-01T00:00:00Z", request.at("/properties/other/pav:lastUpdatedOn").textValue());
+  }
+
+  @Test
+  void mintingAnIdentifierCountsAsAChange() throws Exception {
+    JsonNode stored = schemaWithProperty("field", STORED_CHILD);
+    JsonNode request = schemaWithProperty("field", STORED_CHILD.replace("https://repo.example/fields/1", "tmp-9"));
+
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    JsonNode field = request.at("/properties/field");
+    assertEquals("generated-field-id", field.get("@id").textValue());
+    assertEquals("https://users.example/author", field.get("pav:createdBy").textValue());
+    assertEquals(provenance.getLastUpdatedBy(), field.get("oslc:modifiedBy").textValue());
+  }
+
+  @Test
+  void comparesMultiInstanceChildrenThroughTheirItems() throws Exception {
+    String wrapped = "{\"type\":\"array\",\"minItems\":0,\"items\":" + STORED_CHILD + "}";
+    JsonNode stored = schemaWithProperty("field", wrapped);
+    JsonNode request = schemaWithProperty("field", wrapped);
+
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals("2020-06-01T00:00:00Z",
+        request.at("/properties/field/items/pav:lastUpdatedOn").textValue());
   }
 
   @Test
