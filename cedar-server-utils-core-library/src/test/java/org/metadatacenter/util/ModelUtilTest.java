@@ -35,6 +35,7 @@ class ModelUtilTest {
   void setUp() {
     linkedDataUtil = mock(LinkedDataUtil.class);
     when(linkedDataUtil.buildNewLinkedDataId(CedarResourceType.FIELD)).thenReturn("generated-field-id");
+    when(linkedDataUtil.buildNewLinkedDataId(CedarResourceType.ELEMENT)).thenReturn("generated-element-id");
     provenance = new ProvenanceInfo();
     provenance.setCreatedOn("2026-07-31T12:00:00Z");
     provenance.setCreatedBy("https://users.example/creator");
@@ -182,6 +183,81 @@ class ModelUtilTest {
     ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
 
     verify(linkedDataUtil, never()).buildNewLinkedDataId(CedarResourceType.FIELD);
+  }
+
+  @Test
+  void mintsAnElementIdForAChildDeclaringItselfAnElement() throws Exception {
+    JsonNode schema = schemaWithProperty("child",
+        "{\"type\":\"object\",\"@type\":\"" + CedarResourceType.AtType.ELEMENT + "\"}");
+
+    ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals("generated-element-id", schema.at("/properties/child/@id").textValue());
+    verify(linkedDataUtil, never()).buildNewLinkedDataId(CedarResourceType.FIELD);
+  }
+
+  @Test
+  void mintsAFieldIdForAChildDeclaringItselfAField() throws Exception {
+    JsonNode schema = schemaWithProperty("child",
+        "{\"type\":\"object\",\"@type\":\"" + CedarResourceType.AtType.FIELD + "\"}");
+
+    ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals("generated-field-id", schema.at("/properties/child/@id").textValue());
+    verify(linkedDataUtil, never()).buildNewLinkedDataId(CedarResourceType.ELEMENT);
+  }
+
+  @Test
+  void mintsAnElementIdForAMultiInstanceElementChild() throws Exception {
+    JsonNode schema = schemaWithProperty("child", "{\"type\":\"array\",\"items\":{\"type\":\"object\",\"@type\":\""
+        + CedarResourceType.AtType.ELEMENT + "\"}}");
+
+    ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals("generated-element-id", schema.at("/properties/child/items/@id").textValue());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"{\"type\":\"array\"}", "{\"type\":\"array\",\"items\":null}",
+      "{\"type\":\"array\",\"items\":17}", "{\"type\":\"array\",\"items\":[]}"})
+  void skipsAMultiInstanceChildWhoseItemsIsNotAnObjectRatherThanFailing(String candidate) throws Exception {
+    JsonNode schema = schemaWithProperty("child", candidate);
+
+    ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    verify(linkedDataUtil, never()).buildNewLinkedDataId(CedarResourceType.FIELD);
+    verify(linkedDataUtil, never()).buildNewLinkedDataId(CedarResourceType.ELEMENT);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"https://schema.metadatacenter.org/core/TemplateElement",
+      "https://schema.metadatacenter.org/core/TemplateField",
+      "https://schema.metadatacenter.org/core/StaticTemplateField"})
+  void recognizesEveryChildArtifactTypeTheMetaSchemasAllow(String atType) throws Exception {
+    JsonNode child = JsonMapper.MAPPER.readTree("{\"type\":\"object\",\"@type\":\"" + atType + "\"}");
+
+    assertTrue(ModelUtil.hasRecognisedChildType(child));
+  }
+
+  @Test
+  void mintsAFieldIdForAStaticFieldChild() throws Exception {
+    JsonNode schema = schemaWithProperty("logo",
+        "{\"type\":\"object\",\"@type\":\"" + CedarResourceType.AtType.STATIC_FIELD + "\"}");
+
+    ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals("generated-field-id", schema.at("/properties/logo/@id").textValue());
+    verify(linkedDataUtil, never()).buildNewLinkedDataId(CedarResourceType.ELEMENT);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"{\"type\":\"object\"}", "{\"type\":\"object\",\"@type\":null}",
+      "{\"type\":\"object\",\"@type\":17}",
+      "{\"type\":\"object\",\"@type\":\"https://schema.metadatacenter.org/core/Template\"}"})
+  void refusesToRecognizeAChildWithoutAUsableType(String candidate) throws Exception {
+    JsonNode child = JsonMapper.MAPPER.readTree(candidate);
+
+    assertFalse(ModelUtil.hasRecognisedChildType(child));
   }
 
   @Test

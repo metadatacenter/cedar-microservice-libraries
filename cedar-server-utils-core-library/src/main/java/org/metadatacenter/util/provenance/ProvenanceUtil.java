@@ -41,6 +41,31 @@ public class ProvenanceUtil {
     setProvenanceInfo(node, pi, CreateOrUpdate.UPDATE);
   }
 
+  /**
+   * Creation provenance belongs to whoever created the artifact, so an update takes it from what is stored
+   * rather than from the request. Trusting the request let any caller with write access claim that another
+   * user created the artifact, since an update stamps only the last-modified pair.
+   * <p>
+   * A value absent from the stored artifact is left as the request supplied it. That keeps a repair able to
+   * supply creation provenance an older artifact never had, while denying it the ability to overwrite
+   * creation provenance that is already recorded.
+   */
+  public void preserveCreationProvenance(JsonNode target, JsonNode stored) {
+    if (target == null || stored == null || !target.isObject()) {
+      return;
+    }
+    ObjectNode resource = (ObjectNode) target;
+    copyIfPresent(resource, stored, PAV_CREATED_ON);
+    copyIfPresent(resource, stored, PAV_CREATED_BY);
+  }
+
+  private static void copyIfPresent(ObjectNode target, JsonNode stored, String key) {
+    JsonNode value = stored.get(key);
+    if (value != null && !value.isNull()) {
+      target.set(key, value.deepCopy());
+    }
+  }
+
   private ProvenanceInfo buildFromUserURLId(String userURL) {
     ProvenanceInfo pi = new ProvenanceInfo();
     Instant now = Instant.now();

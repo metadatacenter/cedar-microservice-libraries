@@ -92,7 +92,12 @@ public class ModelUtil {
             generateFieldIdIfTemporaryOrMissing(fieldCandidate, pi, provenanceUtil, linkedDataUtil);
             // multiple instance
           } else if ("array".equals(type)) {
-            generateFieldIdIfTemporaryOrMissing(fieldCandidate.get("items"), pi, provenanceUtil, linkedDataUtil);
+            // A malformed multi-instance child can carry no 'items'. Skip it rather than dereferencing
+            // null: enforceChildArtifactTypes rejects the artifact with a 400 that names the property.
+            JsonNode items = fieldCandidate.get("items");
+            if (items != null && items.isObject()) {
+              generateFieldIdIfTemporaryOrMissing(items, pi, provenanceUtil, linkedDataUtil);
+            }
           }
         }
       }
@@ -104,12 +109,43 @@ public class ModelUtil {
     provenanceUtil.addProvenanceInfo(fieldCandidate, pi);
     JsonNode idNode = fieldCandidate.get("@id");
     if (idNode == null || !idNode.isTextual() || idNode.textValue().startsWith(CedarConstants.TEMP_ID_PREFIX)) {
-      ((ObjectNode) fieldCandidate).put("@id", generateNewFieldId(linkedDataUtil));
+      ((ObjectNode) fieldCandidate).put("@id", generateNewChildId(fieldCandidate, linkedDataUtil));
     }
   }
 
-  private static String generateNewFieldId(LinkedDataUtil linkedDataUtil) {
-    return linkedDataUtil.buildNewLinkedDataId(CedarResourceType.FIELD);
+  /**
+   * The identifier minted for a child must carry the prefix of what the child actually is. Minting every
+   * child as a field gave an element an IRI under 'template-fields', which no later write repairs: the
+   * wrong IRI is well formed, so validation accepts it, and it is no longer temporary, so it is never
+   * minted again. enforceChildArtifactTypes rejects a child whose '@type' cannot be recognised, so an
+   * unrecognised type reaches this point only when validation is disabled; treat it as a field there,
+   * which is the behaviour that has always applied.
+   */
+  private static String generateNewChildId(JsonNode fieldCandidate, LinkedDataUtil linkedDataUtil) {
+    return linkedDataUtil.buildNewLinkedDataId(childResourceType(fieldCandidate));
+  }
+
+  public static CedarResourceType childResourceType(JsonNode fieldCandidate) {
+    JsonNode atType = fieldCandidate.get("@type");
+    if (atType != null && atType.isTextual() && CedarResourceType.AtType.ELEMENT.equals(atType.textValue())) {
+      return CedarResourceType.ELEMENT;
+    }
+    return CedarResourceType.FIELD;
+  }
+
+  /**
+   * The three '@type' values the meta-schemas allow for a child of a template or element. A static field is
+   * a field as far as identifiers go, so only the element case picks a different prefix.
+   */
+  public static boolean hasRecognisedChildType(JsonNode fieldCandidate) {
+    JsonNode atType = fieldCandidate.get("@type");
+    if (atType == null || !atType.isTextual()) {
+      return false;
+    }
+    String value = atType.textValue();
+    return CedarResourceType.AtType.ELEMENT.equals(value)
+        || CedarResourceType.AtType.FIELD.equals(value)
+        || CedarResourceType.AtType.STATIC_FIELD.equals(value);
   }
 
   public static String extractDOIFromResourceContent(String content, CedarResourceType resourceType) throws CedarProcessingException {
