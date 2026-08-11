@@ -144,10 +144,28 @@ public class ModelUtil {
     return !withoutProvenance(child).equals(withoutProvenance(stored));
   }
 
+  /**
+   * A copy of a child with provenance removed at every level, not only its own.
+   * <p>
+   * Below the direct children nothing normalises provenance: those values are whatever the request
+   * supplied. Leaving them in the comparison let a request that differed only in a nested field's
+   * timestamp count as a change to the child containing it, which then took a modification stamp saying
+   * it had been edited. The comparison asks whether this write changed the child's content, and
+   * provenance is not content at any depth.
+   */
   private static JsonNode withoutProvenance(JsonNode child) {
-    ObjectNode copy = child.deepCopy();
-    copy.remove(ProvenanceUtil.PROVENANCE_KEYS);
+    JsonNode copy = child.deepCopy();
+    removeProvenanceRecursively(copy);
     return copy;
+  }
+
+  private static void removeProvenanceRecursively(JsonNode node) {
+    if (node.isObject()) {
+      ((ObjectNode) node).remove(ProvenanceUtil.PROVENANCE_KEYS);
+      node.forEach(ModelUtil::removeProvenanceRecursively);
+    } else if (node.isArray()) {
+      node.forEach(ModelUtil::removeProvenanceRecursively);
+    }
   }
 
   /**

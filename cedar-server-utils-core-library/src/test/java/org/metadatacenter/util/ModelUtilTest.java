@@ -255,6 +255,59 @@ class ModelUtilTest {
         "the child is otherwise untouched, so its modification stamp does not move");
   }
 
+  /** An element child holding one nested field, so the comparison can be watched below depth 1. */
+  private static String elementWith(String nestedProvenance, String nestedTitle) {
+    return "{\"type\":\"object\",\"@id\":\"https://repo.example/elements/1\",\"@type\":\""
+        + CedarResourceType.AtType.ELEMENT + "\","
+        + "\"pav:createdOn\":\"2019-01-01T00:00:00Z\",\"pav:createdBy\":\"https://users.example/author\","
+        + "\"pav:lastUpdatedOn\":\"2020-06-01T00:00:00Z\",\"oslc:modifiedBy\":\"https://users.example/editor\","
+        + "\"properties\":{\"nested\":{\"type\":\"object\",\"title\":\"" + nestedTitle + "\","
+        + "\"@id\":\"https://repo.example/fields/9\",\"@type\":\"" + CedarResourceType.AtType.FIELD + "\","
+        + nestedProvenance + "}}}";
+  }
+
+  private static final String NESTED_OLD =
+      "\"pav:lastUpdatedOn\":\"2020-06-01T00:00:00Z\",\"oslc:modifiedBy\":\"https://users.example/editor\"";
+  private static final String NESTED_NEW =
+      "\"pav:lastUpdatedOn\":\"2026-08-11T00:00:00Z\",\"oslc:modifiedBy\":\"https://users.example/impostor\"";
+
+  @Test
+  void aNestedProvenanceDifferenceIsNotAChangeToTheChildContainingIt() throws Exception {
+    JsonNode stored = schemaWithProperty("element", elementWith(NESTED_OLD, "Same"));
+    JsonNode request = schemaWithProperty("element", elementWith(NESTED_NEW, "Same"));
+
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals("2020-06-01T00:00:00Z", request.at("/properties/element/pav:lastUpdatedOn").textValue(),
+        "provenance the request supplied below depth 1 must not move the child's own stamp");
+  }
+
+  @Test
+  void aNestedContentDifferenceIsStillAChangeToTheChildContainingIt() throws Exception {
+    JsonNode stored = schemaWithProperty("element", elementWith(NESTED_OLD, "Before"));
+    JsonNode request = schemaWithProperty("element", elementWith(NESTED_OLD, "After"));
+
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals(provenance.getLastUpdatedOn(), request.at("/properties/element/pav:lastUpdatedOn").textValue(),
+        "an edit to a nested field is a change to the child containing it");
+    assertEquals("https://users.example/author",
+        request.at("/properties/element/pav:createdBy").textValue(),
+        "and the child keeps the author it had");
+  }
+
+  @Test
+  void leavesNestedProvenanceInTheStoredDocumentUntouched() throws Exception {
+    JsonNode stored = schemaWithProperty("element", elementWith(NESTED_OLD, "Same"));
+    JsonNode request = schemaWithProperty("element", elementWith(NESTED_NEW, "Same"));
+
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals("https://users.example/impostor",
+        request.at("/properties/element/properties/nested/oslc:modifiedBy").textValue(),
+        "the comparison ignores nested provenance; it does not rewrite it, which is the traversal's depth");
+  }
+
   @Test
   void comparesMultiInstanceChildrenThroughTheirItems() throws Exception {
     String wrapped = "{\"type\":\"array\",\"minItems\":0,\"items\":" + STORED_CHILD + "}";
