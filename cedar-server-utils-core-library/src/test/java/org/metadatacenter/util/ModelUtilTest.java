@@ -240,6 +240,45 @@ class ModelUtilTest {
   }
 
   @Test
+  void reportsTheIdentifierItReplacedSoTheOriginalIsNotLostSilently() throws Exception {
+    JsonNode schema = schemaWithProperty("child", "{\"type\":\"object\",\"@id\":\"tmp-1754932461238-4127\","
+        + "\"@type\":\"" + CedarResourceType.AtType.FIELD + "\"}");
+
+    var minted = ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals(1, minted.size());
+    assertEquals("child", minted.get(0).property());
+    assertEquals("tmp-1754932461238-4127", minted.get(0).replaced());
+    assertEquals("generated-field-id", minted.get(0).minted());
+    assertTrue(minted.get(0).destroyedAValue(), "a value was destroyed, so it must be reportable");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"{}", "{\"@id\":null}"})
+  void doesNotClaimToHaveDestroyedAValueWhenTheChildHadNoIdentifier(String idPart) throws Exception {
+    String candidate = ("{\"type\":\"object\",\"@type\":\"" + CedarResourceType.AtType.FIELD + "\""
+        + (idPart.equals("{}") ? "" : ",\"@id\":null") + "}");
+    JsonNode schema = schemaWithProperty("child", candidate);
+
+    var minted = ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    assertEquals(1, minted.size());
+    assertNull(minted.get(0).replaced());
+    assertFalse(minted.get(0).destroyedAValue(),
+        "nothing was lost, so this must not be reported as a replacement");
+  }
+
+  @Test
+  void reportsNothingWhenEveryChildIdentifierIsUsable() throws Exception {
+    JsonNode schema = schemaWithProperty("child", "{\"type\":\"object\","
+        + "\"@id\":\"https://repo.example/template-fields/1\",\"@type\":\""
+        + CedarResourceType.AtType.FIELD + "\"}");
+
+    assertTrue(ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil)
+        .isEmpty());
+  }
+
+  @Test
   void anUnchangedChildCanBeGivenProvenanceTheStoredArtifactLacks() throws Exception {
     // The repair this has to allow: a stored child missing its author, supplied by a request that
     // changes nothing else in that child. Dropping the value here left the artifact unrepairable.

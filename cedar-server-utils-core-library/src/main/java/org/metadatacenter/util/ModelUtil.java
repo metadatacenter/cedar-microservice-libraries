@@ -85,9 +85,10 @@ public class ModelUtil {
    * Gives every direct child an identifier and provenance, for an artifact being created. Every child is
    * new, so each receives a full creation record.
    */
-  public static void ensureFieldIdsRecursively(JsonNode genericInstance, ProvenanceInfo pi, ProvenanceUtil provenanceUtil,
-                                               LinkedDataUtil linkedDataUtil) {
-    ensureFieldIdsRecursively(genericInstance, null, pi, provenanceUtil, linkedDataUtil);
+  public static List<MintedChildId> ensureFieldIdsRecursively(JsonNode genericInstance, ProvenanceInfo pi,
+                                                              ProvenanceUtil provenanceUtil,
+                                                              LinkedDataUtil linkedDataUtil) {
+    return ensureFieldIdsRecursively(genericInstance, null, pi, provenanceUtil, linkedDataUtil);
   }
 
   /**
@@ -109,14 +110,20 @@ public class ModelUtil {
    *
    * @param storedArtifact the artifact as currently stored, or null when this write creates it
    */
-  public static void ensureFieldIdsRecursively(JsonNode genericInstance, JsonNode storedArtifact, ProvenanceInfo pi,
-                                               ProvenanceUtil provenanceUtil, LinkedDataUtil linkedDataUtil) {
+  public static List<MintedChildId> ensureFieldIdsRecursively(JsonNode genericInstance, JsonNode storedArtifact,
+                                                              ProvenanceInfo pi, ProvenanceUtil provenanceUtil,
+                                                              LinkedDataUtil linkedDataUtil) {
     Map<String, JsonNode> storedChildren = childrenByName(storedArtifact);
+    List<MintedChildId> minted = new ArrayList<>();
     // A malformed multi-instance child carrying no 'items' object is skipped rather than dereferenced:
     // enforceChildArtifactTypes rejects the artifact with a 400 that names the property.
     forEachChild(genericInstance, (name, child) -> {
       if (!hasUsableChildId(child)) {
-        ((ObjectNode) child).put("@id", generateNewChildId(child, linkedDataUtil));
+        JsonNode replaced = child.get("@id");
+        String newId = generateNewChildId(child, linkedDataUtil);
+        ((ObjectNode) child).put("@id", newId);
+        minted.add(new MintedChildId(name,
+            replaced == null || replaced.isNull() ? null : replaced.asText(), newId));
       }
       JsonNode stored = storedChildren.get(name);
       if (stored == null) {
@@ -128,6 +135,21 @@ public class ModelUtil {
         provenanceUtil.copyProvenance(child, stored);
       }
     });
+    return minted;
+  }
+
+  /**
+   * An identifier this write assigned to a child, and whatever the request held there before.
+   * <p>
+   * The replaced value is the point. Minting over a value that is not an absolute IRI destroys it, and
+   * nothing else in the stack records what it was, so a repair pass cannot afterwards say which artifacts
+   * it altered or what they held. A null {@code replaced} means the child arrived without an identifier
+   * at all, where there is nothing to lose.
+   */
+  public record MintedChildId(String property, String replaced, String minted) {
+    public boolean destroyedAValue() {
+      return replaced != null && !replaced.isBlank();
+    }
   }
 
   /** The direct children of an artifact, by the property that holds each one. */
