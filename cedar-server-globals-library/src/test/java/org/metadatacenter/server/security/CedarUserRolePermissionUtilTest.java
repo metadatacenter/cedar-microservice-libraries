@@ -206,6 +206,8 @@ class CedarUserRolePermissionUtilTest {
     expected.put(CedarUserRole.CATEGORY_PRIVILEGED_ADMINISTRATOR, EnumSet.of(
         CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_CATEGORY,
         CedarPermission.WRITE_NOT_WRITABLE_CATEGORY));
+    expected.put(CedarUserRole.ARTIFACT_PRIVILEGED_ADMINISTRATOR, EnumSet.of(
+        CedarPermission.WRITE_ARTIFACT_VERBATIM));
     expected.put(CedarUserRole.SEARCH_REINDEXER, EnumSet.of(
         CedarPermission.SEARCH_INDEX_REINDEX, CedarPermission.RULES_INDEX_REINDEX,
         CedarPermission.INCLUSION_SUBGRAPH_RECREATE));
