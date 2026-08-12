@@ -75,6 +75,15 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
     }
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     FolderServerUser updatedUser = executeWriteGetOne(q, FolderServerUser.class);
+    // The update matches on id and returns nothing when no such node exists, which happens if the
+    // user is deleted between the request's own lookup and this write. Reported rather than
+    // dereferenced: buildUser() on the null threw, turning the race into a 500.
+    if (updatedUser == null) {
+      result.addError(CedarErrorType.NOT_FOUND)
+          .message("The user can not be found by id")
+          .parameter("id", user.getId());
+      return result;
+    }
     result.setPayload(updatedUser.buildUser());
     return result;
   }
@@ -115,6 +124,14 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
       }
       CypherQuery q = new CypherQueryWithParameters(cypher, params);
       FolderServerUser updatedUser = executeWriteGetOne(q, FolderServerUser.class);
+      // As in updateUser: the node found at the top of this method can be gone by the time the write
+      // runs, and the write then returns nothing.
+      if (updatedUser == null) {
+        result.addError(CedarErrorType.NOT_FOUND)
+            .message("The user can not be found by id")
+            .parameter("id", oldCedarUser.getId());
+        return result;
+      }
       result.setPayload(updatedUser.buildUser());
       return result;
     } else {
