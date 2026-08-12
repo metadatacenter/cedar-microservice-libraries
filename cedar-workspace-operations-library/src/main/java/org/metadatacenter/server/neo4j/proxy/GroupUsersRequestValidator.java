@@ -2,6 +2,7 @@ package org.metadatacenter.server.neo4j.proxy;
 
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.id.CedarGroupId;
+import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.error.CedarErrorType;
 import org.metadatacenter.server.result.BackendCallResult;
@@ -76,7 +77,10 @@ public class GroupUsersRequestValidator {
    */
   private void validateAdministratorPermission() {
     if (!neo4JUserSessionGroupService.userCanAdministerGroup(groupId)) {
-      callResult.addError(CedarErrorType.AUTHORIZATION)
+      // PERMISSION, not AUTHORIZATION: the caller is identified and simply lacks authority over this
+      // group, which is 403. AUTHORIZATION maps to 401 and would tell them to authenticate again, which
+      // cannot help. ResourcePermissionRequestValidator answers its equivalent denial the same way.
+      callResult.addError(CedarErrorType.PERMISSION)
           .errorKey(CedarErrorKey.GROUP_CAN_BY_MODIFIED_ONLY_BY_GROUP_ADMIN)
           .message("Only the administrators can update the group!")
           .parameter("groupId", groupId);
@@ -115,6 +119,16 @@ public class GroupUsersRequestValidator {
               .parameter("propertyName", "userId")
               .parameter("userId", userId)
               .message("Each user should be listed only once in the request");
+          continue;
+        }
+        // An unknown user fails the whole request. The relation queries match on id and affect nothing
+        // when the node is absent, so without this the named user was quietly dropped while the rest of
+        // the membership change went through and the caller was told it had all been applied.
+        if (!neo4JUserSessionGroupService.userExists(CedarUserId.build(userId))) {
+          callResult.addError(CedarErrorType.NOT_FOUND)
+              .errorKey(CedarErrorKey.USER_NOT_FOUND)
+              .parameter("userId", userId)
+              .message("The user can not be found by id");
           continue;
         }
         users.addUser(new CedarGroupUser(

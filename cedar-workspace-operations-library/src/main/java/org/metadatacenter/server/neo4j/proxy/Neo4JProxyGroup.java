@@ -81,24 +81,25 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
     return executeReadGetList(q, FolderServerUser.class);
   }
 
-  void addUserGroupRelation(CedarUserId userId, CedarGroupId groupId, RelationLabel relation) {
-    FolderServerGroup group = findGroupById(groupId);
-    if (group != null) {
-      FolderServerUser user = proxies.user().findUserById(userId);
-      if (user != null) {
-        addRelation(user, group, relation);
-      }
-    }
+  CypherQuery addUserGroupRelationQuery(CedarUserId userId, CedarGroupId groupId, RelationLabel relation) {
+    String cypher = AbstractCypherQueryBuilder.addRelation(NodeLabel.USER, NodeLabel.GROUP, relation);
+    CypherParameters params = AbstractCypherParamBuilder.matchFromNodeToNode(userId.getId(), groupId.getId());
+    return new CypherQueryWithParameters(cypher, params);
   }
 
-  void removeUserGroupRelation(CedarUserId userId, CedarGroupId groupId, RelationLabel relation) {
-    FolderServerGroup group = findGroupById(groupId);
-    if (group != null) {
-      FolderServerUser user = proxies.user().findUserById(userId);
-      if (user != null) {
-        removeRelation(user, group, relation);
-      }
-    }
+  CypherQuery removeUserGroupRelationQuery(CedarUserId userId, CedarGroupId groupId, RelationLabel relation) {
+    String cypher = AbstractCypherQueryBuilder.removeRelation(NodeLabel.USER, NodeLabel.GROUP, relation);
+    CypherParameters params = AbstractCypherParamBuilder.matchFromNodeToNode(userId.getId(), groupId.getId());
+    return new CypherQueryWithParameters(cypher, params);
+  }
+
+  /**
+   * Applies a whole membership change in one transaction. The caller is responsible for having
+   * established that the group and every named user exist; these queries match on id and silently
+   * affect nothing if a node is absent.
+   */
+  boolean applyUserGroupRelationChanges(List<CypherQuery> changes) {
+    return executeWriteBatch(changes, "updating group users");
   }
 
   FolderServerGroup findGroupBySpecialValue(String specialGroupName) {
@@ -106,20 +107,6 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
     CypherParameters params = CypherParamBuilderGroup.getGroupBySpecialValue(specialGroupName);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetOne(q, FolderServerGroup.class);
-  }
-
-  boolean addRelation(FolderServerUser user, FolderServerGroup group, RelationLabel relation) {
-    String cypher = AbstractCypherQueryBuilder.addRelation(NodeLabel.USER, NodeLabel.GROUP, relation);
-    CypherParameters params = AbstractCypherParamBuilder.matchFromNodeToNode(user.getId(), group.getId());
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "adding relation");
-  }
-
-  boolean removeRelation(FolderServerUser user, FolderServerGroup group, RelationLabel relation) {
-    String cypher = AbstractCypherQueryBuilder.removeRelation(NodeLabel.USER, NodeLabel.GROUP, relation);
-    CypherParameters params = AbstractCypherParamBuilder.matchFromNodeToNode(user.getId(), group.getId());
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "removing relation");
   }
 
   public List<FolderServerGroup> findGroupsOfMemberUser(CedarUserId userId) {

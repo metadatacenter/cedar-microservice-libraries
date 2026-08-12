@@ -40,7 +40,9 @@ public class CypherParamBuilderGroup extends AbstractCypherParamBuilder {
 
   public static CypherParameters getGroupByName(String groupName) {
     CypherParameters params = new CypherParameters();
-    params.put(ParameterPlaceholder.NAME, groupName);
+    // Lowercased to match the NAME_LOWER property the query looks at. A null name matches no node,
+    // which is the right answer to "is this name taken".
+    params.put(ParameterPlaceholder.NAME, groupName == null ? null : groupName.toLowerCase());
     return params;
   }
 

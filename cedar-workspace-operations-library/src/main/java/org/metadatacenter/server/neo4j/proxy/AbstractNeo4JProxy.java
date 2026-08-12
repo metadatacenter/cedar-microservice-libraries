@@ -109,6 +109,42 @@ public abstract class AbstractNeo4JProxy {
     return result;
   }
 
+  /**
+   * Runs several queries inside one write transaction, so a change that spans more than one statement
+   * either lands whole or not at all. {@link #executeWrite} opens a transaction per query and cannot
+   * give that guarantee: a failure partway through a sequence leaves the earlier statements committed.
+   */
+  protected boolean executeWriteBatch(List<CypherQuery> queries, String eventDescription) {
+    if (queries.isEmpty()) {
+      return true;
+    }
+    boolean result = false;
+    List<CypherQueryLog> queryLogs = new ArrayList<>(queries.size());
+    try (Session session = driver.session()) {
+      result = session.writeTransaction(tx -> {
+        // The driver retries a transaction on a transient failure, re-running every query in it.
+        // Clearing here keeps the logs describing the attempt that actually committed.
+        queryLogs.clear();
+        for (CypherQuery q : queries) {
+          if (q instanceof CypherQueryWithParameters qp) {
+            queryLogs.add(prepareQueryLog("writeBatch", qp));
+            tx.run(qp.getRunnableQuery(), qp.getParameterMap());
+          } else {
+            queryLogs.add(prepareQueryLog("writeBatch", q));
+            tx.run(q.getRunnableQuery());
+          }
+        }
+        return true;
+      });
+    } catch (ClientException ex) {
+      log.error("Error while " + eventDescription, ex);
+      reportQueryError(ex, queries.get(0));
+    } finally {
+      queryLogs.forEach(this::commitQueryLog);
+    }
+    return result;
+  }
+
   private CypherQueryLog prepareQueryLog(String operation, CypherQueryWithParameters qp) {
     CypherQueryLog log = new CypherQueryLog(operation,
         qp.getOriginalQuery(),

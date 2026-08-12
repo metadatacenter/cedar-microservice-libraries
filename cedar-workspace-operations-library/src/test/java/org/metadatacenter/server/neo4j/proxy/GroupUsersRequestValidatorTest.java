@@ -6,7 +6,9 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.metadatacenter.error.CedarErrorKey;
+import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.id.CedarGroupId;
+import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarGroupUser;
@@ -38,12 +40,21 @@ class GroupUsersRequestValidatorTest {
     verify(f.service, never()).userCanAdministerGroup(GROUP_ID);
   }
 
+  /**
+   * The status is asserted, not only the key. GroupsResource answers its own 403 before this check is
+   * reached, so nothing at the endpoint would notice the denial being reported as 401 — which is what
+   * it was, telling a caller who is already identified to authenticate again.
+   */
   @Test
   void unauthorizedCallerIsRejectedBeforeBodyValidation() {
     Fixture f = new Fixture();
     when(f.service.userCanAdministerGroup(GROUP_ID)).thenReturn(false);
 
-    assertError(f.validate(null), CedarErrorKey.GROUP_CAN_BY_MODIFIED_ONLY_BY_GROUP_ADMIN);
+    GroupUsersRequestValidator validator = f.validate(null);
+
+    assertError(validator, CedarErrorKey.GROUP_CAN_BY_MODIFIED_ONLY_BY_GROUP_ADMIN);
+    assertEquals(CedarResponseStatus.FORBIDDEN,
+        validator.getCallResult().getFirstError().getErrorPack().getStatus());
   }
 
   @Test
@@ -101,6 +112,20 @@ class GroupUsersRequestValidatorTest {
         entry(USER_1, true, false), entry(USER_1, false, true));
 
     assertError(f.validate(request), CedarErrorKey.UNIQUE_CONSTRAINT_COLLISION);
+  }
+
+  /**
+   * A user the graph does not hold fails the request rather than being dropped from it. The relation
+   * queries match on id and affect nothing when the node is absent, so an unvalidated request applied
+   * every change it could and reported the whole of it as done.
+   */
+  @Test
+  void unknownUserIsRejectedRatherThanSkipped() {
+    Fixture f = new Fixture();
+    when(f.service.userExists(CedarUserId.build(USER_2))).thenReturn(false);
+
+    assertError(f.validate(request(entry(USER_1, true, true), entry(USER_2, false, true))),
+        CedarErrorKey.USER_NOT_FOUND);
   }
 
   @ParameterizedTest
@@ -162,6 +187,9 @@ class GroupUsersRequestValidatorTest {
     private Fixture() {
       when(service.findGroupById(GROUP_ID)).thenReturn(mock(FolderServerGroup.class));
       when(service.userCanAdministerGroup(GROUP_ID)).thenReturn(true);
+      // Every named user exists unless a test says otherwise: validation looks each one up, and a
+      // fixture whose users were all absent would fail every case for the wrong reason.
+      when(service.userExists(any())).thenReturn(true);
     }
 
     private GroupUsersRequestValidator validate(CedarGroupUsersRequest request) {
