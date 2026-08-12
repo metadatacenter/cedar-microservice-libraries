@@ -1,6 +1,7 @@
 package org.metadatacenter.server.cache.user;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.CacheStats;
@@ -37,6 +38,23 @@ public class UserSummaryCache {
 
   private static LoadingCache<String, CedarUserSummary> userSummaryCache;
 
+  /**
+   * How long an id that could not be resolved is remembered as unresolvable.
+   * <p>
+   * Guava caches a value, never a failure, so an id the user server cannot answer for was fetched
+   * again on every single lookup, each attempt waiting out the 20-second socket timeout. That cost
+   * multiplies: a resource carries three such ids — creator, last updater, owner — and
+   * {@link ProvenanceNameUtil} walks the same three for every ancestor on its path and for every
+   * entry of a listing. One folder read with a three-deep path spent four minutes resolving names
+   * that were never going to resolve.
+   * <p>
+   * Short enough that a user server coming back, or an account being created, shows names again
+   * promptly; long enough that a single request cannot pay the timeout more than once per id.
+   */
+  private static final int UNRESOLVABLE_RETENTION_SECONDS = 60;
+
+  private static Cache<String, Boolean> unresolvableIds;
+
   private static CedarConfig cedarConfig;
   private static UserService userService;
   private static MicroserviceUrlUtil microserviceUrlUtil;
@@ -64,6 +82,14 @@ public class UserSummaryCache {
                 }
               });
     }
+    if (unresolvableIds == null) {
+      unresolvableIds =
+          CacheBuilder.newBuilder()
+              .concurrencyLevel(10)
+              .maximumSize(10000)
+              .expireAfterWrite(UNRESOLVABLE_RETENTION_SECONDS, TimeUnit.SECONDS)
+              .build();
+    }
   }
 
   /**
@@ -72,10 +98,21 @@ public class UserSummaryCache {
    */
   public void put(CedarUserSummary userSummary) {
     userSummaryCache.put(userSummary.getId(), userSummary);
+    // A summary supplied directly settles the question, so any standing record of the id being
+    // unresolvable goes with it. Left in place it would shadow this summary until it expired, since
+    // getUser consults it first.
+    if (unresolvableIds != null) {
+      unresolvableIds.invalidate(userSummary.getId());
+    }
   }
 
   public CedarUserSummary getUser(String id) {
     if (id == null) {
+      return null;
+    }
+    // Asked for again within the retention window, an id already known to be unresolvable answers
+    // straight away instead of waiting out another socket timeout.
+    if (unresolvableIds != null && unresolvableIds.getIfPresent(id) != null) {
       return null;
     }
     try {
@@ -88,12 +125,27 @@ public class UserSummaryCache {
       // exception escaped to the generic mapper and turned every read of a resource whose
       // creator/owner could not be resolved into a 500.
       log.warn("No user summary available for {}; serving without a provenance display name", id);
+      rememberUnresolvable(id);
     } catch (UncheckedExecutionException e) {
       log.error("Unchecked error retrieving the user summary for " + id, e);
+      rememberUnresolvable(id);
     } catch (ExecutionException e) {
       log.error("Error Retrieving Elements from the CedarUserSummary Cache" + e.getMessage());
+      rememberUnresolvable(id);
     }
     return null;
+  }
+
+  /**
+   * Marks an id as one the user server could not answer for, so the next lookup within
+   * {@link #UNRESOLVABLE_RETENTION_SECONDS} returns without calling it again. Every failure is
+   * recorded, whatever its cause: an unknown account and an unreachable user server are equally
+   * unresolvable for as long as they last, and neither is worth a timeout per lookup.
+   */
+  private static void rememberUnresolvable(String id) {
+    if (unresolvableIds != null) {
+      unresolvableIds.put(id, Boolean.TRUE);
+    }
   }
 
   public CacheStats getStats() {
