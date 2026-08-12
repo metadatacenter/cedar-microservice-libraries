@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 public abstract class AbstractNeo4JProxy {
 
@@ -143,6 +144,52 @@ public abstract class AbstractNeo4JProxy {
       queryLogs.forEach(this::commitQueryLog);
     }
     return result;
+  }
+
+  /**
+   * Runs caller-supplied work inside one write transaction. A read and the write that depends on it
+   * belong together whenever the change between them has to be computed in Java rather than
+   * expressed in Cypher: run as separate transactions, another writer lands in between and the
+   * second transaction writes back a value derived from a state that no longer holds.
+   * <p>
+   * The work may be retried by the driver after a transient failure, so it must be free of side
+   * effects outside the transaction.
+   */
+  protected <T> T executeInWriteTransaction(Function<Transaction, T> work, String eventDescription) {
+    try (Session session = driver.session()) {
+      return session.writeTransaction(work::apply);
+    } catch (ClientException ex) {
+      log.error("Error while " + eventDescription, ex);
+      throw new RuntimeException("Error while " + eventDescription + ": " + ex.getMessage());
+    }
+  }
+
+  /**
+   * Runs one query on an already-open transaction and returns the single resource it yields.
+   * <p>
+   * Neo4j takes a node's write lock when a statement writes it, never when one merely reads it, so a
+   * value that must still hold at write time has to be read by a writing statement. A plain MATCH
+   * placed first inside the transaction would not serialize anything.
+   */
+  protected <T extends CedarResource> T runInTransactionGetOne(Transaction tx, CypherQuery q, Class<T> type) {
+    CypherQueryLog queryLog = null;
+    try {
+      org.neo4j.driver.Record record;
+      if (q instanceof CypherQueryWithParameters qp) {
+        queryLog = prepareQueryLog("inTransaction", qp);
+        Result result = tx.run(qp.getRunnableQuery(), qp.getParameterMap());
+        record = result.hasNext() ? result.next() : null;
+      } else {
+        queryLog = prepareQueryLog("inTransaction", q);
+        Result result = tx.run(q.getRunnableQuery());
+        record = result.hasNext() ? result.next() : null;
+      }
+      return extractClassFromRecord(record, type);
+    } finally {
+      if (queryLog != null) {
+        commitQueryLog(queryLog);
+      }
+    }
   }
 
   private CypherQueryLog prepareQueryLog(String operation, CypherQueryWithParameters qp) {

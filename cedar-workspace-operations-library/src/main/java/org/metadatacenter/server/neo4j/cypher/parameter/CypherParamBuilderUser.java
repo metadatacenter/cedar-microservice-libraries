@@ -88,6 +88,40 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
     return matchResourceByIdentity(userId);
   }
 
+  public static CypherParameters touchUser(CedarUserId userId) {
+    Instant now = Instant.now();
+    CypherParameters params = new CypherParameters();
+    params.put(NodeProperty.ID, userId.getId());
+    params.put(NodeProperty.LAST_UPDATED_ON, CedarConstants.xsdDateTimeFormatter.format(now));
+    params.put(NodeProperty.LAST_UPDATED_ON_TS, now.getEpochSecond());
+    return params;
+  }
+
+  /**
+   * The API key properties as the graph holds them: the key values as a list, and the keys
+   * themselves as a JSON object keyed by value. Both are derived from the one list, so they cannot
+   * fall out of step with each other.
+   */
+  public static CypherParameters updateUserApiKeys(CedarUserId userId, List<CedarUserApiKey> apiKeys)
+      throws CedarProcessingException {
+    CypherParameters params = new CypherParameters();
+    params.put(NodeProperty.ID, userId.getId());
+
+    List<String> justKeys = new ArrayList<>();
+    Map<String, CedarUserApiKey> keyMap = new HashMap<>();
+    for (CedarUserApiKey key : apiKeys) {
+      justKeys.add(key.getKey());
+      keyMap.put(key.getKey(), key);
+    }
+    params.put(NodeProperty.API_KEYS, justKeys);
+    try {
+      params.put(NodeProperty.API_KEY_MAP, JsonMapper.MAPPER.writeValueAsString(keyMap));
+    } catch (JsonProcessingException e) {
+      throw new CedarProcessingException(e);
+    }
+    return params;
+  }
+
   public static CypherParameters getUserByApiKey(String apiKey) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.API_KEY, apiKey);

@@ -55,6 +55,34 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
         """;
   }
 
+  /**
+   * Stamps the update time and returns the user, opening a change to that user's API keys. The SET
+   * is what takes the node's write lock; a bare MATCH would return the same row and serialize
+   * nothing, leaving the keys free to move before the change is written.
+   */
+  public static String touchAndReadUser() {
+    StringBuilder sb = new StringBuilder();
+    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})");
+    sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON));
+    sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON_TS));
+    sb.append(" RETURN user");
+    return sb.toString();
+  }
+
+  /**
+   * Writes the API key properties and nothing else. {@link #updateUser()} sets every field of the
+   * node from one in-memory snapshot, so using it to change a key also wrote back the name, email,
+   * roles, permissions and UI preferences as they stood when that snapshot was read.
+   */
+  public static String updateUserApiKeys() {
+    StringBuilder sb = new StringBuilder();
+    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})");
+    sb.append(buildSetter("user", NodeProperty.API_KEYS));
+    sb.append(buildSetter("user", NodeProperty.API_KEY_MAP));
+    sb.append(" RETURN user");
+    return sb.toString();
+  }
+
   public static String getUserById() {
     return """
         MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})

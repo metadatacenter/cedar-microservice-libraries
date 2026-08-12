@@ -10,6 +10,7 @@ import org.metadatacenter.server.service.UserService;
 import org.metadatacenter.server.user.UserServiceUtil;
 import org.metadatacenter.util.json.JsonMapper;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -95,6 +96,93 @@ public class InMemoryUserService implements UserService {
           .parameter("modifications", modifications);
     }
     return result;
+  }
+
+  @Override
+  public BackendCallResult<CedarUser> addApiKey(CedarUserId userId, CedarUserApiKey newApiKey, int maxApiKeys) {
+    return changeApiKeys(userId, keys -> {
+      if (keys.size() >= maxApiKeys) {
+        return "You may have at most " + maxApiKeys + " API keys. Delete one before creating another.";
+      }
+      keys.add(newApiKey);
+      return null;
+    });
+  }
+
+  @Override
+  public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyValue, String newKeyValue,
+                                                       LocalDateTime newCreationDate) {
+    return changeApiKeys(userId, keys -> {
+      CedarUserApiKey target = find(keys, keyValue);
+      if (target == null) {
+        return API_KEY_NOT_FOUND;
+      }
+      target.setKey(newKeyValue);
+      target.setCreationDate(newCreationDate);
+      return null;
+    });
+  }
+
+  @Override
+  public BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyValue) {
+    return changeApiKeys(userId, keys -> {
+      CedarUserApiKey target = find(keys, keyValue);
+      if (target == null) {
+        return API_KEY_NOT_FOUND;
+      }
+      if (target.isEnabled()) {
+        long remainingEnabled = keys.stream().filter(k -> k != target && k.isEnabled()).count();
+        if (remainingEnabled < 1) {
+          return "You must keep at least one active API key. Regenerate this key instead of deleting it.";
+        }
+      }
+      keys.remove(target);
+      return null;
+    });
+  }
+
+  /**
+   * The map stands in for the graph, so the change is applied to the stored user rather than to a
+   * copy the caller holds — which is the property the Neo4j implementation gets from doing the read
+   * and the write in one transaction.
+   */
+  private BackendCallResult<CedarUser> changeApiKeys(CedarUserId userId, ApiKeyChange change) {
+    BackendCallResult<CedarUser> result = new BackendCallResult<>();
+    CedarUser user = users.get(userId.getId());
+    if (user == null) {
+      result.addError(CedarErrorType.NOT_FOUND)
+          .message("The user can not be found by id")
+          .parameter("id", userId.getId());
+      return result;
+    }
+    List<CedarUserApiKey> keys = new ArrayList<>(user.getApiKeys() == null ? List.of() : user.getApiKeys());
+    String refusal = change.apply(keys);
+    if (refusal != null) {
+      result.addError(API_KEY_NOT_FOUND.equals(refusal) ? CedarErrorType.NOT_FOUND : CedarErrorType.INVALID_ARGUMENT)
+          .message(refusal)
+          .parameter("id", userId.getId());
+      return result;
+    }
+    user.setApiKeys(keys);
+    result.setPayload(user);
+    return result;
+  }
+
+  private static CedarUserApiKey find(List<CedarUserApiKey> keys, String keyValue) {
+    for (CedarUserApiKey k : keys) {
+      if (k.getKey() != null && k.getKey().equals(keyValue)) {
+        return k;
+      }
+    }
+    return null;
+  }
+
+  private static final String API_KEY_NOT_FOUND = "API key not found.";
+
+  /** Applies the change to the stored key list, or returns the message explaining the refusal. */
+  @FunctionalInterface
+  private interface ApiKeyChange {
+    String apply(List<CedarUserApiKey> keys);
   }
 
   @Override
