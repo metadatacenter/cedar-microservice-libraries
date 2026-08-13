@@ -17,6 +17,7 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.InclusionSubgraphServiceSession;
 import org.metadatacenter.server.result.BackendCallResult;
+import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUser;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUserPermissionPair;
@@ -39,6 +40,10 @@ import java.util.Map;
  * <p>Running against a real Neo4j is the point. The filtering is a permission condition inside the Cypher,
  * and a string assertion on the query would not notice a clause that fails to parse, matches nothing, or
  * quietly matches everything.
+ *
+ * <p>The last case is the waiver: {@code READ_NOT_READABLE_NODE} drops the conditions rather than being
+ * applied on top of them, which is how every other conditioned listing treats it. Filtering the listing
+ * without honouring the waiver would have quietly narrowed what a filesystem administrator can see.
  */
 public class InclusionSubgraphListingPermissionIntegrationTest {
 
@@ -47,6 +52,8 @@ public class InclusionSubgraphListingPermissionIntegrationTest {
   private static CedarUser user2;
   private static CedarRequestContext user1Context;
   private static CedarRequestContext user2Context;
+  /** User 2's identity carrying the privileged-read waiver, and nothing else changed. */
+  private static CedarRequestContext privilegedContext;
   private static CedarFolderId user1HomeId;
 
   /** The included artifact every fixture below points at. Readable by both users. */
@@ -69,6 +76,7 @@ public class InclusionSubgraphListingPermissionIntegrationTest {
     user2 = TestAuthUtil.getTestUser2(cedarConfig);
     user1Context = CedarRequestContextFactory.fromUser(user1);
     user2Context = CedarRequestContextFactory.fromUser(user2);
+    privilegedContext = CedarRequestContextFactory.fromUser(withPrivilegedRead(user2));
     user1HomeId = CedarDataServices.getInstance().getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
 
     source = create(new FolderServerElement(), CedarResourceType.ELEMENT, "ISL source element");
@@ -110,7 +118,40 @@ public class InclusionSubgraphListingPermissionIntegrationTest {
         "the only including element is one user 2 has no grant on");
   }
 
+  /**
+   * A caller holding {@code READ_NOT_READABLE_NODE} sees the whole tree, as they do in every other
+   * listing that carries permission conditions.
+   *
+   * <p>The privileged reader here is user 2 with the waiver added, and that choice is what makes the
+   * assertion mean anything. The obvious fixture — the built-in admin — proves nothing: the seed has the
+   * admin create the global objects, so they own the root folder, every artifact hangs under it through
+   * CONTAINS, and the ordinary conditions already admit them to everything. Reusing user 2 puts the
+   * waiver against a graph position whose limits the test above has already pinned, so the only
+   * difference between the two results is the permission.
+   */
+  @Test
+  public void aPrivilegedReaderSeesEveryIncludingArtifact() {
+    List<String> templates = includingTemplateIdsFor(privilegedContext);
+    Assertions.assertTrue(templates.contains(sharedTemplate.getId()), templates.toString());
+    Assertions.assertTrue(templates.contains(privateTemplate.getId()),
+        "user 2 sees only the shared template without the waiver; with it they should see both: " + templates);
+    Assertions.assertEquals(List.of(privateElement.getId()), includingElementIdsFor(privilegedContext),
+        "the including element is one user 2 has no grant on, so the waiver is the only way to it");
+  }
+
   // ── fixtures and helpers ───────────────────────────────────────────────────
+
+  /**
+   * User 2's id carrying {@code READ_NOT_READABLE_NODE}. A copy rather than a mutation: the test users are
+   * cached singletons, so granting the permission on the shared instance would silently widen what user 2
+   * can see in every other test that resolves them.
+   */
+  private static CedarUser withPrivilegedRead(CedarUser user) {
+    CedarUser privileged = new CedarUser();
+    privileged.setId(user.getId());
+    privileged.setPermissions(List.of(CedarPermission.READ_NOT_READABLE_NODE.getPermissionName()));
+    return privileged;
+  }
 
   private static InclusionSubgraphServiceSession inclusionsOf(CedarRequestContext context) {
     return CedarDataServices.getInstance().getInclusionSubgraphServiceSession(context);

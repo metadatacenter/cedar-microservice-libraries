@@ -49,16 +49,16 @@ public class CypherQueryBuilderGraph extends AbstractCypherQueryBuilder {
         """.formatted(relationLabel.getValue(), relationLabel.getValue());
   }
 
-  public static String getIncludingTemplates() {
-    return getIncludingResources();
+  public static String getIncludingTemplates(boolean addPermissionConditions) {
+    return getIncludingResources(addPermissionConditions);
   }
 
-  public static String getIncludingElements() {
-    return getIncludingResources();
+  public static String getIncludingElements(boolean addPermissionConditions) {
+    return getIncludingResources(addPermissionConditions);
   }
 
   /**
-   * The artifacts of one type that include the given artifact and that the user may read.
+   * The artifacts of one type that include the given artifact, filtered to the ones the user may read.
    *
    * <p>Inclusion is a property of the artifacts, not of who may see them, so the arc alone matches every
    * including artifact in the installation. Without the permission conditions this returns other people's
@@ -69,18 +69,27 @@ public class CypherQueryBuilderGraph extends AbstractCypherQueryBuilder {
    * grant, held directly or through a group, on the artifact or on a folder containing it — so an artifact
    * appears here exactly when {@code userHasReadAccessToResource} would allow it.
    *
+   * <p>{@code addPermissionConditions} is false for a caller holding {@code READ_NOT_READABLE_NODE}, which
+   * is how every other conditioned listing treats that permission. The user is then not matched at all
+   * rather than matched and ignored, so the query never depends on a node for a caller whose access does
+   * not come from the graph.
+   *
    * <p>Templates and elements ask the same question of different node types, which the resource type
    * parameter carries. One query answers both; two identical copies would only offer somewhere for the
    * conditions to be added to one and not the other.
    */
-  private static String getIncludingResources() {
-    return """
-        MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
-        MATCH (source:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>} })
-        MATCH (including:<LABEL.FILESYSTEM_RESOURCE> {<PROP.RESOURCE_TYPE>:{<PH.RESOURCE_TYPE>}})
-        MATCH (including)-[:<REL.INCLUDES>]->(source)
-        """
-        + getResourcePermissionConditions(" WHERE ", "including")
-        + " RETURN including";
+  private static String getIncludingResources(boolean addPermissionConditions) {
+    StringBuilder sb = new StringBuilder();
+    if (addPermissionConditions) {
+      sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
+    }
+    sb.append(" MATCH (source:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>} })");
+    sb.append(" MATCH (including:<LABEL.FILESYSTEM_RESOURCE> {<PROP.RESOURCE_TYPE>:{<PH.RESOURCE_TYPE>}})");
+    sb.append(" MATCH (including)-[:<REL.INCLUDES>]->(source)");
+    if (addPermissionConditions) {
+      sb.append(getResourcePermissionConditions(" WHERE ", "including"));
+    }
+    sb.append(" RETURN including");
+    return sb.toString();
   }
 }

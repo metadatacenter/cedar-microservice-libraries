@@ -3,7 +3,6 @@ package org.metadatacenter.server.neo4j.proxy;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarResourceId;
-import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.RelationLabel;
 import org.metadatacenter.model.folderserver.FolderServerArc;
@@ -14,8 +13,11 @@ import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.cypher.parameter.*;
 import org.metadatacenter.server.neo4j.cypher.query.*;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
+import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.List;
+
+import static org.metadatacenter.server.security.model.auth.CedarPermission.READ_NOT_READABLE_NODE;
 
 public class Neo4JProxyGraph extends AbstractNeo4JProxy {
 
@@ -91,16 +93,20 @@ public class Neo4JProxyGraph extends AbstractNeo4JProxy {
     return executeWrite(q, "creating new inclusion arcs");
   }
 
-  public List<FolderServerTemplate> listIncludingTemplates(CedarResourceId sourceId, CedarUserId userId) {
-    String cypher = CypherQueryBuilderGraph.getIncludingTemplates();
-    CypherParameters params = CypherParamBuilderGraph.matchIdAndResourceTypeAndUser(sourceId, ResourceType.TEMPLATE, userId);
+  public List<FolderServerTemplate> listIncludingTemplates(CedarResourceId sourceId, CedarUser cu) {
+    boolean addPermissionConditions = !cu.has(READ_NOT_READABLE_NODE);
+    String cypher = CypherQueryBuilderGraph.getIncludingTemplates(addPermissionConditions);
+    CypherParameters params = CypherParamBuilderGraph.matchIdAndResourceTypeAndUser(sourceId, ResourceType.TEMPLATE,
+        cu.getResourceId(), addPermissionConditions);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, FolderServerTemplate.class);
   }
 
-  public List<FolderServerElement> listIncludingElements(CedarResourceId sourceId, CedarUserId userId) {
-    String cypher = CypherQueryBuilderGraph.getIncludingElements();
-    CypherParameters params = CypherParamBuilderGraph.matchIdAndResourceTypeAndUser(sourceId, ResourceType.ELEMENT, userId);
+  public List<FolderServerElement> listIncludingElements(CedarResourceId sourceId, CedarUser cu) {
+    boolean addPermissionConditions = !cu.has(READ_NOT_READABLE_NODE);
+    String cypher = CypherQueryBuilderGraph.getIncludingElements(addPermissionConditions);
+    CypherParameters params = CypherParamBuilderGraph.matchIdAndResourceTypeAndUser(sourceId, ResourceType.ELEMENT,
+        cu.getResourceId(), addPermissionConditions);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, FolderServerElement.class);
   }

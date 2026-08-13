@@ -31,9 +31,11 @@ public class CypherParamBuilderGraph extends AbstractCypherParamBuilder {
   }
 
   public static CypherParameters matchIdAndResourceTypeAndUser(CedarResourceId id, ResourceType resourceType,
-                                                               CedarUserId userId) {
+                                                               CedarUserId userId, boolean addPermissionConditions) {
     CypherParameters params = matchIdAndResourceType(id, resourceType);
-    params.put(ParameterPlaceholder.USER_ID, userId);
+    if (addPermissionConditions) {
+      params.put(ParameterPlaceholder.USER_ID, userId);
+    }
     return params;
   }
 }
