@@ -2,6 +2,7 @@ package org.metadatacenter.server.neo4j.cypher.parameter;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.id.CedarResourceId;
+import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.request.ResourceType;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
@@ -26,6 +27,13 @@ public class CypherParamBuilderGraph extends AbstractCypherParamBuilder {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.ID, id);
     params.put(ParameterPlaceholder.RESOURCE_TYPE, resourceType.getValue());
+    return params;
+  }
+
+  public static CypherParameters matchIdAndResourceTypeAndUser(CedarResourceId id, ResourceType resourceType,
+                                                               CedarUserId userId) {
+    CypherParameters params = matchIdAndResourceType(id, resourceType);
+    params.put(ParameterPlaceholder.USER_ID, userId);
     return params;
   }
 }

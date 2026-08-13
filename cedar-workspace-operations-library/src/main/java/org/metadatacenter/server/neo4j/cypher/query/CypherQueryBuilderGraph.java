@@ -50,20 +50,37 @@ public class CypherQueryBuilderGraph extends AbstractCypherQueryBuilder {
   }
 
   public static String getIncludingTemplates() {
-    return """
-        MATCH (source:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>} })
-        MATCH (including:<LABEL.FILESYSTEM_RESOURCE> {<PROP.RESOURCE_TYPE>:{<PH.RESOURCE_TYPE>}})
-        MATCH (including)-[:<REL.INCLUDES>]->(source)
-        RETURN including
-        """;
+    return getIncludingResources();
   }
 
   public static String getIncludingElements() {
+    return getIncludingResources();
+  }
+
+  /**
+   * The artifacts of one type that include the given artifact and that the user may read.
+   *
+   * <p>Inclusion is a property of the artifacts, not of who may see them, so the arc alone matches every
+   * including artifact in the installation. Without the permission conditions this returns other people's
+   * artifacts: the callers use it to build the tree of artifacts affected by a change, and that tree is
+   * both shown to the user and taken as the list of artifacts to rewrite.
+   *
+   * <p>The conditions are the same ones the rest of the graph queries apply — ownership or a read or write
+   * grant, held directly or through a group, on the artifact or on a folder containing it — so an artifact
+   * appears here exactly when {@code userHasReadAccessToResource} would allow it.
+   *
+   * <p>Templates and elements ask the same question of different node types, which the resource type
+   * parameter carries. One query answers both; two identical copies would only offer somewhere for the
+   * conditions to be added to one and not the other.
+   */
+  private static String getIncludingResources() {
     return """
+        MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
         MATCH (source:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>} })
         MATCH (including:<LABEL.FILESYSTEM_RESOURCE> {<PROP.RESOURCE_TYPE>:{<PH.RESOURCE_TYPE>}})
         MATCH (including)-[:<REL.INCLUDES>]->(source)
-        RETURN including
-        """;
+        """
+        + getResourcePermissionConditions(" WHERE ", "including")
+        + " RETURN including";
   }
 }

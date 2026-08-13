@@ -30,13 +30,16 @@ public class Neo4JUserSessionInclusionSubgraphService extends AbstractNeo4JUserS
     }
   }
 
+  // The session, not the caller, supplies the user the listing is filtered for. Taking it as an argument
+  // would let a caller ask on someone else's behalf, which is the whole of what these listings protect.
+
   @Override
   public List<FolderServerTemplate> listIncludingTemplates(CedarResourceId id) {
-    return proxies.graph().listIncludingTemplates(id);
+    return proxies.graph().listIncludingTemplates(id, cu.getResourceId());
   }
 
   @Override
   public List<FolderServerElement> listIncludingElements(CedarResourceId id) {
-    return proxies.graph().listIncludingElements(id);
+    return proxies.graph().listIncludingElements(id, cu.getResourceId());
   }
 }
