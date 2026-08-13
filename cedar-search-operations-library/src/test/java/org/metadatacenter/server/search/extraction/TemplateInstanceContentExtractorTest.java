@@ -19,6 +19,7 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.search.InfoField;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -253,7 +254,7 @@ class TemplateInstanceContentExtractorTest {
     if (blankRatherThanMissing) {
       instance.put("schema:isBasedOn", "  ");
     }
-    when(extractionUtils.getArtifactById(INSTANCE_ID, CedarResourceType.INSTANCE, requestContext)).thenReturn(instance);
+    when(extractionUtils.getArtifactById(INSTANCE_ID, CedarResourceType.INSTANCE, requestContext)).thenReturn(Optional.of(instance));
 
     CedarProcessingException error = assertThrows(CedarProcessingException.class,
         () -> generateInstanceFields(false));
@@ -318,11 +319,59 @@ class TemplateInstanceContentExtractorTest {
   void extractsValueSetsFromStandaloneField() throws Exception {
     ObjectNode standalone = field("field-1", "Field", null, false,
         "https://example.org/vs/one", "https://example.org/vs/two");
-    when(extractionUtils.getArtifactById("field-1", CedarResourceType.FIELD, requestContext)).thenReturn(standalone);
+    when(extractionUtils.getArtifactById("field-1", CedarResourceType.FIELD, requestContext)).thenReturn(Optional.of(standalone));
 
     List<String> output = extractor.generateValueSetsURIs(resource(CedarResourceType.FIELD, "field-1"), requestContext);
 
     assertEquals(List.of("https://example.org/vs/one", "https://example.org/vs/two"), output);
+  }
+
+  /**
+   * The graph and the artifact server can disagree — most often while a deletion is in flight, and
+   * the permission consumer reaches an artifact between the two deletes. The artifact's name, path
+   * and permissions all come from the graph and are still worth indexing, so a missing body must
+   * cost the content and nothing more. Failing here used to abandon the whole index write, and with
+   * it the permission update for every artifact behind this one in the same event.
+   */
+  @Test
+  void aTemplateAbsentFromTheArtifactServerIsIndexedWithoutItsContent() throws Exception {
+    when(extractionUtils.getArtifactById(TEMPLATE_ID, CedarResourceType.TEMPLATE, requestContext))
+        .thenReturn(Optional.empty());
+
+    List<InfoField> output = extractor.generateInfoFields(
+        resource(CedarResourceType.TEMPLATE, TEMPLATE_ID), requestContext, false);
+
+    assertEquals(List.of(), output);
+  }
+
+  @Test
+  void anInstanceAbsentFromTheArtifactServerIsIndexedWithoutItsContent() throws Exception {
+    when(extractionUtils.getArtifactById(INSTANCE_ID, CedarResourceType.INSTANCE, requestContext))
+        .thenReturn(Optional.empty());
+
+    assertEquals(List.of(), generateInstanceFields(false));
+  }
+
+  /** The instance survives its template. Its values cannot be named, but it stays indexed. */
+  @Test
+  void anInstanceWhoseTemplateIsAbsentIsIndexedWithoutItsContent() throws Exception {
+    ObjectNode instance = MAPPER.createObjectNode();
+    instance.put("schema:isBasedOn", TEMPLATE_ID);
+    when(extractionUtils.getArtifactById(INSTANCE_ID, CedarResourceType.INSTANCE, requestContext))
+        .thenReturn(Optional.of(instance));
+    when(extractionUtils.getArtifactById(TEMPLATE_ID, CedarResourceType.TEMPLATE, requestContext))
+        .thenReturn(Optional.empty());
+
+    assertEquals(List.of(), generateInstanceFields(false));
+  }
+
+  @Test
+  void aFieldAbsentFromTheArtifactServerContributesNoValueSets() throws Exception {
+    when(extractionUtils.getArtifactById("field-1", CedarResourceType.FIELD, requestContext))
+        .thenReturn(Optional.empty());
+
+    assertEquals(List.of(),
+        extractor.generateValueSetsURIs(resource(CedarResourceType.FIELD, "field-1"), requestContext));
   }
 
   private List<InfoField> generateInstanceFields(boolean regeneration) throws CedarProcessingException {
@@ -330,8 +379,8 @@ class TemplateInstanceContentExtractorTest {
   }
 
   private void stubArtifacts(ObjectNode template, ObjectNode instance) throws CedarProcessingException {
-    when(extractionUtils.getArtifactById(INSTANCE_ID, CedarResourceType.INSTANCE, requestContext)).thenReturn(instance);
-    when(extractionUtils.getArtifactById(TEMPLATE_ID, CedarResourceType.TEMPLATE, requestContext)).thenReturn(template);
+    when(extractionUtils.getArtifactById(INSTANCE_ID, CedarResourceType.INSTANCE, requestContext)).thenReturn(Optional.of(instance));
+    when(extractionUtils.getArtifactById(TEMPLATE_ID, CedarResourceType.TEMPLATE, requestContext)).thenReturn(Optional.of(template));
   }
 
   private static FileSystemResource resource(CedarResourceType type, String id) {

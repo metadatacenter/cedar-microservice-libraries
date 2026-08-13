@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.metadatacenter.model.ModelNodeNames.JSON_LD_ID;
 import static org.metadatacenter.model.ModelNodeNames.JSON_LD_VALUE;
@@ -42,6 +43,19 @@ public class TemplateInstanceContentExtractor {
 
   public TemplateInstanceContentExtractor(CedarConfig cedarConfig) {
     this(new ExtractionUtils(cedarConfig));
+  }
+
+  /**
+   * The artifact server does not hold this artifact, so there is no content to index for it.
+   * <p>
+   * The rest of the document — name, path, permissions, categories — comes from the graph and is
+   * still worth indexing, so the artifact is indexed without its content rather than left out of
+   * the index altogether. That matters most while a deletion is in flight, where failing instead
+   * would abandon a permission update for every artifact behind this one.
+   */
+  private List<InfoField> noContentFor(String artifactId) {
+    log.warn("The artifact is not in the artifact server, so it is indexed without its content:" + artifactId);
+    return List.of();
   }
 
   TemplateInstanceContentExtractor(ExtractionUtils extractionUtils) {
@@ -90,8 +104,14 @@ public class TemplateInstanceContentExtractor {
 
       List<String> valueSetsURIs = new ArrayList<>();
       // Retrieve the template field and parse and return URIs of value sets if present
-      JsonNode schema = extractionUtils.getArtifactById(folderServerNode.getId(), folderServerNode.getType(), requestContext);
-      List<TemplateNode> schemaNodes = templateContentExtractor.getTemplateNodes(schema, folderServerNode.getType());
+      Optional<JsonNode> schema =
+          extractionUtils.getArtifactById(folderServerNode.getId(), folderServerNode.getType(), requestContext);
+      if (schema.isEmpty()) {
+        log.warn("The field is not in the artifact server, so it contributes no value sets to the index. Field:"
+            + folderServerNode.getId());
+        return List.of();
+      }
+      List<TemplateNode> schemaNodes = templateContentExtractor.getTemplateNodes(schema.get(), folderServerNode.getType());
 
       for (TemplateNode node : schemaNodes) {
         if (node.getType().equals(CedarResourceType.FIELD)) {
@@ -122,8 +142,12 @@ public class TemplateInstanceContentExtractor {
     if (folderServerNode.getType().equals(CedarResourceType.INSTANCE)) {
 
       List<InfoField> infoFields = new ArrayList<>();
-      JsonNode templateInstance = extractionUtils.getArtifactById(folderServerNode.getId(),
+      Optional<JsonNode> instance = extractionUtils.getArtifactById(folderServerNode.getId(),
           folderServerNode.getType(), requestContext);
+      if (instance.isEmpty()) {
+        return noContentFor(folderServerNode.getId());
+      }
+      JsonNode templateInstance = instance.get();
       JsonNode templateIdNode = templateInstance.get(SCHEMA_IS_BASED_ON);
       if (templateIdNode == null || templateIdNode.isNull() || templateIdNode.asText().isBlank()) {
         throw new CedarProcessingException(SCHEMA_IS_BASED_ON + " not found for template instance: "
@@ -139,8 +163,17 @@ public class TemplateInstanceContentExtractor {
       }
       // Otherwise, retrieve the template and parse it
       else {
-        JsonNode template = extractionUtils.getArtifactById(templateId, CedarResourceType.TEMPLATE, requestContext);
-        List<TemplateNode> templateNodes = templateContentExtractor.getTemplateNodes(template, CedarResourceType.TEMPLATE);
+        Optional<JsonNode> template =
+            extractionUtils.getArtifactById(templateId, CedarResourceType.TEMPLATE, requestContext);
+        if (template.isEmpty()) {
+          // Without the template there is nothing to name the instance's values by, so the instance
+          // is indexed without its content rather than not at all
+          log.warn("The template an instance is based on is not in the artifact server, so the instance is"
+              + " indexed without its content. Instance:" + folderServerNode.getId() + " template:" + templateId);
+          return List.of();
+        }
+        List<TemplateNode> templateNodes =
+            templateContentExtractor.getTemplateNodes(template.get(), CedarResourceType.TEMPLATE);
         nodesMap = new HashMap<>();
         for (TemplateNode node : templateNodes) {
           nodesMap.put(List.copyOf(node.getPath()), node);
@@ -202,8 +235,12 @@ public class TemplateInstanceContentExtractor {
 
       List<InfoField> infoFields = new ArrayList<>();
       // Retrieve the template/element/field and parse it to extract its nodes
-      JsonNode schema = extractionUtils.getArtifactById(folderServerNode.getId(), folderServerNode.getType(), requestContext);
-      List<TemplateNode> schemaNodes = templateContentExtractor.getTemplateNodes(schema, folderServerNode.getType());
+      Optional<JsonNode> schema =
+          extractionUtils.getArtifactById(folderServerNode.getId(), folderServerNode.getType(), requestContext);
+      if (schema.isEmpty()) {
+        return noContentFor(folderServerNode.getId());
+      }
+      List<TemplateNode> schemaNodes = templateContentExtractor.getTemplateNodes(schema.get(), folderServerNode.getType());
 
       for (TemplateNode node : schemaNodes) {
         if (node.getType().equals(CedarResourceType.FIELD)) {
