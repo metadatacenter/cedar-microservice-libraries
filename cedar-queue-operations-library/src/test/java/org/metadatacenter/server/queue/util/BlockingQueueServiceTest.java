@@ -15,6 +15,7 @@ import redis.clients.jedis.Jedis;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -160,6 +161,50 @@ class BlockingQueueServiceTest {
     } finally {
       cloneQueue.close();
     }
+  }
+
+  /**
+   * A consumer pops a message before processing it, so a message it cannot handle is already off
+   * the queue when it fails. The dead-letter queue is what keeps that message rather than losing
+   * it, and it has to be a queue the consumer does not itself drain.
+   */
+  @Test
+  void aMessageThatCannotBeHandledIsKeptOnTheDeadLetterQueue() {
+    permissionQueue.initializeBlockingQueue();
+
+    assertTrue(permissionQueue.deadLetter("{\"id\":\"artifact-1\"}"), "the message should be parked");
+
+    assertEquals(1, permissionQueue.deadLetterCount(), "the dead-letter queue holds the message");
+    assertEquals(0, permissionQueue.messageCount(),
+        "parking a message must not push it back onto the queue the consumer drains");
+  }
+
+  @Test
+  void deadLetteredMessagesAccumulateInOrderSoTheyCanBeReplayed() {
+    permissionQueue.initializeBlockingQueue();
+
+    permissionQueue.deadLetter("first");
+    permissionQueue.deadLetter("second");
+
+    assertEquals(2, permissionQueue.deadLetterCount());
+    try (Jedis jedis = new Jedis("127.0.0.1", redis.port())) {
+      assertEquals(List.of("first", "second"),
+          jedis.lrange(permissionQueue.getDeadLetterQueueName(), 0, -1));
+    }
+  }
+
+  @Test
+  void theDeadLetterQueueIsNamedAfterTheQueueItServes() {
+    assertEquals(QueueTestConfig.queueName(QueueService.SEARCH_PERMISSION_QUEUE_ID) + "-dead-letter",
+        permissionQueue.getDeadLetterQueueName());
+  }
+
+  @Test
+  void thereIsNothingToParkForAnAbsentMessage() {
+    permissionQueue.initializeBlockingQueue();
+
+    assertFalse(permissionQueue.deadLetter(null));
+    assertEquals(0, permissionQueue.deadLetterCount());
   }
 
   private static SearchPermissionQueueEvent readEvent(String json) {
