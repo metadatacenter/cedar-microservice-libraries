@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.eclipse.jetty.servlets.CrossOriginFilter.*;
 
@@ -129,9 +130,19 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     DefaultServerFactory serverFactory = (DefaultServerFactory) configuration.getServerFactory();
     ((HttpConnectorFactory) serverFactory.getApplicationConnectors().get(0)).setPort(getApplicationHttpPort(configuration));
-    ((HttpConnectorFactory) serverFactory.getAdminConnectors().get(0)).setPort(getApplicationAdminPort(configuration));
+    HttpConnectorFactory adminConnector = (HttpConnectorFactory) serverFactory.getAdminConnectors().get(0);
+    adminConnector.setPort(getApplicationAdminPort(configuration));
+    // The admin connector answers /metrics and /threads to anyone who reaches it — no credentials, a
+    // few hundred kilobytes each. Dropwizard binds every interface unless told otherwise, so it was
+    // reachable from the network rather than only from the host. Loopback is enough for everything
+    // that reads it: cedar-services.sh polls 127.0.0.1, and the container health check curls localhost
+    // from inside the container.
+    adminConnector.setBindHost("127.0.0.1");
     System.setProperty("STOP.PORT", String.valueOf(getServerStopPort(configuration)));
-    System.setProperty("STOP.KEY", "Stop:" + getServerName().getName() + ":Me");
+    // A stop key anyone can derive from the service name is not a key. Nothing drives this connector —
+    // cedar-services.sh stops a service by signalling its pid — so a value that exists only in this
+    // process is enough, and leaves no shutdown that can be triggered from outside it.
+    System.setProperty("STOP.KEY", UUID.randomUUID().toString());
 
     log.info("**************************************************************");
     log.info("********** Running CEDAR microservice " + getName());
@@ -142,7 +153,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     setupEnvironment(environment);
     runApp(configuration, environment);
 
-    environment.jersey().register(CedarServerInsightReportResource.class);
+    environment.jersey().register(new CedarServerInsightReportResource(cedarConfig));
     environment.jersey().register(RequestIdGeneratorFilter.class);
     environment.jersey().register(ResponseLoggerFilter.class);
     environment.jersey().register(new InstanceContextInjectionFeature(environment.jersey().getResourceConfig()));
