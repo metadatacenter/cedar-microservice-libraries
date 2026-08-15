@@ -122,9 +122,13 @@ public final class ArtifactYamlTranscoder {
           + "read-time convenience and can not be stored. Submit the full form, or omit the id to author minimally. "
           + "See https://metadatacenter.readthedocs.io/en/latest/yaml-spec/minimal-and-full/");
     }
-    // The lenient reader tolerates an absent modelVersion and defaults it, which the minimal
-    // authoring form relies on; compact input never reaches the reader, it is rejected above
-    YamlArtifactReader reader = new YamlArtifactReader(true);
+    // Which reader the body asks for. A document naming the artifact it describes is the full form,
+    // where the identifier belongs and the ordinary reader wants the model version that comes with it.
+    // A document naming none is being authored: the lenient reader tolerates the absent model version
+    // and defaults it, which the minimal form relies on. Reading everything leniently refused an
+    // instance carrying its own id, since an instance has no model version to tell the forms apart and
+    // the lenient reader takes an identifier as the mark of a document claiming to be stored.
+    YamlArtifactReader reader = new YamlArtifactReader(yamlMap.get("id") == null);
     JsonArtifactRenderer renderer = new JsonArtifactRenderer();
     ObjectNode rendered = switch (resourceType) {
       case TEMPLATE -> renderer.renderTemplateSchemaArtifact(reader.readTemplateSchemaArtifact(yamlMap));
