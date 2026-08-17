@@ -87,41 +87,27 @@ public final class ArtifactYamlTranscoder {
   }
 
   /**
-   * The keys the system records about a stored artifact. The compact YAML form strips all of
-   * them while keeping the id; the minimal authoring form carries none of them and no id
-   * either. An id with none of these present is therefore the signature of compact input.
-   */
-  private static final List<String> SYSTEM_RECORDED_KEYS =
-      List.of("modelVersion", "version", "status", "createdOn", "createdBy", "modifiedOn", "modifiedBy");
-
-  /**
-   * Thrown when a YAML request body is the compact form, which is a lossy read-time convenience
-   * and can not be stored.
-   */
-  public static final class CompactYamlBodyException extends RuntimeException {
-    private CompactYamlBodyException(String message) {
-      super(message);
-    }
-  }
-
-  /**
    * Converts a YAML artifact serialization into the JSON Schema/JSON-LD form expected by the
    * artifact server. The YAML is parsed, read into the artifact model, and rendered as JSON.
    *
-   * The compact form is rejected: it carries the artifact's id but strips the system-recorded
-   * keys, so storing it would silently regenerate that content. The minimal authoring form -
-   * no id, the system supplies the rest - and the full form both pass through.
+   * <p>Every form passes through, including the compact one, and nothing here inspects the body to
+   * refuse it. The compact form used to be caught here by its signature — an id with none of the
+   * system-recorded keys — because storing it would silently regenerate what it strips. It no longer
+   * has that signature: compact stopped carrying the identifier, which leaves it the same document as
+   * the minimal authoring form, and no document anywhere carries the old shape.
+   *
+   * <p>Nothing is lost by dropping it. The old signature is still refused, by the reader below rather
+   * than by a guard: naming an artifact is what selects the full form, and the full form requires a
+   * model version, which that shape does not carry. A body naming none cannot update either, since an
+   * update must name the artifact it updates — so what is left is create, which is what the minimal
+   * form is for: no stored artifact to damage, and the server supplies the identifier, version, status,
+   * model version and provenance itself. Asking to write compact explicitly, with
+   * {@code ?compact=true} on a POST or PUT, is still refused by the resources.
    */
   public static String yamlToJsonString(String yamlContent, CedarResourceType resourceType) throws IOException {
     LinkedHashMap<String, Object> yamlMap =
         YAML_MAPPER.readValue(yamlContent, new TypeReference<LinkedHashMap<String, Object>>() {
         });
-    if (yamlMap.get("id") != null && SYSTEM_RECORDED_KEYS.stream().noneMatch(yamlMap::containsKey)) {
-      throw new CompactYamlBodyException("The YAML body appears to be the compact form: it carries an id but none "
-          + "of the system-recorded keys (version, status, modelVersion, provenance). The compact form is a lossy "
-          + "read-time convenience and can not be stored. Submit the full form, or omit the id to author minimally. "
-          + "See https://metadatacenter.readthedocs.io/en/latest/yaml-spec/minimal-and-full/");
-    }
     // Which reader the body asks for. A document naming the artifact it describes is the full form,
     // where the identifier belongs and the ordinary reader wants the model version that comes with it.
     // A document naming none is being authored: the lenient reader tolerates the absent model version
