@@ -1,6 +1,7 @@
 package org.metadatacenter.server.cache.user;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.base.Ticker;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
@@ -63,33 +64,66 @@ public class UserSummaryCache {
     return instance;
   }
 
+  /**
+   * Where a summary comes from when the cache does not have one. Production calls the user server over
+   * HTTP; a test supplies its own, which is the only way to reach this class without one running.
+   */
+  public interface SummaryLoader {
+    CedarUserSummary load(String id) throws Exception;
+  }
+
   public static void init(CedarConfig cedarConfig, UserService userService) {
     UserSummaryCache.cedarConfig = cedarConfig;
     UserSummaryCache.userService = userService;
     UserSummaryCache.microserviceUrlUtil = cedarConfig.getMicroserviceUrlUtil();
-    if (userSummaryCache == null) {
-      userSummaryCache =
-          CacheBuilder.newBuilder()
-              .concurrencyLevel(10)
-              .maximumSize(10000)
-              .expireAfterAccess(30, TimeUnit.MINUTES)
-              .recordStats()
-              .build(new CacheLoader<>() {
-                @Override
-                public CedarUserSummary load(String id) throws Exception {
-                  log.info("Fetching CedarUserSummary from microservice/ Cache Miss");
-                  return instance.getUserSummary(id);
-                }
-              });
+    if (userSummaryCache == null || unresolvableIds == null) {
+      build(id -> {
+        log.info("Fetching CedarUserSummary from microservice/ Cache Miss");
+        return instance.getUserSummary(id);
+      }, Ticker.systemTicker(), UNRESOLVABLE_RETENTION_SECONDS);
     }
-    if (unresolvableIds == null) {
-      unresolvableIds =
-          CacheBuilder.newBuilder()
-              .concurrencyLevel(10)
-              .maximumSize(10000)
-              .expireAfterWrite(UNRESOLVABLE_RETENTION_SECONDS, TimeUnit.SECONDS)
-              .build();
-    }
+  }
+
+  /**
+   * Rebuild both caches around a loader and a clock the caller controls.
+   *
+   * <p>The behaviour worth asserting here is what happens when a lookup fails, and how long that is
+   * remembered. Neither is reachable through {@link #init}: it takes a {@code CedarConfig}, its loader
+   * calls the user server, and it will not replace caches that already exist. What that cost is on
+   * record — a failure Guava does not cache was refetched on every lookup, each waiting out a
+   * 20-second socket timeout, until a suite that should take a minute had to be killed by hand. The
+   * fix is a few lines and the only thing guarding it is that the suite finishes, so a regression
+   * reads as a CI timeout rather than as a failure.
+   *
+   * <p>Supplying a ticker keeps the expiry assertions honest: retention is asserted by advancing a
+   * clock rather than by sleeping through it, so the test states the boundary instead of approaching
+   * it.
+   */
+  public static void buildForTesting(SummaryLoader loader, Ticker ticker, long unresolvableRetentionSeconds) {
+    build(loader, ticker, unresolvableRetentionSeconds);
+  }
+
+  private static void build(SummaryLoader loader, Ticker ticker, long unresolvableRetentionSeconds) {
+    userSummaryCache =
+        CacheBuilder.newBuilder()
+            .concurrencyLevel(10)
+            .maximumSize(10000)
+            .expireAfterAccess(30, TimeUnit.MINUTES)
+            .ticker(ticker)
+            .recordStats()
+            .build(new CacheLoader<>() {
+              @Override
+              public CedarUserSummary load(String id) throws Exception {
+                return loader.load(id);
+              }
+            });
+    unresolvableIds =
+        CacheBuilder.newBuilder()
+            .concurrencyLevel(10)
+            .maximumSize(10000)
+            .expireAfterWrite(unresolvableRetentionSeconds, TimeUnit.SECONDS)
+            .ticker(ticker)
+            .build();
   }
 
   /**
