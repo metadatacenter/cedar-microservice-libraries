@@ -92,7 +92,6 @@ public abstract class AbstractCedarConfigTest {
     env.put(CedarEnvironmentVariable.CEDAR_IMMPORT_SUBMISSION_PASSWORD.getName(), "submissionPassword");
 
     env.put(CedarEnvironmentVariable.CEDAR_SALT_API_KEY.getName(), "saltme");
-    env.put(CedarEnvironmentVariable.CEDAR_VALIDATION_ENABLED.getName(), "true");
     env.put(CedarEnvironmentVariable.CEDAR_CADSR_ONTOLOGIES_FOLDER.getName(), "/tmp/cadsr-ontologies");
     env.put(CedarEnvironmentVariable.CEDAR_TRUSTED_FOLDERS.getName(),
         "{\\\"caDSR\\\":[\\\"https://repo.metadatacenter.orgx/folders/c3a7b03c-87bb-49c4-b311-2eb1bd398c4e\\\"]}");
