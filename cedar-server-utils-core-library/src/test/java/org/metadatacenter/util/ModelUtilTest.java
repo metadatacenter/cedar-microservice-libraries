@@ -336,15 +336,15 @@ class ModelUtilTest {
   }
 
   @Test
-  void leavesNestedProvenanceInTheStoredDocumentUntouched() throws Exception {
+  void restoresNestedProvenanceFromTheStoredArtifact() throws Exception {
     JsonNode stored = schemaWithProperty("element", elementWith(NESTED_OLD, "Same"));
     JsonNode request = schemaWithProperty("element", elementWith(NESTED_NEW, "Same"));
 
     ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
 
-    assertEquals("https://users.example/impostor",
+    assertEquals("https://users.example/editor",
         request.at("/properties/element/properties/nested/oslc:modifiedBy").textValue(),
-        "the comparison ignores nested provenance; it does not rewrite it, which is the traversal's depth");
+        "request-supplied provenance is not authoritative at any schema depth");
   }
 
   @Test
@@ -369,6 +369,21 @@ class ModelUtilTest {
     JsonNode item = schema.at("/properties/field/items");
     assertEquals("generated-field-id", item.get("@id").textValue());
     assertCreationProvenance(item);
+  }
+
+  @Test
+  void assignsIdsAndCreationProvenanceToNestedChildren() throws Exception {
+    JsonNode schema = schemaWithProperty("element", "{\"type\":\"object\",\"@type\":\""
+        + CedarResourceType.AtType.ELEMENT + "\",\"properties\":{\"nested\":{\"type\":\"object\",\"@id\":null,"
+        + "\"@type\":\"" + CedarResourceType.AtType.FIELD + "\"}}}");
+
+    var minted = ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
+
+    JsonNode nested = schema.at("/properties/element/properties/nested");
+    assertEquals("generated-field-id", nested.get("@id").textValue());
+    assertCreationProvenance(nested);
+    assertTrue(minted.stream().anyMatch(id -> id.property().equals("element/nested")),
+        "the audit record identifies the nested property that was normalized");
   }
 
   @ParameterizedTest

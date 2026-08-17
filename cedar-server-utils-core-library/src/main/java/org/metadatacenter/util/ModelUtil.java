@@ -81,10 +81,7 @@ public class ModelUtil {
     return extractStringFromPointer(jsonNode, SCHEMA_IS_BASED_ON);
   }
 
-  /**
-   * Gives every direct child an identifier and provenance, for an artifact being created. Every child is
-   * new, so each receives a full creation record.
-   */
+  /** Gives every child at every depth an identifier and provenance for an artifact being created. */
   public static List<MintedChildId> ensureFieldIdsRecursively(JsonNode genericInstance, ProvenanceInfo pi,
                                                               ProvenanceUtil provenanceUtil,
                                                               LinkedDataUtil linkedDataUtil) {
@@ -92,7 +89,7 @@ public class ModelUtil {
   }
 
   /**
-   * Gives every direct child an identifier, and provenance describing what this write actually did to it.
+   * Gives every child at every depth an identifier, and provenance describing what this write actually did to it.
    * <p>
    * Three cases, distinguished by comparing each child against the same property in the stored artifact.
    * A child with no counterpart there is new and gets a full creation record. A child whose content
@@ -113,16 +110,24 @@ public class ModelUtil {
   public static List<MintedChildId> ensureFieldIdsRecursively(JsonNode genericInstance, JsonNode storedArtifact,
                                                               ProvenanceInfo pi, ProvenanceUtil provenanceUtil,
                                                               LinkedDataUtil linkedDataUtil) {
-    Map<String, JsonNode> storedChildren = childrenByName(storedArtifact);
     List<MintedChildId> minted = new ArrayList<>();
+    ensureChildIdsRecursively(genericInstance, storedArtifact, "", pi, provenanceUtil, linkedDataUtil, minted);
+    return minted;
+  }
+
+  private static void ensureChildIdsRecursively(JsonNode artifact, JsonNode storedArtifact, String parentPath,
+                                                ProvenanceInfo pi, ProvenanceUtil provenanceUtil,
+                                                LinkedDataUtil linkedDataUtil, List<MintedChildId> minted) {
+    Map<String, JsonNode> storedChildren = childrenByName(storedArtifact);
     // A malformed multi-instance child carrying no 'items' object is skipped rather than dereferenced:
     // enforceChildArtifactTypes rejects the artifact with a 400 that names the property.
-    forEachChild(genericInstance, (name, child) -> {
+    forEachChild(artifact, (name, child) -> {
+      String path = parentPath.isEmpty() ? name : parentPath + "/" + name;
       if (!hasUsableChildId(child)) {
         JsonNode replaced = child.get("@id");
         String newId = generateNewChildId(child, linkedDataUtil);
         ((ObjectNode) child).put("@id", newId);
-        minted.add(new MintedChildId(name,
+        minted.add(new MintedChildId(path,
             replaced == null || replaced.isNull() ? null : replaced.asText(), newId));
       }
       JsonNode stored = storedChildren.get(name);
@@ -134,8 +139,8 @@ public class ModelUtil {
       } else {
         provenanceUtil.copyProvenance(child, stored);
       }
+      ensureChildIdsRecursively(child, stored, path, pi, provenanceUtil, linkedDataUtil, minted);
     });
-    return minted;
   }
 
   /**
@@ -334,5 +339,4 @@ public class ModelUtil {
     return doiInRequest;
   }
 }
-
 
