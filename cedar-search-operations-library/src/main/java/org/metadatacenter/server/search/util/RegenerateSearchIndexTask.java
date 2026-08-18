@@ -137,11 +137,9 @@ public class RegenerateSearchIndexTask {
           nodeIndexingService.indexBatch(currentBatch);
         }
 
-        // Point alias to new index
-        esManagementService.addAlias(newIndexName, aliasName);
-
-        // Delete any other index previously associated to the alias
-        indexUtils.deleteOldIndices(esManagementService, aliasName, newIndexName);
+        // Make all bulk-indexed documents searchable, verify that the rebuild is complete, atomically
+        // promote it, and only then remove the old concrete indices.
+        indexUtils.verifyAndPromoteIndex(esManagementService, aliasName, newIndexName, resources.size());
       } else {
         log.info(
             "After all the checks were performed, it seems that the index does not need to be regenerated this time.");

@@ -16,16 +16,19 @@ import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract
 import org.metadatacenter.model.folderserver.extract.FolderServerTemplateExtract;
 import org.metadatacenter.model.response.FolderServerNodeListResponse;
 import org.metadatacenter.server.search.elasticsearch.service.ElasticsearchManagementService;
+import org.mockito.InOrder;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -99,6 +102,70 @@ class IndexUtilsTest {
     verify(managementService, never()).deleteIndex("cedar-search2-2025-01-01t000000");
     verify(managementService, never()).deleteIndex("cedar-rules-2025-01-01t000000");
     verify(managementService, never()).deleteIndex(".opensearch-system");
+  }
+
+  @Test
+  void verifiedIndexIsPromotedBeforeOldIndicesAreDeleted() throws Exception {
+    String alias = "cedar-search";
+    String oldIndex = "cedar-search-2026-07-30t220000";
+    String newIndex = "cedar-search-2026-07-31t220000";
+    when(managementService.countDocuments(newIndex)).thenReturn(42L);
+    when(managementService.getAllIndices()).thenReturn(List.of(oldIndex, newIndex));
+
+    indexUtils.verifyAndPromoteIndex(managementService, alias, newIndex, 42L);
+
+    InOrder order = inOrder(managementService);
+    order.verify(managementService).refreshIndex(newIndex);
+    order.verify(managementService).countDocuments(newIndex);
+    order.verify(managementService).replaceAlias(newIndex, alias);
+    order.verify(managementService).getAllIndices();
+    order.verify(managementService).deleteIndex(oldIndex);
+  }
+
+  @Test
+  void countMismatchLeavesExistingAliasAndIndicesUntouched() throws Exception {
+    String alias = "cedar-search";
+    String newIndex = "cedar-search-2026-07-31t220000";
+    when(managementService.countDocuments(newIndex)).thenReturn(41L);
+
+    CedarProcessingException error = assertThrows(CedarProcessingException.class,
+        () -> indexUtils.verifyAndPromoteIndex(managementService, alias, newIndex, 42L));
+
+    assertTrue(error.getMessage().contains("expected 42 documents but found 41"));
+    verify(managementService, never()).replaceAlias(anyString(), anyString());
+    verify(managementService, never()).getAllIndices();
+    verify(managementService, never()).deleteIndex(anyString());
+  }
+
+  @Test
+  void refreshFailureLeavesExistingAliasAndIndicesUntouched() throws Exception {
+    String alias = "cedar-search";
+    String newIndex = "cedar-search-2026-07-31t220000";
+    doThrow(new CedarProcessingException("refresh failed"))
+        .when(managementService).refreshIndex(newIndex);
+
+    assertThrows(CedarProcessingException.class,
+        () -> indexUtils.verifyAndPromoteIndex(managementService, alias, newIndex, 42L));
+
+    verify(managementService, never()).countDocuments(anyString());
+    verify(managementService, never()).replaceAlias(anyString(), anyString());
+    verify(managementService, never()).getAllIndices();
+    verify(managementService, never()).deleteIndex(anyString());
+  }
+
+  @Test
+  void aliasPromotionFailureDoesNotDeleteOldIndices() throws Exception {
+    String alias = "cedar-search";
+    String newIndex = "cedar-search-2026-07-31t220000";
+    when(managementService.countDocuments(newIndex)).thenReturn(42L);
+    when(managementService.replaceAlias(newIndex, alias))
+        .thenThrow(new CedarProcessingException("promotion failed"));
+
+    assertThrows(CedarProcessingException.class,
+        () -> indexUtils.verifyAndPromoteIndex(managementService, alias, newIndex, 42L));
+
+    verify(managementService, never()).getAllIndices();
+    verify(managementService, never()).deleteIndex(anyString());
   }
 
   @ParameterizedTest

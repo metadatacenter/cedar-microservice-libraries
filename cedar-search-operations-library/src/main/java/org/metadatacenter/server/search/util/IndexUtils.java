@@ -147,6 +147,23 @@ public class IndexUtils {
     }
   }
 
+  void verifyAndPromoteIndex(ElasticsearchManagementService esManagementService, String aliasName,
+                             String newIndexName, long expectedDocumentCount) throws CedarProcessingException {
+    log.info("Refreshing newly generated index before promotion: " + newIndexName);
+    esManagementService.refreshIndex(newIndexName);
+
+    long actualDocumentCount = esManagementService.countDocuments(newIndexName);
+    if (actualDocumentCount != expectedDocumentCount) {
+      throw new CedarProcessingException(
+          "Refusing to promote index '" + newIndexName + "': expected " + expectedDocumentCount
+              + " documents but found " + actualDocumentCount);
+    }
+    log.info("Verified " + actualDocumentCount + " documents in newly generated index: " + newIndexName);
+
+    esManagementService.replaceAlias(newIndexName, aliasName);
+    deleteOldIndices(esManagementService, aliasName, newIndexName);
+  }
+
   public void ensureIndexAndAliasExist(ElasticsearchManagementService esManagementService, String aliasName)
       throws CedarProcessingException {
     int cedarIndexCount = 0;
