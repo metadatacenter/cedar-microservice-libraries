@@ -6,14 +6,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.metadatacenter.artifacts.model.core.Artifact;
+import org.metadatacenter.artifacts.model.core.TemplateInstanceArtifact;
+import org.metadatacenter.artifacts.model.core.TemplateSchemaArtifact;
 import org.metadatacenter.artifacts.model.reader.JsonArtifactReader;
 import org.metadatacenter.artifacts.model.reader.YamlArtifactReader;
 import org.metadatacenter.artifacts.model.renderer.JsonArtifactRenderer;
+import org.metadatacenter.artifacts.model.tools.InstanceInflater;
 import org.metadatacenter.artifacts.model.tools.YamlSerializer;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.util.json.JsonMapper;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,7 +42,20 @@ public final class ArtifactYamlTranscoder {
 
   private static final List<MediaType> YAML_TYPES = List.of(APPLICATION_X_YAML_TYPE, APPLICATION_YAML_TYPE);
 
+  /**
+   * Supplies the stored template an instance is based on, so a YAML instance can be completed
+   * against it. The two servers reach a template differently — the artifact server reads its own
+   * store, the resource server asks the artifact server — so each passes its own.
+   */
+  @FunctionalInterface
+  public interface TemplateResolver {
+    /** The template's JSON, or null when this server holds no template under that IRI. */
+    JsonNode templateFor(String templateIri) throws IOException;
+  }
+
   private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
+
+  private static final Logger log = LoggerFactory.getLogger(ArtifactYamlTranscoder.class);
 
   private ArtifactYamlTranscoder() {
   }
@@ -105,6 +125,28 @@ public final class ArtifactYamlTranscoder {
    * {@code ?compact=true} on a POST or PUT, is still refused by the resources.
    */
   public static String yamlToJsonString(String yamlContent, CedarResourceType resourceType) throws IOException {
+    return yamlToJsonString(yamlContent, resourceType, null);
+  }
+
+  /**
+   * As above, completing an instance against the template {@code templateResolver} supplies.
+   *
+   * <p>A YAML instance carries only the fields that hold a value: the serialization has no way to
+   * write an empty one, refusing an empty mapping and a null alike, and the model regards an
+   * instance that omits them as whole. The JSON it becomes here may not — a template's schema marks
+   * every one of its properties required — so the missing slots are materialized on the way through.
+   * The requirement is met where it arises, at the boundary that produces the JSON, rather than by
+   * asking every YAML author to write something their serialization cannot express.
+   *
+   * <p>Only a YAML body passes through here, so a JSON client is unaffected: a JSON instance is
+   * stored as it was sent, and a field it omits is still refused. The two cases are the same
+   * document and can only be told apart by the serialization it arrived in — omission means "empty"
+   * in YAML and "gone" in JSON.
+   *
+   * <p>A null resolver skips the completion, which is what every non-instance kind passes.
+   */
+  public static String yamlToJsonString(String yamlContent, CedarResourceType resourceType,
+                                        TemplateResolver templateResolver) throws IOException {
     LinkedHashMap<String, Object> yamlMap =
         YAML_MAPPER.readValue(yamlContent, new TypeReference<LinkedHashMap<String, Object>>() {
         });
@@ -120,10 +162,66 @@ public final class ArtifactYamlTranscoder {
       case TEMPLATE -> renderer.renderTemplateSchemaArtifact(reader.readTemplateSchemaArtifact(yamlMap));
       case ELEMENT -> renderer.renderElementSchemaArtifact(reader.readElementSchemaArtifact(yamlMap));
       case FIELD -> renderer.renderFieldSchemaArtifact(reader.readFieldSchemaArtifact(yamlMap));
-      case INSTANCE -> renderer.renderTemplateInstanceArtifact(reader.readTemplateInstanceArtifact(yamlMap));
+      case INSTANCE -> renderer.renderTemplateInstanceArtifact(
+          completed(reader.readTemplateInstanceArtifact(yamlMap), templateResolver));
       default -> throw new IllegalArgumentException("YAML is not supported for resource type: " + resourceType);
     };
     return JsonMapper.MAPPER.writeValueAsString(rendered);
+  }
+
+  private static TemplateInstanceArtifact completed(TemplateInstanceArtifact instance,
+                                                    TemplateResolver templateResolver) throws IOException {
+    if (templateResolver == null) {
+      return instance;
+    }
+    String templateIri = instance.isBasedOn().toString();
+    JsonNode template = templateResolver.templateFor(templateIri);
+    if (template == null) {
+      throw new IllegalArgumentException(
+          "the template this instance says it isBasedOn can not be found: " + templateIri);
+    }
+    TemplateSchemaArtifact schema = new JsonArtifactReader().readTemplateSchemaArtifact((ObjectNode) template);
+    return InstanceInflater.inflate(schema, instance);
+  }
+
+  /**
+   * Applies the negotiated response type to a response a resource built as JSON. When the client
+   * asked for YAML and the entity is the artifact's JSON, the entity is re-rendered as YAML.
+   * Everything else keeps the JSON it was built as, and says so.
+   *
+   * <p>Saying so is the point. What is left unrendered is not an artifact — an error, or the folder
+   * record a write answers with — and neither has a YAML form. A response that names no media type
+   * is written in the one the Accept header negotiated, so leaving it unnamed asked Jersey for YAML
+   * it has no writer for, and a successful write came back 500.
+   *
+   * @param jsonResponse the response as the resource built it, entity and status included
+   * @param resourceType the artifact kind, for reading the entity into the model
+   * @param responseType the negotiated type, from {@link #negotiateResponseType}; empty means the
+   *                     client asked for nothing this server can produce, and the response is left
+   *                     to the caller to refuse
+   */
+  public static Response negotiatedArtifactResponse(Response jsonResponse, CedarResourceType resourceType,
+                                                    Optional<MediaType> responseType) {
+    if (responseType.isEmpty() || isJson(responseType.get())) {
+      return jsonResponse;
+    }
+    if (Response.Status.Family.familyOf(jsonResponse.getStatus()) != Response.Status.Family.SUCCESSFUL
+        || !(jsonResponse.getEntity() instanceof JsonNode artifactNode)) {
+      return asJson(jsonResponse);
+    }
+    try {
+      return Response.fromResponse(jsonResponse)
+          .entity(jsonToYaml(artifactNode, resourceType, false))
+          .type(responseType.get())
+          .build();
+    } catch (Exception e) {
+      log.warn("The artifact could not be rendered as YAML; returning the JSON response", e);
+      return asJson(jsonResponse);
+    }
+  }
+
+  private static Response asJson(Response response) {
+    return Response.fromResponse(response).type(MediaType.APPLICATION_JSON_TYPE).build();
   }
 
   /**
