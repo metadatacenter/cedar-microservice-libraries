@@ -36,16 +36,20 @@ import org.slf4j.LoggerFactory;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterRegistration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.eclipse.jetty.servlets.CrossOriginFilter.*;
 
 public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceConfiguration> extends Application<T> {
 
   private static final Logger log = LoggerFactory.getLogger(CedarMicroserviceApplication.class);
+  static final String CORS_ALLOWED_ORIGINS_ENV = "CEDAR_CORS_ALLOWED_ORIGINS";
+  static final String DEFAULT_CORS_ALLOWED_ORIGINS = "*";
   private static final List<String> HTTP_HEADERS;
   private static final List<String> HTTP_METHODS;
 
@@ -205,7 +209,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     final FilterRegistration.Dynamic cors = environment.servlets().addFilter("CORS", CrossOriginFilter.class);
 
     // Configure CORS parameters
-    String httpOrigins = "*";
+    String httpOrigins = resolveCorsAllowedOrigins(System.getenv());
     String httpHeaders = String.join(",", HTTP_HEADERS);
     String httpMethods = String.join(",", HTTP_METHODS);
     log.info("Setting up CORS...");
@@ -217,6 +221,18 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     cors.setInitParameter(ALLOWED_METHODS_PARAM, httpMethods);
     // Add URL mapping
     cors.addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), true, "/*");
+  }
+
+  static String resolveCorsAllowedOrigins(Map<String, String> environment) {
+    String configuredOrigins = environment.get(CORS_ALLOWED_ORIGINS_ENV);
+    if (configuredOrigins == null || configuredOrigins.isBlank()) {
+      return DEFAULT_CORS_ALLOWED_ORIGINS;
+    }
+    String normalizedOrigins = Arrays.stream(configuredOrigins.split(","))
+        .map(String::trim)
+        .filter(origin -> !origin.isEmpty())
+        .collect(Collectors.joining(","));
+    return normalizedOrigins.isEmpty() ? DEFAULT_CORS_ALLOWED_ORIGINS : normalizedOrigins;
   }
 
   protected abstract void initializeApp();
