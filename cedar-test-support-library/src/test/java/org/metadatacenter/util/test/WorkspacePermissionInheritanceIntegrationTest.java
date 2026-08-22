@@ -58,15 +58,15 @@ public class WorkspacePermissionInheritanceIntegrationTest {
     user1Context = CedarRequestContextFactory.fromUser(user1);
     user2Context = CedarRequestContextFactory.fromUser(user2);
 
-    user1HomeId = CedarDataServices.getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
+    user1HomeId = CedarDataServices.getInstance().getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
   }
 
   private static FolderServiceSession foldersOf(CedarRequestContext context) {
-    return CedarDataServices.getFolderServiceSession(context);
+    return CedarDataServices.getInstance().getFolderServiceSession(context);
   }
 
   private static ResourcePermissionServiceSession permissionsOf(CedarRequestContext context) {
-    return CedarDataServices.getResourcePermissionServiceSession(context);
+    return CedarDataServices.getInstance().getResourcePermissionServiceSession(context);
   }
 
   private static FolderServerFolder createFolderUnder(CedarFolderId parentId, String name) {

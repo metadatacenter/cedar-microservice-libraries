@@ -66,7 +66,7 @@ public class GroupSharingRevocationIntegrationTest {
     user2 = TestAuthUtil.getTestUser2(cedarConfig);
     user1Context = CedarRequestContextFactory.fromUser(user1);
     user2Context = CedarRequestContextFactory.fromUser(user2);
-    user1HomeId = CedarDataServices.getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
+    user1HomeId = CedarDataServices.getInstance().getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
   }
 
   /**
@@ -108,7 +108,7 @@ public class GroupSharingRevocationIntegrationTest {
     Assertions.assertTrue(user2Permissions().userHasWriteAccessToResource(folder.getResourceId()),
         "a member of a group holding WRITE should have write access");
 
-    boolean deleted = CedarDataServices.getGroupServiceSession(user1Context)
+    boolean deleted = CedarDataServices.getInstance().getGroupServiceSession(user1Context)
         .deleteGroupById(group.getResourceId());
     Assertions.assertTrue(deleted, "the owner should be able to delete their own group");
 
@@ -117,7 +117,7 @@ public class GroupSharingRevocationIntegrationTest {
 
     // The folder itself must survive, still owned by user 1: deleting a group someone shared a folder
     // with must not take the folder with it.
-    FolderServerFolder after = CedarDataServices.getFolderServiceSession(user1Context)
+    FolderServerFolder after = CedarDataServices.getInstance().getFolderServiceSession(user1Context)
         .findFolderById(folder.getResourceId());
     Assertions.assertNotNull(after, "deleting the group must not delete the folder shared with it");
     Assertions.assertTrue(user1Permissions().userIsOwnerOfResource(folder.getResourceId()),
@@ -133,14 +133,14 @@ public class GroupSharingRevocationIntegrationTest {
     newFolder.setName(name);
     newFolder.setDescription("Created by GroupSharingRevocationIntegrationTest");
     CedarFolderId newFolderId = cedarConfig.getLinkedDataUtil().buildNewLinkedDataIdObject(CedarFolderId.class);
-    FolderServerFolder created = CedarDataServices.getFolderServiceSession(user1Context)
+    FolderServerFolder created = CedarDataServices.getInstance().getFolderServiceSession(user1Context)
         .createFolderAsChildOfId(newFolder, user1HomeId, newFolderId);
     Assertions.assertNotNull(created, "the fixture folder should be created");
     return created;
   }
 
   private static FolderServerGroup group(String name) {
-    FolderServerGroup created = CedarDataServices.getGroupServiceSession(user1Context)
+    FolderServerGroup created = CedarDataServices.getInstance().getGroupServiceSession(user1Context)
         .createGroup(name, "Created by GroupSharingRevocationIntegrationTest");
     Assertions.assertNotNull(created, "the fixture group should be created");
     return created;
@@ -156,7 +156,7 @@ public class GroupSharingRevocationIntegrationTest {
     if (includeUser2) {
       request.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user2.getId()), false, true));
     }
-    GroupServiceSession groups = CedarDataServices.getGroupServiceSession(user1Context);
+    GroupServiceSession groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
     BackendCallResult result = groups.updateGroupUsers(group.getResourceId(), request);
     Assertions.assertFalse(result.isError(), "the membership update should succeed");
   }
@@ -168,17 +168,17 @@ public class GroupSharingRevocationIntegrationTest {
     request.setOwner(new ResourcePermissionUser(user1.getId()));
     request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
         new ResourcePermissionGroup(group.getId()), permission));
-    BackendCallResult result = CedarDataServices.getResourcePermissionServiceSession(user1Context)
+    BackendCallResult result = CedarDataServices.getInstance().getResourcePermissionServiceSession(user1Context)
         .updateResourcePermissions(folder.getResourceId(), request);
     Assertions.assertFalse(result.isError(), "the group grant should succeed");
   }
 
   private static ResourcePermissionServiceSession user1Permissions() {
-    return CedarDataServices.getResourcePermissionServiceSession(user1Context);
+    return CedarDataServices.getInstance().getResourcePermissionServiceSession(user1Context);
   }
 
   private static ResourcePermissionServiceSession user2Permissions() {
-    return CedarDataServices.getResourcePermissionServiceSession(user2Context);
+    return CedarDataServices.getInstance().getResourcePermissionServiceSession(user2Context);
   }
 
 }

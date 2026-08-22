@@ -10,8 +10,12 @@ import org.metadatacenter.util.json.JsonMapper;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;
 import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
+import org.opensearch.action.admin.indices.refresh.RefreshRequest;
+import org.opensearch.action.admin.indices.refresh.RefreshResponse;
 import org.opensearch.action.support.master.AcknowledgedResponse;
 import org.opensearch.client.*;
+import org.opensearch.client.core.CountRequest;
+import org.opensearch.client.core.CountResponse;
 import org.opensearch.client.indices.CreateIndexRequest;
 import org.opensearch.client.indices.CreateIndexResponse;
 import org.opensearch.client.indices.GetIndexRequest;
@@ -161,6 +165,63 @@ public class ElasticsearchManagementService {
       }
     } catch (IOException e) {
       throw new CedarProcessingException("Error adding alias '" + aliasName + "' to index '" + indexName + "'", e);
+    }
+  }
+
+  /**
+   * Atomically moves an alias to a single concrete index. The remove and add actions are submitted
+   * together so clients never observe an intermediate cluster state without the alias.
+   */
+  public boolean replaceAlias(String indexName, String aliasName) throws CedarProcessingException {
+    IndicesAliasesRequest request = new IndicesAliasesRequest();
+    request.addAliasAction(IndicesAliasesRequest.AliasActions.remove()
+        .indices("*")
+        .alias(aliasName)
+        .mustExist(false));
+    request.addAliasAction(IndicesAliasesRequest.AliasActions.add()
+        .index(indexName)
+        .alias(aliasName));
+
+    try {
+      AcknowledgedResponse response = getClient().indices().updateAliases(request, RequestOptions.DEFAULT);
+      if (!response.isAcknowledged()) {
+        throw new CedarProcessingException(
+            "Failed to replace alias '" + aliasName + "' with index '" + indexName + "'");
+      }
+      log.info("The alias '" + aliasName + "' now points to index '" + indexName + "'");
+      return true;
+    } catch (IOException e) {
+      throw new CedarProcessingException(
+          "Error replacing alias '" + aliasName + "' with index '" + indexName + "'", e);
+    }
+  }
+
+  public void refreshIndex(String indexName) throws CedarProcessingException {
+    try {
+      RefreshResponse response = getClient().indices()
+          .refresh(new RefreshRequest(indexName), RequestOptions.DEFAULT);
+      if (response.getFailedShards() > 0) {
+        throw new CedarProcessingException(
+            "Failed to refresh all shards for index '" + indexName + "': "
+                + response.getFailedShards() + " shard(s) failed");
+      }
+      log.info("The index '" + indexName + "' has been refreshed");
+    } catch (IOException e) {
+      throw new CedarProcessingException("Error refreshing index '" + indexName + "'", e);
+    }
+  }
+
+  public long countDocuments(String indexName) throws CedarProcessingException {
+    try {
+      CountResponse response = getClient().count(new CountRequest(indexName), RequestOptions.DEFAULT);
+      if (response.getFailedShards() > 0) {
+        throw new CedarProcessingException(
+            "Failed to count all shards for index '" + indexName + "': "
+                + response.getFailedShards() + " shard(s) failed");
+      }
+      return response.getCount();
+    } catch (IOException e) {
+      throw new CedarProcessingException("Error counting documents in index '" + indexName + "'", e);
     }
   }
 

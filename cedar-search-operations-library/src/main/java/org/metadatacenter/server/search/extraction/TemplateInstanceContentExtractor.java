@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.metadatacenter.model.ModelNodeNames.JSON_LD_ID;
 import static org.metadatacenter.model.ModelNodeNames.JSON_LD_VALUE;
@@ -38,10 +39,27 @@ public class TemplateInstanceContentExtractor {
   /**
    * Cache of template nodes, which is used to avoid retrieving and parsing the same template multiple times.
    */
-  private HashMap<String, HashMap<String, TemplateNode>> templateNodesCache;
+  private Map<String, Map<List<String>, TemplateNode>> templateNodesCache;
 
   public TemplateInstanceContentExtractor(CedarConfig cedarConfig) {
-    this.extractionUtils = new ExtractionUtils(cedarConfig);
+    this(new ExtractionUtils(cedarConfig));
+  }
+
+  /**
+   * The artifact server does not hold this artifact, so there is no content to index for it.
+   * <p>
+   * The rest of the document — name, path, permissions, categories — comes from the graph and is
+   * still worth indexing, so the artifact is indexed without its content rather than left out of
+   * the index altogether. That matters most while a deletion is in flight, where failing instead
+   * would abandon a permission update for every artifact behind this one.
+   */
+  private List<InfoField> noContentFor(String artifactId) {
+    log.warn("The artifact is not in the artifact server, so it is indexed without its content:" + artifactId);
+    return List.of();
+  }
+
+  TemplateInstanceContentExtractor(ExtractionUtils extractionUtils) {
+    this.extractionUtils = extractionUtils;
     this.templateContentExtractor = new TemplateContentExtractor();
     this.templateNodesCache = new HashMap<>();
   }
@@ -86,8 +104,14 @@ public class TemplateInstanceContentExtractor {
 
       List<String> valueSetsURIs = new ArrayList<>();
       // Retrieve the template field and parse and return URIs of value sets if present
-      JsonNode schema = extractionUtils.getArtifactById(folderServerNode.getId(), folderServerNode.getType(), requestContext);
-      List<TemplateNode> schemaNodes = templateContentExtractor.getTemplateNodes(schema, folderServerNode.getType());
+      Optional<JsonNode> schema =
+          extractionUtils.getArtifactById(folderServerNode.getId(), folderServerNode.getType(), requestContext);
+      if (schema.isEmpty()) {
+        log.warn("The field is not in the artifact server, so it contributes no value sets to the index. Field:"
+            + folderServerNode.getId());
+        return List.of();
+      }
+      List<TemplateNode> schemaNodes = templateContentExtractor.getTemplateNodes(schema.get(), folderServerNode.getType());
 
       for (TemplateNode node : schemaNodes) {
         if (node.getType().equals(CedarResourceType.FIELD)) {
@@ -118,11 +142,20 @@ public class TemplateInstanceContentExtractor {
     if (folderServerNode.getType().equals(CedarResourceType.INSTANCE)) {
 
       List<InfoField> infoFields = new ArrayList<>();
-      JsonNode templateInstance = extractionUtils.getArtifactById(folderServerNode.getId(),
+      Optional<JsonNode> instance = extractionUtils.getArtifactById(folderServerNode.getId(),
           folderServerNode.getType(), requestContext);
-      String templateId = templateInstance.get(SCHEMA_IS_BASED_ON).asText();
+      if (instance.isEmpty()) {
+        return noContentFor(folderServerNode.getId());
+      }
+      JsonNode templateInstance = instance.get();
+      JsonNode templateIdNode = templateInstance.get(SCHEMA_IS_BASED_ON);
+      if (templateIdNode == null || templateIdNode.isNull() || templateIdNode.asText().isBlank()) {
+        throw new CedarProcessingException(SCHEMA_IS_BASED_ON + " not found for template instance: "
+            + folderServerNode.getId());
+      }
+      String templateId = templateIdNode.asText();
 
-      HashMap<String, TemplateNode> nodesMap = null;
+      Map<List<String>, TemplateNode> nodesMap;
       // If it's an index regeneration task the cache will be needed to avoid retrieving and parsing the same
       // template multiple times (once per template instance). If the cache contains the template nodes, return them
       if (isIndexRegenerationTask && templateNodesCache.containsKey(templateId)) {
@@ -130,11 +163,20 @@ public class TemplateInstanceContentExtractor {
       }
       // Otherwise, retrieve the template and parse it
       else {
-        JsonNode template = extractionUtils.getArtifactById(templateId, CedarResourceType.TEMPLATE, requestContext);
-        List<TemplateNode> templateNodes = templateContentExtractor.getTemplateNodes(template, CedarResourceType.TEMPLATE);
+        Optional<JsonNode> template =
+            extractionUtils.getArtifactById(templateId, CedarResourceType.TEMPLATE, requestContext);
+        if (template.isEmpty()) {
+          // Without the template there is nothing to name the instance's values by, so the instance
+          // is indexed without its content rather than not at all
+          log.warn("The template an instance is based on is not in the artifact server, so the instance is"
+              + " indexed without its content. Instance:" + folderServerNode.getId() + " template:" + templateId);
+          return List.of();
+        }
+        List<TemplateNode> templateNodes =
+            templateContentExtractor.getTemplateNodes(template.get(), CedarResourceType.TEMPLATE);
         nodesMap = new HashMap<>();
         for (TemplateNode node : templateNodes) {
-          nodesMap.put(node.generatePathDotNotation(), node);
+          nodesMap.put(List.copyOf(node.getPath()), node);
         }
         if (isIndexRegenerationTask) {
           templateNodesCache.put(templateId, nodesMap);
@@ -146,8 +188,8 @@ public class TemplateInstanceContentExtractor {
       for (FieldValue fieldValue : fieldValues) {
         String fieldName = null;
         String fieldPrefLabel = null;
-        if (nodesMap.containsKey(fieldValue.generatePathDotNotation())) {
-          TemplateNode templateNode = nodesMap.get(fieldValue.generatePathDotNotation());
+        if (nodesMap.containsKey(fieldValue.getFieldPath())) {
+          TemplateNode templateNode = nodesMap.get(fieldValue.getFieldPath());
           fieldName = templateNode.getName();
           fieldPrefLabel = templateNode.getPrefLabel();
         } else {
@@ -193,8 +235,12 @@ public class TemplateInstanceContentExtractor {
 
       List<InfoField> infoFields = new ArrayList<>();
       // Retrieve the template/element/field and parse it to extract its nodes
-      JsonNode schema = extractionUtils.getArtifactById(folderServerNode.getId(), folderServerNode.getType(), requestContext);
-      List<TemplateNode> schemaNodes = templateContentExtractor.getTemplateNodes(schema, folderServerNode.getType());
+      Optional<JsonNode> schema =
+          extractionUtils.getArtifactById(folderServerNode.getId(), folderServerNode.getType(), requestContext);
+      if (schema.isEmpty()) {
+        return noContentFor(folderServerNode.getId());
+      }
+      List<TemplateNode> schemaNodes = templateContentExtractor.getTemplateNodes(schema.get(), folderServerNode.getType());
 
       for (TemplateNode node : schemaNodes) {
         if (node.getType().equals(CedarResourceType.FIELD)) {
@@ -222,7 +268,7 @@ public class TemplateInstanceContentExtractor {
    * @return
    * @throws CedarProcessingException
    */
-  private List<FieldValue> getFieldValues(JsonNode currentNode, HashMap<String, TemplateNode> templateNodesMap,
+  private List<FieldValue> getFieldValues(JsonNode currentNode, Map<List<String>, TemplateNode> templateNodesMap,
                                           List<String> currentPath, List<FieldValue> results) throws CedarProcessingException {
 
     if (currentPath == null) {
@@ -237,43 +283,33 @@ public class TemplateInstanceContentExtractor {
       Map.Entry<String, JsonNode> currentNodeMap = jsonNodesIterator.next();
       List<String> tmpPath = new ArrayList<>(currentPath);
       tmpPath.add(currentNodeMap.getKey());
-      String tmpPathDotNotation = getPathDotNotation(tmpPath);
       TemplateNode templateNode = null;
-      if (templateNodesMap.containsKey(tmpPathDotNotation)) {
-        templateNode = templateNodesMap.get(tmpPathDotNotation);
-        // Not an array
-        if (!templateNode.isArray()) {
-          // Template Element
-          if (templateNode.isTemplateElementNode()) {
-            getFieldValues(currentNodeMap.getValue(), templateNodesMap, tmpPath, results);
-          }
-          // Template Field
-          else if (templateNode.isTemplateFieldNode()) {
-            // Extract value and save it to the results
-            results.add(generateFieldValue(currentNodeMap.getValue(), tmpPath));
-          } else {
-            throw new CedarProcessingException("Unrecognized node type. The template node must be either a " +
-                "Template Field or a Template Element. Node type: " + templateNode.getName());
-          }
-        }
-        // Array
-        else {
-          // Array of template elements
-          if (templateNode.isTemplateElementNode()) {
-            for (JsonNode node : currentNodeMap.getValue()) {
-              getFieldValues(node, templateNodesMap, tmpPath, results);
+      if (templateNodesMap.containsKey(tmpPath)) {
+        templateNode = templateNodesMap.get(tmpPath);
+        JsonNode storedValue = currentNodeMap.getValue();
+        // Stored instance shape is authoritative here. It may legitimately differ from the current template after
+        // a field or element changes between single and repeated cardinality.
+        if (templateNode.isTemplateElementNode()) {
+          if (storedValue.isArray()) {
+            for (JsonNode node : storedValue) {
+              if (node.isObject()) {
+                getFieldValues(node, templateNodesMap, tmpPath, results);
+              }
             }
+          } else if (storedValue.isObject()) {
+            getFieldValues(storedValue, templateNodesMap, tmpPath, results);
           }
-          // Array of template fields
-          else if (templateNode.isTemplateFieldNode()) {
-            for (JsonNode node : currentNodeMap.getValue()) {
-              // Extract value and save it to the results
-              results.add(generateFieldValue(node, tmpPath));
+        } else if (templateNode.isTemplateFieldNode()) {
+          if (storedValue.isArray()) {
+            for (JsonNode node : storedValue) {
+              addFieldValueIfPresent(node, tmpPath, results);
             }
           } else {
-            throw new CedarProcessingException("Unrecognized node type. The template node must be either a " +
-                "Template Field or a Template Element. Node type: " + templateNode.getName());
+            addFieldValueIfPresent(storedValue, tmpPath, results);
           }
+        } else {
+          throw new CedarProcessingException("Unrecognized node type. The template node must be either a " +
+              "Template Field or a Template Element. Node type: " + templateNode.getName());
         }
       } else {
         // Node not found in the map of template nodes. It is not a relevant node (e.g. @context) so we ignore it.
@@ -282,8 +318,14 @@ public class TemplateInstanceContentExtractor {
     return results;
   }
 
-  private String getPathDotNotation(List<String> path) {
-    return String.join(".", path);
+  private void addFieldValueIfPresent(JsonNode storedValue, List<String> fieldPath, List<FieldValue> results) {
+    if (!storedValue.isObject()) {
+      return;
+    }
+    FieldValue fieldValue = generateFieldValue(storedValue, fieldPath);
+    if (fieldValue.getFieldValue() != null || fieldValue.getFieldValueUri() != null) {
+      results.add(fieldValue);
+    }
   }
 
   private FieldValue generateFieldValue(JsonNode fieldNode, List<String> fieldPath) {

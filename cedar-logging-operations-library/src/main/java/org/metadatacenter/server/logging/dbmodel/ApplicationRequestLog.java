@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jakarta.persistence.*;
+import org.hibernate.Length;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -98,7 +99,11 @@ public class ApplicationRequestLog {
   @Column(length = 350)
   private String queryParameters;
 
+  // Hibernate 6 sizes a @Lob String from its column length, and the default 255 makes MySQL
+  // pick tinytext - which silently truncated every entry longer than that. Hibernate 5 gave
+  // longtext regardless. LONG32 restores it. Existing databases keep the columns they have.
   @Lob
+  @Column(length = Length.LONG32)
   private String errorPack;
 
   public static ApplicationRequestLog fromAppRequestFilter(AppLogMessage appLog) {

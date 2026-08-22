@@ -19,6 +19,7 @@ public class PagedSortedQuery extends PagedQuery {
 
   public PagedSortedQuery(PaginationConfig config) {
     super(config);
+    sortInput = Optional.empty();
     sortList = new ArrayList<>();
   }
 
@@ -77,6 +78,7 @@ public class PagedSortedQuery extends PagedQuery {
       if (!QuerySortOptions.isKnownField(test)) {
         throw new CedarAssertionException("You passed an illegal sort type:'" + s + "'. The allowed values are:" +
             QuerySortOptions.getKnownFieldNames())
+            .badRequest()
             .parameter("sort", s)
             .parameter("allowedSort", QuerySortOptions.getKnownFieldNames());
       }

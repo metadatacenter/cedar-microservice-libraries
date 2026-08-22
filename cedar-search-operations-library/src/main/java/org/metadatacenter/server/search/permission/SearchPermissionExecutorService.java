@@ -7,7 +7,6 @@ import org.metadatacenter.id.*;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.Upsert;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
-import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.CategoryServiceSession;
@@ -39,16 +38,16 @@ public class SearchPermissionExecutorService {
 
   public SearchPermissionExecutorService(CedarConfig cedarConfig, IndexUtils indexUtils, NodeSearchingService nodeSearchingService,
                                          NodeIndexingService nodeIndexingService) {
-    UserService userService = CedarDataServices.getNeoUserService();
+    UserService userService = CedarDataServices.getInstance().getNeoUserService();
     this.nodeSearchingService = nodeSearchingService;
     this.nodeIndexingService = nodeIndexingService;
     this.indexUtils = indexUtils;
 
     this.cedarRequestContext = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
 
-    folderSession = CedarDataServices.getFolderServiceSession(cedarRequestContext);
-    permissionSession = CedarDataServices.getResourcePermissionServiceSession(cedarRequestContext);
-    categorySession = CedarDataServices.getCategoryServiceSession(cedarRequestContext);
+    folderSession = CedarDataServices.getInstance().getFolderServiceSession(cedarRequestContext);
+    permissionSession = CedarDataServices.getInstance().getResourcePermissionServiceSession(cedarRequestContext);
+    categorySession = CedarDataServices.getInstance().getCategoryServiceSession(cedarRequestContext);
   }
 
   // Main entry point
@@ -76,13 +75,10 @@ public class SearchPermissionExecutorService {
   }
 
   private void updateOneArtifact(CedarArtifactId artifactId) {
-    FolderServerArtifact resource = folderSession.findArtifactById(artifactId);
-    if (resource != null) {
-      log.debug("Update one artifact:" + resource.getName());
-      upsertOnePermissions(Upsert.UPDATE, artifactId);
-    } else {
-      log.error("Resource was not found:" + artifactId);
-    }
+    log.debug("Update one artifact:" + artifactId);
+    // upsertOnePermissions resolves the artifact itself, and removes the index document when the
+    // artifact no longer exists
+    upsertOnePermissions(Upsert.UPDATE, artifactId);
   }
 
   private void updateFolderRecursively(CedarFolderId folderId) {
@@ -123,9 +119,18 @@ public class SearchPermissionExecutorService {
     log.debug("upsertOneDocument for permissions:" + upsert.getValue() + ":" + resourceId);
     try {
       FileSystemResource node = folderSession.findResourceById(resourceId);
+      if (node == null) {
+        // The resource is gone from the graph, so any document the index still holds for it is
+        // an orphan: a permission update has nothing to write, and leaving the document in place
+        // would keep the resource visible to search and keep feeding it back to this service,
+        // which sources its work list from the index. Remove it instead.
+        log.info("The resource no longer exists, removing it from the index:" + resourceId);
+        nodeIndexingService.removeDocumentFromIndex(resourceId);
+        return;
+      }
       CedarNodeMaterializedPermissions perm = permissionSession.getResourceMaterializedPermission(resourceId);
       CedarNodeMaterializedCategories categories = null;
-      if (node != null && node.getType() != CedarResourceType.FOLDER) {
+      if (node.getType() != CedarResourceType.FOLDER) {
         categories = categorySession.getArtifactMaterializedCategories(CedarUntypedArtifactId.build(resourceId.getId()));
       }
       if (upsert == Upsert.UPDATE) {

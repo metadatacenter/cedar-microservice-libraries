@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 
 /**
  * Utilities used to extract information from CEDAR artifacts
@@ -32,25 +33,37 @@ public class ExtractionUtils {
     this.cedarConfig = cedarConfig;
   }
 
-  public JsonNode getArtifactById(String artifactId, CedarResourceType nodeType,
-                                  CedarRequestContext requestContext) throws CedarProcessingException {
+  /**
+   * Retrieves an artifact's content from the artifact server.
+   * <p>
+   * An artifact that is not there and an artifact server that cannot be reached are different
+   * outcomes and are reported differently. An absent artifact is a normal state — the graph and the
+   * artifact server disagree, most often because a deletion is in flight — so it comes back as an
+   * empty result for the caller to handle. Anything else is a failure of the retrieval itself and
+   * is thrown, carrying the status code so the cause is visible rather than guessed at.
+   *
+   * @return the artifact's content, or empty when the artifact server does not have it
+   */
+  public Optional<JsonNode> getArtifactById(String artifactId, CedarResourceType nodeType,
+                                            CedarRequestContext requestContext) throws CedarProcessingException {
     String url =
         cedarConfig.getMicroserviceUrlUtil().getArtifact().getResourceType(nodeType) + "/"
             + CedarUrlUtil.urlEncode(artifactId);
     ClassicHttpResponse proxyResponse = ProxyUtil.proxyGet(url, requestContext);
     HttpEntity entity = proxyResponse.getEntity();
-    if (proxyResponse.getCode() == HttpConstants.OK && entity != null) {
-      String artifactString = null;
-      JsonNode artifactJson = null;
+    int statusCode = proxyResponse.getCode();
+    if (statusCode == HttpConstants.OK && entity != null) {
       try {
-        artifactString = EntityUtils.toString(entity, StandardCharsets.UTF_8);
-        artifactJson = JsonMapper.MAPPER.readTree(artifactString);
+        String artifactString = EntityUtils.toString(entity, StandardCharsets.UTF_8);
+        return Optional.of(JsonMapper.MAPPER.readTree(artifactString));
       } catch (IOException | ParseException e) {
         throw new CedarProcessingException("Error when reading artifact as Json: " + artifactId);
       }
-      return artifactJson;
+    } else if (statusCode == HttpConstants.NOT_FOUND) {
+      return Optional.empty();
     } else {
-      throw new CedarProcessingException("Error when retrieving artifact: " + artifactId);
+      throw new CedarProcessingException("Error when retrieving artifact: " + artifactId
+          + " (the artifact server answered " + statusCode + ")");
     }
   }
 

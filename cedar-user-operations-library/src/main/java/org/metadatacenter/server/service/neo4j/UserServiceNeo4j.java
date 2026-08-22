@@ -6,8 +6,10 @@ import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.neo4j.proxy.Neo4JProxyUser;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.user.CedarUser;
+import org.metadatacenter.server.security.model.user.CedarUserApiKey;
 import org.metadatacenter.server.service.UserService;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,6 +47,22 @@ public class UserServiceNeo4j implements UserService {
   @Override
   public BackendCallResult<CedarUser> patchUser(CedarUserId userId, JsonNode modifications) {
     return userProxy.patchUser(userId, modifications);
+  }
+
+  @Override
+  public BackendCallResult<CedarUser> addApiKey(CedarUserId userId, CedarUserApiKey newApiKey, int maxApiKeys) {
+    return userProxy.addApiKey(userId, newApiKey, maxApiKeys);
+  }
+
+  @Override
+  public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyValue, String newKeyValue,
+                                                       LocalDateTime newCreationDate) {
+    return userProxy.regenerateApiKey(userId, keyValue, newKeyValue, newCreationDate);
+  }
+
+  @Override
+  public BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyValue) {
+    return userProxy.deleteApiKey(userId, keyValue);
   }
 
   @Override

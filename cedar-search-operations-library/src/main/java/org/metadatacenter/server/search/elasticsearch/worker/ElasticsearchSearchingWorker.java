@@ -43,7 +43,7 @@ public class ElasticsearchSearchingWorker {
     return findAllValuesForField(fieldName, qb);
   }
 
-  public List<String> findAllValuesForField(String fieldName, QueryBuilder queryBuilder) {
+  public List<String> findAllValuesForField(String fieldName, QueryBuilder queryBuilder) throws CedarProcessingException {
     List<String> fieldValues = new ArrayList<>();
 
     SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder()
@@ -60,13 +60,10 @@ public class ElasticsearchSearchingWorker {
 
       do {
         for (SearchHit hit : response.getHits().getHits()) {
-          Map<String, Object> f = hit.getSourceAsMap();
-          String[] pathFragments = fieldName.split("\\.");
-          for (int i = 0; i < pathFragments.length - 1; i++) {
-            f = (Map<String, Object>) f.get(pathFragments[0]);
+          String fieldValue = getStringValue(hit.getSourceAsMap(), fieldName);
+          if (fieldValue != null) {
+            fieldValues.add(fieldValue);
           }
-          String fieldValue = (String) f.get(pathFragments[pathFragments.length - 1]);
-          fieldValues.add(fieldValue);
         }
 
         String scrollId = response.getScrollId();
@@ -74,9 +71,20 @@ public class ElasticsearchSearchingWorker {
         response = client.scroll(scrollRequest, RequestOptions.DEFAULT);
       } while (response.getHits().getHits().length != 0);
     } catch (IOException e) {
-      log.error("Error while searching all values", e);
+      throw new CedarProcessingException("Error while scrolling all values for field " + fieldName, e);
     }
 
     return fieldValues;
+  }
+
+  private String getStringValue(Map<String, Object> source, String fieldName) {
+    Object current = source;
+    for (String pathFragment : fieldName.split("\\.")) {
+      if (!(current instanceof Map<?, ?> currentMap)) {
+        return null;
+      }
+      current = currentMap.get(pathFragment);
+    }
+    return current instanceof String ? (String) current : null;
   }
 }

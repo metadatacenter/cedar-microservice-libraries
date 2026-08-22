@@ -1,7 +1,7 @@
-# cedar-server-utils
+# cedar-microservice-libraries
 Collection of utils shared by server components
 
-[![Build Status](https://travis-ci.com/metadatacenter/cedar-server-utils.svg?branch=master)](https://travis-ci.com/metadatacenter/cedar-server-utils)
+[![CI](https://github.com/metadatacenter/cedar-microservice-libraries/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/metadatacenter/cedar-microservice-libraries/actions/workflows/ci.yml)
 
 #### Questions
 

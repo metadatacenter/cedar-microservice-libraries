@@ -17,6 +17,7 @@ public abstract class CedarUserRolePermissionUtil {
   private static final Set<String> groupPrivilegedAdministratorPermissions;
   private static final Set<String> filesystemAdministratorPermissions;
   private static final Set<String> categoryAdministratorPermissions;
+  private static final Set<String> artifactPrivilegedAdministratorPermissions;
   private static final Set<String> categoryPrivilegedAdministratorPermissions;
   private static final Set<String> searchReindexerPermissions;
   private static final Set<String> processMessageSenderPermission;
@@ -79,6 +80,11 @@ public abstract class CedarUserRolePermissionUtil {
     categoryAdministratorPermissions.add(CedarPermission.CATEGORY_UPDATE.getPermissionName());
     categoryAdministratorPermissions.add(CedarPermission.CATEGORY_DELETE.getPermissionName());
 
+    // Held only by the built-in admin, like the other privileged roles: a verbatim write states its own
+    // provenance, so it can attribute a change to another user.
+    artifactPrivilegedAdministratorPermissions = new HashSet<>();
+    artifactPrivilegedAdministratorPermissions.add(CedarPermission.WRITE_ARTIFACT_VERBATIM.getPermissionName());
+
     categoryPrivilegedAdministratorPermissions = new HashSet<>();
     categoryPrivilegedAdministratorPermissions.add(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_CATEGORY.getPermissionName());
     categoryPrivilegedAdministratorPermissions.add(CedarPermission.WRITE_NOT_WRITABLE_CATEGORY.getPermissionName());
@@ -104,6 +110,7 @@ public abstract class CedarUserRolePermissionUtil {
     roleToPermissions.put(CedarUserRole.FILESYSTEM_ADMINISTRATOR, filesystemAdministratorPermissions);
     roleToPermissions.put(CedarUserRole.CATEGORY_ADMINISTRATOR, categoryAdministratorPermissions);
     roleToPermissions.put(CedarUserRole.CATEGORY_PRIVILEGED_ADMINISTRATOR, categoryPrivilegedAdministratorPermissions);
+    roleToPermissions.put(CedarUserRole.ARTIFACT_PRIVILEGED_ADMINISTRATOR, artifactPrivilegedAdministratorPermissions);
     roleToPermissions.put(CedarUserRole.SEARCH_REINDEXER, searchReindexerPermissions);
     roleToPermissions.put(CedarUserRole.PROCESS_MESSAGE_SENDER, processMessageSenderPermission);
     roleToPermissions.put(CedarUserRole.MONITOR_MANAGER, monitorManagerPermission);
@@ -111,9 +118,11 @@ public abstract class CedarUserRolePermissionUtil {
 
   public static void expandRolesIntoPermissions(CedarUser u) {
     Set<String> permissions = new HashSet<>();
-    for (CedarUserRole role : u.getRoles()) {
-      if (role != null) {
-        permissions.addAll(roleToPermissions.get(role));
+    if (u.getRoles() != null) {
+      for (CedarUserRole role : u.getRoles()) {
+        if (role != null) {
+          permissions.addAll(roleToPermissions.get(role));
+        }
       }
     }
     List<String> permissionList = new ArrayList<>(permissions);

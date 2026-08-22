@@ -42,7 +42,8 @@ public class TrustedByUtil {
         resourceType.equals(CedarResourceType.ELEMENT) ||
         resourceType.equals(CedarResourceType.FIELD) ||
         resourceType.equals(CedarResourceType.INSTANCE)) {
-      if (folderIdsToEntitiesMap.containsKey(parentFolderId)) {
+      if (parentFolderId != null && folderIdsToEntitiesMap != null
+          && folderIdsToEntitiesMap.containsKey(parentFolderId)) {
         return folderIdsToEntitiesMap.get(parentFolderId);
       }
     }
@@ -50,18 +51,16 @@ public class TrustedByUtil {
   }
 
   private static String extractParentFolderIdFromPathInfo(List<FolderServerResourceExtract> pathInfo) {
-    if (pathInfo.isEmpty()) {
+    if (pathInfo == null || pathInfo.isEmpty()) {
       return null;
     }
     if (pathInfo.get(pathInfo.size() - 1).getType().equals(CedarResourceType.FOLDER)) {
       return pathInfo.get(pathInfo.size() - 1).getId();
-    } else {
+    } else if (pathInfo.size() > 1) {
       return pathInfo.get(pathInfo.size() - 2).getId();
     }
+    return null;
   }
 
 
 }
-
-
-

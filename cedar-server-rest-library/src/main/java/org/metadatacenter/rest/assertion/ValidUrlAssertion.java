@@ -26,7 +26,7 @@ public class ValidUrlAssertion implements CedarAssertion {
   @Override
   public CedarAssertionResult check(CedarRequestContext requestContext, Object target) {
     if (!(target instanceof String id)) {
-      return new CedarAssertionResult("The id should be a non-null String");
+      return new CedarAssertionResult("The id should be a non-null String").badRequest();
     } else {
       if (id != null) {
         // There is no way currently to customize the URL Validator.

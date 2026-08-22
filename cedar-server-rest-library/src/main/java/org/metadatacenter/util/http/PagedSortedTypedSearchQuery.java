@@ -25,6 +25,11 @@ public class PagedSortedTypedSearchQuery extends PagedSortedTypedQuery {
 
   public PagedSortedTypedSearchQuery(PaginationConfig config) {
     super(config);
+    this.qInput = Optional.empty();
+    this.isBasedOnInput = Optional.empty();
+    this.idInput = Optional.empty();
+    this.categoryIdInput = Optional.empty();
+    this.modeInput = Optional.empty();
   }
 
   public PagedSortedTypedSearchQuery isBasedOn(Optional<String> isBasedOnInput) {

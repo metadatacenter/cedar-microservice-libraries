@@ -43,7 +43,22 @@ public class ElasticsearchIndexingWorker {
     this.documentType = IndexedDocumentType.DOC.getValue();
   }
 
+  /**
+   * Indexes a document under a backend-generated id. Every call creates a new document, so this
+   * is only correct where a CEDAR id legitimately maps to many documents, as it does for rules.
+   * To index one document per resource, use {@link #addToIndex(JsonNode, String)}.
+   */
   public IndexedDocumentId addToIndex(JsonNode json) throws CedarProcessingException {
+    return addToIndex(json, null);
+  }
+
+  /**
+   * Indexes a document under a caller-chosen id, replacing any document already held under that
+   * id. Passing the CEDAR id makes indexing idempotent: a resource occupies exactly one document
+   * however many times it is indexed, and a re-index needs no prior removal to avoid a duplicate.
+   * A null documentId falls back to a backend-generated id.
+   */
+  public IndexedDocumentId addToIndex(JsonNode json, String documentId) throws CedarProcessingException {
     IndexedDocumentId newId = null;
     try {
       boolean again = true;
@@ -53,8 +68,13 @@ public class ElasticsearchIndexingWorker {
         try {
           IndexRequest indexRequest = new IndexRequest(indexName)
               .source(JsonMapper.MAPPER.writeValueAsString(json), XContentType.JSON);
+          if (documentId != null) {
+            indexRequest.id(documentId);
+          }
           IndexResponse response = client.index(indexRequest, RequestOptions.DEFAULT);
-          if (response.status() == RestStatus.CREATED) {
+          // CREATED is a first write, OK an overwrite of an existing document; both leave the
+          // index holding exactly what was asked for
+          if (response.status() == RestStatus.CREATED || response.status() == RestStatus.OK) {
             log.debug("The " + documentType + " has been indexed");
             again = false;
             newId = new IndexedDocumentId(response.getId());
@@ -75,27 +95,41 @@ public class ElasticsearchIndexingWorker {
   }
 
   /**
-   * Removes from the index all documents that match a given CEDAR artifact id
-   *
-   * @param resourceId
-   * @return
-   * @throws CedarProcessingException
+   * Removes from the index every document held for a given CEDAR resource.
+   * <p>
+   * Removal proceeds in two steps because the index can hold a resource under two kinds of id.
+   * A document indexed through {@link #addToIndex(JsonNode, String)} sits under the CEDAR id, and
+   * a delete by that id is a realtime operation: it reaches a document written moments earlier,
+   * before any refresh has made it searchable. A document written under a backend-generated id —
+   * by an older build, or by the batch path — is reachable only by a query over the cid field,
+   * which sees just the refreshed segments. Doing both removes the resource whichever way it was
+   * indexed, and confines the refresh race to documents that no current write path produces.
    */
   public long removeAllFromIndex(CedarFilesystemResourceId resourceId) throws CedarProcessingException {
-    log.debug("Removing " + documentType + " cid:" + resourceId.getId() + " from the " + indexName + " index");
+    String cedarId = resourceId.getId();
+    log.debug("Removing " + documentType + " cid:" + cedarId + " from the " + indexName + " index");
     try {
-      // Create the delete by query request
-      DeleteByQueryRequest request = new DeleteByQueryRequest(indexName);
-      request.setQuery(QueryBuilders.matchQuery(DOCUMENT_CEDAR_ID, resourceId.getId()));
+      long removedCount = 0;
 
-      // Execute the delete by query request
-      BulkByScrollResponse response = client.deleteByQuery(request, RequestOptions.DEFAULT);
+      DeleteRequest byIdRequest = new DeleteRequest(indexName, cedarId);
+      DeleteResponse byIdResponse = client.delete(byIdRequest, RequestOptions.DEFAULT);
+      if (byIdResponse.status() == RestStatus.OK) {
+        removedCount++;
+      }
 
-      long removedCount = response.getDeleted();
+      DeleteByQueryRequest byQueryRequest = new DeleteByQueryRequest(indexName);
+      byQueryRequest.setQuery(QueryBuilders.matchQuery(DOCUMENT_CEDAR_ID, cedarId));
+      BulkByScrollResponse byQueryResponse = client.deleteByQuery(byQueryRequest, RequestOptions.DEFAULT);
+      removedCount += byQueryResponse.getDeleted();
+
       if (removedCount == 0) {
-        log.error("The " + documentType + " cid:" + resourceId.getId() + " was not removed from the " + indexName + " index");
+        // Either the resource was never indexed, or it is held under a backend-generated id
+        // that is not yet searchable. The caller decides whether that is a real failure — the
+        // retry overload in NodeIndexingService treats it as retryable — so this is a warning
+        // here, not an error.
+        log.warn("The " + documentType + " cid:" + cedarId + " was not removed from the " + indexName + " index");
       } else {
-        log.debug("Removed " + removedCount + " documents of type " + documentType + " cid:" + resourceId.getId() + " from the " + indexName + " index");
+        log.debug("Removed " + removedCount + " documents of type " + documentType + " cid:" + cedarId + " from the " + indexName + " index");
       }
       return removedCount;
     } catch (IOException e) {
@@ -147,32 +181,36 @@ public class ElasticsearchIndexingWorker {
     }
   }
 
-  public void addBatch(List<IndexingDocumentDocument> currentBatch) {
-    if (currentBatch != null) {
-      BulkRequest bulkRequest = new BulkRequest();
+  public void addBatch(List<IndexingDocumentDocument> currentBatch) throws CedarProcessingException {
+    if (currentBatch == null || currentBatch.isEmpty()) {
+      return;
+    }
+    BulkRequest bulkRequest = new BulkRequest();
 
-      for (IndexingDocumentDocument ir : currentBatch) {
-        JsonNode jsonResource = JsonMapper.MAPPER.convertValue(ir, JsonNode.class);
-
-        try {
-          IndexRequest indexRequest = new IndexRequest(indexName)
-              .source(JsonMapper.MAPPER.writeValueAsString(jsonResource), XContentType.JSON);
-          bulkRequest.add(indexRequest);
-        } catch (JsonProcessingException e) {
-          log.error("Error while serializing indexing document", e);
-        }
-      }
-
+    for (IndexingDocumentDocument ir : currentBatch) {
+      JsonNode jsonResource = JsonMapper.MAPPER.convertValue(ir, JsonNode.class);
       try {
-        BulkResponse bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT);
-        if (bulkResponse.hasFailures()) {
-          // process failures by iterating through each bulk response item
-          log.error("Failure when processing bulk request:");
-          log.error(bulkResponse.buildFailureMessage());
+        IndexRequest indexRequest = new IndexRequest(indexName)
+            .source(JsonMapper.MAPPER.writeValueAsString(jsonResource), XContentType.JSON);
+        // Index under the CEDAR id, so a resource that appears twice in a regeneration run
+        // ends up as one document rather than two
+        if (ir.getCid() != null) {
+          indexRequest.id(ir.getCid());
         }
-      } catch (IOException e) {
-        log.error("Error executing bulk request", e);
+        bulkRequest.add(indexRequest);
+      } catch (JsonProcessingException e) {
+        throw new CedarProcessingException("Error while serializing indexing document", e);
       }
+    }
+
+    try {
+      BulkResponse bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT);
+      if (bulkResponse.hasFailures()) {
+        throw new CedarProcessingException("Failure when processing bulk request: " +
+            bulkResponse.buildFailureMessage());
+      }
+    } catch (IOException e) {
+      throw new CedarProcessingException("Error executing bulk request", e);
     }
   }
 }

@@ -47,6 +47,9 @@ public class ResourcePermissionRequestValidator {
       validateWritePermission();
     }
     if (callResult.isOk()) {
+      validateRequest();
+    }
+    if (callResult.isOk()) {
       validateAndSetOwner();
     }
     if (callResult.isOk()) {
@@ -89,6 +92,15 @@ public class ResourcePermissionRequestValidator {
     }
   }
 
+  private void validateRequest() {
+    if (request == null) {
+      callResult.addError(INVALID_ARGUMENT)
+          .errorKey(CedarErrorKey.MISSING_PARAMETER)
+          .parameter("paramName", "request")
+          .message("The resource permissions request is missing");
+    }
+  }
+
   private void validateAndSetOwner() {
     ResourcePermissionUser owner = request.getOwner();
     if (owner == null) {
@@ -96,6 +108,11 @@ public class ResourcePermissionRequestValidator {
           .errorKey(CedarErrorKey.MISSING_PARAMETER)
           .parameter("paramName", "owner")
           .message("The owner should be present in the request");
+    } else if (owner.getId() == null || owner.getId().isBlank()) {
+      callResult.addError(INVALID_ARGUMENT)
+          .errorKey(CedarErrorKey.MISSING_PARAMETER)
+          .parameter("paramName", "ownerId")
+          .message("The owner id should be present in the request");
     } else {
       CedarUserId newOwnerId = owner.getResourceIds();
       FolderServerUser newOwner = proxies.user().findUserById(newOwnerId);
@@ -112,13 +129,28 @@ public class ResourcePermissionRequestValidator {
 
   private void validateAndSetUsers() {
     List<ResourcePermissionUserPermissionPair> userPermissions = request.getUserPermissions();
+    if (userPermissions == null) {
+      return;
+    }
     for (ResourcePermissionUserPermissionPair pair : userPermissions) {
+      if (pair == null) {
+        callResult.addError(INVALID_ARGUMENT)
+            .errorKey(CedarErrorKey.MISSING_PARAMETER)
+            .parameter("paramName", "userPermission")
+            .message("The user permission entry is missing from the request");
+        continue;
+      }
       ResourcePermissionUser permissionUser = pair.getUser();
       if (permissionUser == null) {
         callResult.addError(INVALID_ARGUMENT)
             .errorKey(CedarErrorKey.MISSING_PARAMETER)
             .parameter("paramName", "user")
             .message("The user resource is missing from the request");
+      } else if (permissionUser.getId() == null || permissionUser.getId().isBlank()) {
+        callResult.addError(INVALID_ARGUMENT)
+            .errorKey(CedarErrorKey.MISSING_PARAMETER)
+            .parameter("paramName", "userId")
+            .message("The user id is missing from the request");
       } else {
         FilesystemResourcePermission permission = pair.getPermission();
         if (permission == null) {
@@ -145,13 +177,28 @@ public class ResourcePermissionRequestValidator {
 
   private void validateAndSetGroups() {
     List<ResourcePermissionGroupPermissionPair> groupPermissions = request.getGroupPermissions();
+    if (groupPermissions == null) {
+      return;
+    }
     for (ResourcePermissionGroupPermissionPair pair : groupPermissions) {
+      if (pair == null) {
+        callResult.addError(INVALID_ARGUMENT)
+            .errorKey(CedarErrorKey.MISSING_PARAMETER)
+            .parameter("paramName", "groupPermission")
+            .message("The group permission entry is missing from the request");
+        continue;
+      }
       ResourcePermissionGroup permissionGroup = pair.getGroup();
       if (permissionGroup == null) {
         callResult.addError(INVALID_ARGUMENT)
             .errorKey(CedarErrorKey.MISSING_PARAMETER)
             .parameter("paramName", "group")
             .message("The group resource is missing from the request");
+      } else if (permissionGroup.getId() == null || permissionGroup.getId().isBlank()) {
+        callResult.addError(INVALID_ARGUMENT)
+            .errorKey(CedarErrorKey.MISSING_PARAMETER)
+            .parameter("paramName", "groupId")
+            .message("The group id is missing from the request");
       } else {
         FilesystemResourcePermission permission = pair.getPermission();
         if (permission == null) {

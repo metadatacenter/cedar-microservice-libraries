@@ -63,13 +63,25 @@ public class InclusionSubgraphUtil {
 
   private static List<String> extractFirstLevelIncludedIds(JsonNode artifact) {
     List<String> linkIds = new ArrayList<>();
+    if (artifact == null) {
+      return linkIds;
+    }
     JsonNode properties = artifact.get(JsonSchemaConstants.PROPERTIES);
+    if (properties == null || !properties.isObject()) {
+      return linkIds;
+    }
     for (Iterator<String> it = properties.fieldNames(); it.hasNext(); ) {
       String fieldName = it.next();
       JsonNode embedded = null;
       if (!ModelUtil.isSpecialField(fieldName)) {
         JsonNode candidate = properties.get(fieldName);
+        if (candidate == null || !candidate.isObject()) {
+          continue;
+        }
         JsonNode typeNode = candidate.get(JsonSchemaConstants.TYPE);
+        if (typeNode == null || !typeNode.isTextual()) {
+          continue;
+        }
         String typeValue = typeNode.textValue();
         if (JsonSchemaConstants.TYPE_VALUE_OBJECT.equals(typeValue)) {
           // single embedded artifact
@@ -79,10 +91,14 @@ public class InclusionSubgraphUtil {
           embedded = candidate.get(JsonSchemaConstants.ITEMS);
         }
       }
-      if (embedded != null) {
+      if (embedded != null && embedded.isObject()) {
         JsonNode atTypeNode = embedded.get(LinkedData.TYPE);
-        String atType = atTypeNode.textValue();
         JsonNode atIdNode = embedded.get(LinkedData.ID);
+        if (atTypeNode == null || !atTypeNode.isTextual() || atIdNode == null || !atIdNode.isTextual()
+            || atIdNode.textValue().isBlank()) {
+          continue;
+        }
+        String atType = atTypeNode.textValue();
         String atId = atIdNode.textValue();
         if (CedarConstants.TEMPLATE_FIELD_TYPE_URI.equals(atType)) {
           linkIds.add(atId);
@@ -117,7 +133,9 @@ public class InclusionSubgraphUtil {
       templates.put(templateId, t);
       if (requestTemplates != null && requestTemplates.containsKey(templateId)) {
         InclusionSubgraphTemplate inclusionSubgraphTemplate = requestTemplates.get(templateId);
-        t.setOperation(inclusionSubgraphTemplate.getOperation());
+        if (inclusionSubgraphTemplate != null) {
+          t.setOperation(inclusionSubgraphTemplate.getOperation());
+        }
       }
     }
     return templates;
@@ -135,8 +153,11 @@ public class InclusionSubgraphUtil {
       elements.put(elementId, e);
       if (requestElements != null && requestElements.containsKey(elementId)) {
         InclusionSubgraphElement inclusionSubgraphElement = requestElements.get(elementId);
-        e.setOperation(inclusionSubgraphElement.getOperation());
-        if (inclusionSubgraphElement.getOperation() == InclusionSubgraphNodeOperation.UPDATE) {
+        if (inclusionSubgraphElement != null) {
+          e.setOperation(inclusionSubgraphElement.getOperation());
+        }
+        if (inclusionSubgraphElement != null &&
+            inclusionSubgraphElement.getOperation() == InclusionSubgraphNodeOperation.UPDATE) {
           e.setElements(computeAffectedElements(elementId, inclusionSubgraphElement.getElements(),
               inclusionSubgraphSession));
           e.setTemplates(computeAffectedTemplates(elementId, inclusionSubgraphElement.getTemplates(),
@@ -232,7 +253,7 @@ public class InclusionSubgraphUtil {
     if (requiredValue == null) {
       return;
     }
-    if (!root.has(VALUE_CONSTRAINTS)) {
+    if (!root.has(VALUE_CONSTRAINTS) || !root.get(VALUE_CONSTRAINTS).isObject()) {
       root.putObject(VALUE_CONSTRAINTS);
     }
     ObjectNode valueConstraints = (ObjectNode) root.get(VALUE_CONSTRAINTS);
@@ -240,7 +261,7 @@ public class InclusionSubgraphUtil {
   }
 
   private static Boolean getCurrentRequiredValue(ObjectNode root) {
-    if (!root.has(VALUE_CONSTRAINTS)) {
+    if (!root.has(VALUE_CONSTRAINTS) || !root.get(VALUE_CONSTRAINTS).isObject()) {
       return null;
     }
     ObjectNode valueConstraints = (ObjectNode) root.get(VALUE_CONSTRAINTS);
@@ -254,7 +275,7 @@ public class InclusionSubgraphUtil {
     if (!newDocument.has(SCHEMA_ORG_NAME) || !newDocument.has(SCHEMA_ORG_DESCRIPTION)) {
       return;
     }
-    if (!root.has(UI)) {
+    if (!root.has(UI) || !root.get(UI).isObject()) {
       return;
     }
 

@@ -26,21 +26,21 @@ public class CurrentUserPermissionUpdaterForGraphDbCategory extends CurrentUserC
   public void update(CurrentUserCategoryPermissions currentUserCategoryPermissions) {
     String id = category.getId();
     CedarCategoryId ccId = CedarCategoryId.build(id);
-    category.getCurrentUserPermissions().setCanRead(true);
+    currentUserCategoryPermissions.setCanRead(true);
     if (categoryPermissionSession.userHasWriteAccessToCategory(ccId)) {
-      category.getCurrentUserPermissions().setCanWrite(true);
-      category.getCurrentUserPermissions().setCanDelete(true);
-      category.getCurrentUserPermissions().setCanAttach(true);
-      category.getCurrentUserPermissions().setCanDetach(true);
+      currentUserCategoryPermissions.setCanWrite(true);
+      currentUserCategoryPermissions.setCanDelete(true);
+      currentUserCategoryPermissions.setCanAttach(true);
+      currentUserCategoryPermissions.setCanDetach(true);
       if (!category.isRoot()) {
-        category.getCurrentUserPermissions().setCanShare(true);
+        currentUserCategoryPermissions.setCanShare(true);
       }
     } else if (categoryPermissionSession.userHasAttachAccessToCategory(ccId)) {
-      category.getCurrentUserPermissions().setCanAttach(true);
-      category.getCurrentUserPermissions().setCanDetach(true);
+      currentUserCategoryPermissions.setCanAttach(true);
+      currentUserCategoryPermissions.setCanDetach(true);
     }
     if (categoryPermissionSession.userCanChangeOwnerOfCategory(ccId)) {
-      category.getCurrentUserPermissions().setCanChangeOwner(true);
+      currentUserCategoryPermissions.setCanChangeOwner(true);
     }
   }
 }

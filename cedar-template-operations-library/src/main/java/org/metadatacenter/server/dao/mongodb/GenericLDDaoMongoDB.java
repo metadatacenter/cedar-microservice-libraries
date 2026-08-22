@@ -152,7 +152,9 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     if (updateResult.getMatchedCount() == 1) {
       return find(id);
     } else {
-      throw new InternalError();
+      // Invariant violation (the document existed a moment ago), not JVM corruption: a RuntimeException
+      // flows through catch (Exception) and the CedarExceptionMapper, giving a clean 500 with an errorId.
+      throw new IllegalStateException("Update matched no document for @id=" + id);
     }
   }
 
@@ -174,7 +176,7 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     }
     DeleteResult deleteResult = entityCollection.deleteOne(eq("@id", id));
     if (deleteResult.getDeletedCount() != 1) {
-      throw new InternalError();
+      throw new IllegalStateException("Delete did not remove exactly one document for @id=" + id);
     }
   }
 

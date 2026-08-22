@@ -104,9 +104,14 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
         " RETURN group";
   }
 
+  /**
+   * Matches on NAME_LOWER, not NAME: group names are unique without regard to case. Every group node
+   * carries NAME_LOWER and group listings order by it, so matching the cased NAME here let "Curators"
+   * and "curators" both pass the uniqueness check and coexist.
+   */
   public static String getGroupByName() {
     return "" +
-        " MATCH (group:<LABEL.GROUP> {<PROP.NAME>:{<PH.NAME>}})" +
+        " MATCH (group:<LABEL.GROUP> {<PROP.NAME_LOWER>:{<PH.NAME>}})" +
         " RETURN group";
   }
 

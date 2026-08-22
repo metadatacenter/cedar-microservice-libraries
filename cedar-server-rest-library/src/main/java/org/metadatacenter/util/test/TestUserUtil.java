@@ -10,7 +10,7 @@ import org.metadatacenter.server.security.model.user.CedarUser;
 public class TestUserUtil {
 
   private static String getTestUserAuthHeader(CedarUserId userId) {
-    CedarUser user = CedarDataServices.getNeoUserService().findUser(userId);
+    CedarUser user = CedarDataServices.getInstance().getNeoUserService().findUser(userId);
     AuthRequest authRequest = new CedarApiKeyAuthRequest(user.getFirstActiveApiKey());
     return authRequest.getAuthHeader();
   }

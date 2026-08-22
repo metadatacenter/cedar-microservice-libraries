@@ -46,9 +46,10 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_IS_BASED_ON;
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_ORG_IDENTIFIER;
@@ -66,10 +67,10 @@ public class CloneInstancesExecutorService {
   protected static ValuerecommenderReindexQueueService valuerecommenderReindexQueueService;
 
   public CloneInstancesExecutorService(CedarConfig cedarConfig) {
-    UserService userService = CedarDataServices.getNeoUserService();
+    UserService userService = CedarDataServices.getInstance().getNeoUserService();
 
     cedarRequestContext = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
-    folderSession = CedarDataServices.getFolderServiceSession(cedarRequestContext);
+    folderSession = CedarDataServices.getInstance().getFolderServiceSession(cedarRequestContext);
     microserviceUrlUtil = cedarConfig.getMicroserviceUrlUtil();
     linkedDataUtil = cedarRequestContext.getLinkedDataUtil();
   }
@@ -90,12 +91,9 @@ public class CloneInstancesExecutorService {
                                         String newFolderName) {
     long numberOfInstances = folderSession.getNumberOfInstances(oldTemplateId);
     if (numberOfInstances > 0) {
-      List<FolderServerResourceExtract> instanceExtracts =
-          folderSession.searchIsBasedOn(List.of(CedarResourceType.INSTANCE), oldTemplateId, 1000, 0,
-              List.of(QuerySortOptions.DEFAULT_SORT_FIELD.getName()));
+      List<FolderServerResourceExtract> instanceExtracts = findAllInstances(folderSession, oldTemplateId);
 
-      Map<String, List<FolderServerResourceExtract>> instancesByOwner = instanceExtracts.stream()
-          .collect(Collectors.groupingBy(FolderServerResourceExtract::getOwnedBy));
+      Map<String, List<FolderServerResourceExtract>> instancesByOwner = groupInstancesByOwner(instanceExtracts);
 
       for (Map.Entry<String, List<FolderServerResourceExtract>> entry : instancesByOwner.entrySet()) {
         CedarUserId ownerUser = CedarUserId.build(entry.getKey());
@@ -131,6 +129,35 @@ public class CloneInstancesExecutorService {
     }
   }
 
+  static List<FolderServerResourceExtract> findAllInstances(FolderServiceSession folderSession,
+                                                            CedarTemplateId templateId) {
+    final int pageSize = 1000;
+    int offset = 0;
+    List<FolderServerResourceExtract> instances = new ArrayList<>();
+    List<FolderServerResourceExtract> page;
+    do {
+      page = folderSession.searchIsBasedOn(List.of(CedarResourceType.INSTANCE), templateId, pageSize, offset,
+          List.of(QuerySortOptions.DEFAULT_SORT_FIELD.getName()));
+      instances.addAll(page);
+      offset += page.size();
+    } while (page.size() == pageSize);
+    return instances;
+  }
+
+  static Map<String, List<FolderServerResourceExtract>> groupInstancesByOwner(
+      List<FolderServerResourceExtract> instances) {
+    Map<String, List<FolderServerResourceExtract>> instancesByOwner = new LinkedHashMap<>();
+    for (FolderServerResourceExtract instance : instances) {
+      String owner = instance.getOwnedBy();
+      if (owner == null || owner.isBlank()) {
+        log.error("Instance has no owner and cannot be cloned: " + instance.getId());
+        continue;
+      }
+      instancesByOwner.computeIfAbsent(owner, ignored -> new ArrayList<>()).add(instance);
+    }
+    return instancesByOwner;
+  }
+
 
   private Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId oldInstanceId,
                                                        CedarTemplateId oldTemplateId,
@@ -139,7 +166,7 @@ public class CloneInstancesExecutorService {
                                                        CedarUserId userId) throws CedarException {
     CedarRequestContext c = this.cedarRequestContext;
 
-    FolderServiceSession folderSession = CedarDataServices.getFolderServiceSession(c);
+    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(c);
     CedarResourceType resourceType = CedarResourceType.INSTANCE;
 
     String originalDocument = null;
@@ -247,7 +274,7 @@ public class CloneInstancesExecutorService {
                                                              String description, String identifier,
                                                              CedarTemplateId newTemplateId, CedarUserId userId) throws CedarException {
 
-    FolderServiceSession folderSession = CedarDataServices.getFolderServiceSession(c);
+    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(c);
 
     if (CedarResourceTypeUtil.isNotValidForRestCall(resourceType)) {
       throw new CedarProcessingException("You passed an illegal resourceType:'" + resourceType.getValue() +

@@ -33,7 +33,7 @@ public abstract class AbstractNeo4JUserSession {
 
   public boolean userIsOwnerOfFilesystemResource(CedarFilesystemResourceId resourceId) {
     FolderServerUser owner = getFilesystemResourceOwner(resourceId);
-    return owner != null && owner.getId().equals(cu.getId());
+    return owner != null && owner.getId() != null && owner.getId().equals(cu.getId());
   }
 
   protected FolderServerUser getCategoryOwner(CedarCategoryId categoryId) {

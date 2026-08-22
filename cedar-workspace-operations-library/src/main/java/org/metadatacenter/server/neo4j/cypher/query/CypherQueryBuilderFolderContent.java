@@ -51,6 +51,7 @@ public class CypherQueryBuilderFolderContent extends AbstractCypherQueryBuilder 
     sb.append(getOrderByExpression("child", sortList));
     sb.append(", child.<PROP.VERSION> DESC");
     sb.append(", child.<PROP.CREATED_ON_TS> DESC");
+    sb.append(", child.<PROP.ID>");
     sb.append(" SKIP $offset");
     sb.append(" LIMIT $limit");
     return sb.toString();

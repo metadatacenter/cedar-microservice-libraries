@@ -1,7 +1,10 @@
 package org.metadatacenter.cedar.util.dw;
 
 import com.codahale.metrics.annotation.Timed;
+import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.exception.CedarException;
+import org.metadatacenter.rest.context.CedarRequestContext;
+import org.metadatacenter.server.security.model.auth.CedarPermission;
 
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -14,11 +17,30 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.metadatacenter.rest.assertion.GenericAssertions.LoggedIn;
+
+/**
+ * What the JVM is doing right now: memory, threads, garbage collection.
+ *
+ * <p>Every endpoint here is gated on {@code MONITOR_READ}, which only the {@code monitorManager} role
+ * carries. It reads as diagnostic rather than sensitive, but {@code /thread-details} returns a stack
+ * trace for every live thread — around half a megabyte naming internal classes, methods and line
+ * numbers — and it served that to anyone who asked, on the application connector, which nginx proxies
+ * to the public host. Being on the diagnostic side of a service is not the same as being unreachable.
+ */
 @Path("/insight")
 @Produces(MediaType.APPLICATION_JSON)
-public class CedarServerInsightReportResource {
+public class CedarServerInsightReportResource extends CedarMicroserviceResource {
 
-  public CedarServerInsightReportResource() {
+  public CedarServerInsightReportResource(CedarConfig cedarConfig) {
+    super(cedarConfig);
+  }
+
+  /** Logged in and holding MONITOR_READ, which is what every endpoint below requires. */
+  private void mustBeAllowedToReadTheServer() throws CedarException {
+    CedarRequestContext c = buildRequestContext();
+    c.must(c.user()).be(LoggedIn);
+    c.must(c.user()).have(CedarPermission.MONITOR_READ);
   }
 
   private void addMemory(Map<String, Object> r) {
@@ -65,8 +87,11 @@ public class CedarServerInsightReportResource {
 
   private void addThreadDetails(Map<String, Object> r) {
     ThreadInfo[] threadInfos = ManagementFactory.getThreadMXBean().dumpAllThreads(true, true);
-    Map<String, Object> threadInfo = new LinkedHashMap<>();
     for (ThreadInfo ti : threadInfos) {
+      // Per thread. One map hoisted out of this loop was stored under every thread name, so each
+      // iteration overwrote what the previous key pointed at and the report described every thread as
+      // a copy of the last one.
+      Map<String, Object> threadInfo = new LinkedHashMap<>();
       threadInfo.put("id", ti.getThreadId());
       threadInfo.put("name", ti.getThreadName());
       threadInfo.put("state", ti.getThreadState());
@@ -74,7 +99,6 @@ public class CedarServerInsightReportResource {
       threadInfo.put("is-daemon", ti.isDaemon());
       threadInfo.put("is-in-native", ti.isInNative());
       threadInfo.put("is-suspended", ti.isSuspended());
-      threadInfo.put("is-daemon", ti.isDaemon());
 
       Map<String, Object> li = null;
       LockInfo lockInfo = ti.getLockInfo();
@@ -116,6 +140,7 @@ public class CedarServerInsightReportResource {
   @Timed
   @Path("/memory")
   public Response memory() throws CedarException {
+    mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();
     addMemory(r);
     return Response.ok().entity(r).build();
@@ -125,6 +150,7 @@ public class CedarServerInsightReportResource {
   @Timed
   @Path("/system")
   public Response system() throws CedarException {
+    mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();
     addSystem(r);
     return Response.ok().entity(r).build();
@@ -134,6 +160,7 @@ public class CedarServerInsightReportResource {
   @Timed
   @Path("/threads")
   public Response threads() throws CedarException {
+    mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();
     addThreads(r);
     return Response.ok().entity(r).build();
@@ -143,6 +170,7 @@ public class CedarServerInsightReportResource {
   @Timed
   @Path("/gc")
   public Response gc() throws CedarException {
+    mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();
     addGc(r);
     return Response.ok().entity(r).build();
@@ -152,6 +180,7 @@ public class CedarServerInsightReportResource {
   @Timed
   @Path("/thread-details")
   public Response threadDetails() throws CedarException {
+    mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();
     addThreadDetails(r);
     return Response.ok().entity(r).build();
@@ -161,6 +190,7 @@ public class CedarServerInsightReportResource {
   @Timed
   @Path("/full")
   public Response full() throws CedarException {
+    mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();
     addMemory(r);
     addSystem(r);

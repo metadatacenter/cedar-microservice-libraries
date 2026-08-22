@@ -17,9 +17,9 @@ public class JsonMergePatchAssertion implements CedarAssertion {
     if (!(target instanceof CedarRequestNoun cedarRequestNoun)) {
       return new CedarAssertionResult("Only instances of CedarRequestNoun can be checked with this assertion");
     }
-    String contentType;
-    contentType = cedarRequestNoun.getContentType();
-    if (CONTENT_TYPE_APPLICATION_MERGE_PATCH_JSON.equals(contentType)) {
+    String contentType = cedarRequestNoun.getContentType();
+    String mediaType = contentType == null ? null : contentType.split(";", 2)[0].trim();
+    if (CONTENT_TYPE_APPLICATION_MERGE_PATCH_JSON.equalsIgnoreCase(mediaType)) {
       return null;
     }
     return new CedarAssertionResult("You need to provide a request with '" + CONTENT_TYPE_APPLICATION_MERGE_PATCH_JSON +

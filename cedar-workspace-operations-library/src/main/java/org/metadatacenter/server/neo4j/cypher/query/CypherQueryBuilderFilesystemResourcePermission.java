@@ -94,12 +94,17 @@ public class CypherQueryBuilderFilesystemResourcePermission extends AbstractCyph
   }
 
   private static String getUserIdsWithTransitivePermissionOnFilesystemResource(RelationLabel relationLabel) {
+    // The owner traversal and the grant traversal must bind DISTINCT node variables. If both
+    // OPTIONAL MATCHes bind the same `user`, the second reuses the binding the first produced, so a
+    // grantee who is not also an owner is silently dropped. This is the materialized user list that
+    // feeds the search index, so the effect was that a shared artifact never carried its grantee's
+    // key and a name search could not find it. Collect each set on its own and union them.
     return """
         MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})
-        OPTIONAL MATCH p1 = (resource)<-[:CONTAINS*0..]-()<-[:OWNS]-(user:User)
-        OPTIONAL MATCH p2 = (resource)<-[:CONTAINS*0..]-()<-[:%s]-()<-[:MEMBEROF*0..1]-(user:User)
-        WITH user, p1, p2
-        WHERE p1 IS NOT NULL OR p2 IS NOT NULL
+        OPTIONAL MATCH (resource)<-[:CONTAINS*0..]-()<-[:OWNS]-(owner:User)
+        OPTIONAL MATCH (resource)<-[:CONTAINS*0..]-()<-[:%s]-()<-[:MEMBEROF*0..1]-(grantee:User)
+        WITH collect(DISTINCT owner) + collect(DISTINCT grantee) AS users
+        UNWIND users AS user
         RETURN DISTINCT user.<PROP.ID>
         """.formatted(relationLabel);
   }

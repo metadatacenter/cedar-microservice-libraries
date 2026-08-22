@@ -196,7 +196,7 @@ public class NodeSearchingService extends AbstractSearchingService {
     req.setPublicationStatus(publicationStatus);
     req.setCategoryId(categoryId);
     CedarCategoryId cid = CedarCategoryId.build(categoryId);
-    CategoryServiceSession categorySession = CedarDataServices.getCategoryServiceSession(rctx);
+    CategoryServiceSession categorySession = CedarDataServices.getInstance().getCategoryServiceSession(rctx);
     FolderServerCategory category = categorySession.getCategoryById(cid);
     if (category != null) {
       response.setCategoryName(category.getName());

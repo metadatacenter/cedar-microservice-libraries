@@ -69,9 +69,9 @@ public class NodeIndexingService extends AbstractIndexingService {
 
     IndexingDocumentDocument ir = new IndexingDocumentDocument(node.getId());
     // Set node's path info
-    FolderServiceSession folderSession = CedarDataServices.getFolderServiceSession(requestContext);
+    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(requestContext);
     node.setPathInfo(PathInfoBuilder.getResourcePathExtract(requestContext, folderSession,
-        CedarDataServices.getResourcePermissionServiceSession(requestContext), node));
+        CedarDataServices.getInstance().getResourcePermissionServiceSession(requestContext), node));
     ir.setInfo(FolderServerNodeInfo.fromNode(node));
     ir.setMaterializedPermissions(permissions);
     ir.setMaterializedCategories(categories);
@@ -133,10 +133,10 @@ public class NodeIndexingService extends AbstractIndexingService {
   public IndexedDocumentId indexDocument(FileSystemResource resource, CedarRequestContext requestContext) throws CedarProcessingException {
     log.debug("Indexing resource (id = " + resource.getId() + ")");
     ResourcePermissionServiceSession permissionSession =
-        CedarDataServices.getResourcePermissionServiceSession(requestContext);
+        CedarDataServices.getInstance().getResourcePermissionServiceSession(requestContext);
     CedarNodeMaterializedPermissions permissions =
         permissionSession.getResourceMaterializedPermission(resource.getResourceId());
-    CategoryServiceSession categorySession = CedarDataServices.getCategoryServiceSession(requestContext);
+    CategoryServiceSession categorySession = CedarDataServices.getInstance().getCategoryServiceSession(requestContext);
     CedarNodeMaterializedCategories categories = new CedarNodeMaterializedCategories(resource.getId());
     if (resource.getType() != CedarResourceType.FOLDER) {
       categories = categorySession.getArtifactMaterializedCategories(CedarArtifactId.build(resource.getId(),
@@ -148,14 +148,20 @@ public class NodeIndexingService extends AbstractIndexingService {
   public IndexedDocumentId indexDocument(FileSystemResource resource, CedarNodeMaterializedPermissions permissions,
                                          CedarNodeMaterializedCategories categories, CedarRequestContext requestContext,
                                          boolean isIndexRegenerationTask) throws CedarProcessingException {
+    // A caller that could not find the resource has nothing to index. Say so, rather than
+    // dereferencing null several frames deeper and reporting it as a NullPointerException.
+    if (resource == null) {
+      throw new CedarProcessingException("Unable to index a resource that does not exist");
+    }
     log.debug("Indexing resource (id = " + resource.getId() + ")");
     IndexingDocumentDocument ir = createIndexDocument(resource, permissions, categories, requestContext,
         isIndexRegenerationTask);
     JsonNode jsonResource = JsonMapper.MAPPER.convertValue(ir, JsonNode.class);
-    return indexWorker.addToIndex(jsonResource);
+    // Index under the CEDAR id, so re-indexing replaces the resource's document in place
+    return indexWorker.addToIndex(jsonResource, resource.getId());
   }
 
-  public void indexBatch(List<IndexingDocumentDocument> currentBatch) {
+  public void indexBatch(List<IndexingDocumentDocument> currentBatch) throws CedarProcessingException {
     indexWorker.addBatch(currentBatch);
   }
 

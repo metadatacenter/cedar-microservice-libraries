@@ -36,15 +36,20 @@ import org.slf4j.LoggerFactory;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterRegistration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.eclipse.jetty.servlets.CrossOriginFilter.*;
 
 public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceConfiguration> extends Application<T> {
 
   private static final Logger log = LoggerFactory.getLogger(CedarMicroserviceApplication.class);
+  static final String CORS_ALLOWED_ORIGINS_ENV = "CEDAR_CORS_ALLOWED_ORIGINS";
+  static final String DEFAULT_CORS_ALLOWED_ORIGINS = "*";
   private static final List<String> HTTP_HEADERS;
   private static final List<String> HTTP_METHODS;
 
@@ -110,7 +115,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     //Initialize user service
     CedarDataServices.initializeNeo4jServices(cedarConfig);
-    userService = CedarDataServices.getNeoUserService();
+    userService = CedarDataServices.getInstance().getNeoUserService();
 
     //Initialize Keycloak
     KeycloakDeploymentProvider keycloakDeploymentProvider = new KeycloakDeploymentProvider();
@@ -119,7 +124,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     // verify a bearer token's signature instead of trusting its payload.
     IAuthorizationResolver authResolver = new AuthorizationKeycloakAndApiKeyResolver(keycloakDeployment);
     Authorization.setAuthorizationResolver(authResolver);
-    Authorization.setUserService(CedarDataServices.getNeoUserService());
+    Authorization.setUserService(CedarDataServices.getInstance().getNeoUserService());
 
     appLoggerQueueService = new AppLoggerQueueService(cedarConfig.getCacheConfig().getPersistent());
     AppLogger.initLoggerQueueService(appLoggerQueueService, SystemComponent.getFor(getServerName()));
@@ -129,9 +134,19 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     DefaultServerFactory serverFactory = (DefaultServerFactory) configuration.getServerFactory();
     ((HttpConnectorFactory) serverFactory.getApplicationConnectors().get(0)).setPort(getApplicationHttpPort(configuration));
-    ((HttpConnectorFactory) serverFactory.getAdminConnectors().get(0)).setPort(getApplicationAdminPort(configuration));
+    HttpConnectorFactory adminConnector = (HttpConnectorFactory) serverFactory.getAdminConnectors().get(0);
+    adminConnector.setPort(getApplicationAdminPort(configuration));
+    // The admin connector answers /metrics and /threads to anyone who reaches it — no credentials, a
+    // few hundred kilobytes each. Dropwizard binds every interface unless told otherwise, so it was
+    // reachable from the network rather than only from the host. Loopback is enough for everything
+    // that reads it: cedar-services.sh polls 127.0.0.1, and the container health check curls localhost
+    // from inside the container.
+    adminConnector.setBindHost("127.0.0.1");
     System.setProperty("STOP.PORT", String.valueOf(getServerStopPort(configuration)));
-    System.setProperty("STOP.KEY", "Stop:" + getServerName().getName() + ":Me");
+    // A stop key anyone can derive from the service name is not a key. Nothing drives this connector —
+    // cedar-services.sh stops a service by signalling its pid — so a value that exists only in this
+    // process is enough, and leaves no shutdown that can be triggered from outside it.
+    System.setProperty("STOP.KEY", UUID.randomUUID().toString());
 
     log.info("**************************************************************");
     log.info("********** Running CEDAR microservice " + getName());
@@ -142,7 +157,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     setupEnvironment(environment);
     runApp(configuration, environment);
 
-    environment.jersey().register(CedarServerInsightReportResource.class);
+    environment.jersey().register(new CedarServerInsightReportResource(cedarConfig));
     environment.jersey().register(RequestIdGeneratorFilter.class);
     environment.jersey().register(ResponseLoggerFilter.class);
     environment.jersey().register(new InstanceContextInjectionFeature(environment.jersey().getResourceConfig()));
@@ -194,7 +209,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     final FilterRegistration.Dynamic cors = environment.servlets().addFilter("CORS", CrossOriginFilter.class);
 
     // Configure CORS parameters
-    String httpOrigins = "*";
+    String httpOrigins = resolveCorsAllowedOrigins(System.getenv());
     String httpHeaders = String.join(",", HTTP_HEADERS);
     String httpMethods = String.join(",", HTTP_METHODS);
     log.info("Setting up CORS...");
@@ -206,6 +221,18 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     cors.setInitParameter(ALLOWED_METHODS_PARAM, httpMethods);
     // Add URL mapping
     cors.addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), true, "/*");
+  }
+
+  static String resolveCorsAllowedOrigins(Map<String, String> environment) {
+    String configuredOrigins = environment.get(CORS_ALLOWED_ORIGINS_ENV);
+    if (configuredOrigins == null || configuredOrigins.isBlank()) {
+      return DEFAULT_CORS_ALLOWED_ORIGINS;
+    }
+    String normalizedOrigins = Arrays.stream(configuredOrigins.split(","))
+        .map(String::trim)
+        .filter(origin -> !origin.isEmpty())
+        .collect(Collectors.joining(","));
+    return normalizedOrigins.isEmpty() ? DEFAULT_CORS_ALLOWED_ORIGINS : normalizedOrigins;
   }
 
   protected abstract void initializeApp();

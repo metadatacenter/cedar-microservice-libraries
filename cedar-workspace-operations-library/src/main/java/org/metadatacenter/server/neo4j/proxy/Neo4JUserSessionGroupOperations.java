@@ -4,12 +4,15 @@ import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.RelationLabel;
+import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.security.model.auth.CedarGroupUser;
 import org.metadatacenter.server.security.model.auth.CedarGroupUsers;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionGroupPermissionPair;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUserPermissionPair;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public final class Neo4JUserSessionGroupOperations {
@@ -21,8 +24,14 @@ public final class Neo4JUserSessionGroupOperations {
   private Neo4JUserSessionGroupOperations() {
   }
 
-  static void updateGroupUsers(Neo4JProxyGroup neo4JProxy, CedarGroupId groupId, CedarGroupUsers currentGroupUsers, CedarGroupUsers newGroupUsers,
-                               RelationLabel relation, Filter filter) {
+  /**
+   * The queries that carry one relation of a group's membership from its current state to the
+   * requested one. Returning them rather than running them lets the caller commit the administrator
+   * and member changes together, in a single transaction.
+   */
+  static List<CypherQuery> collectGroupUserChanges(Neo4JProxyGroup neo4JProxy, CedarGroupId groupId,
+                                                   CedarGroupUsers currentGroupUsers, CedarGroupUsers newGroupUsers,
+                                                   RelationLabel relation, Filter filter) {
     Set<CedarUserId> oldUsers = new HashSet<>();
     for (CedarGroupUser gu : currentGroupUsers.getUsers()) {
       if ((filter == Filter.ADMINISTRATOR && gu.isAdministrator()) || (filter == Filter.MEMBER && gu.isMember())) {
@@ -36,29 +45,21 @@ public final class Neo4JUserSessionGroupOperations {
       }
     }
 
+    List<CypherQuery> changes = new ArrayList<>();
+
     Set<CedarUserId> toRemoveUsers = new HashSet<>(oldUsers);
     toRemoveUsers.removeAll(newUsers);
-    if (!toRemoveUsers.isEmpty()) {
-      removeGroupUsers(neo4JProxy, groupId, toRemoveUsers, relation);
+    for (CedarUserId cuid : toRemoveUsers) {
+      changes.add(neo4JProxy.removeUserGroupRelationQuery(cuid, groupId, relation));
     }
 
     Set<CedarUserId> toAddUsers = new HashSet<>(newUsers);
     toAddUsers.removeAll(oldUsers);
-    if (!toAddUsers.isEmpty()) {
-      addGroupUsers(neo4JProxy, groupId, toAddUsers, relation);
-    }
-  }
-
-  private static void addGroupUsers(Neo4JProxyGroup neo4JProxy, CedarGroupId groupURL, Set<CedarUserId> toAddUsers, RelationLabel relation) {
     for (CedarUserId cuid : toAddUsers) {
-      neo4JProxy.addUserGroupRelation(cuid, groupURL, relation);
+      changes.add(neo4JProxy.addUserGroupRelationQuery(cuid, groupId, relation));
     }
-  }
 
-  private static void removeGroupUsers(Neo4JProxyGroup neo4JProxy, CedarGroupId groupURL, Set<CedarUserId> toRemoveUsers, RelationLabel relation) {
-    for (CedarUserId cuid : toRemoveUsers) {
-      neo4JProxy.removeUserGroupRelation(cuid, groupURL, relation);
-    }
+    return changes;
   }
 
   static void addGroupPermissions(Neo4JProxyResourcePermission neo4JProxy, CedarFilesystemResourceId resourceId,

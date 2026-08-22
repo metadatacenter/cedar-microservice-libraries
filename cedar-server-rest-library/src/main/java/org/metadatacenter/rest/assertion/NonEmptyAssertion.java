@@ -36,7 +36,7 @@ public class NonEmptyAssertion implements CedarAssertion {
       }
       CedarRequestBody cedarRequestBody = (CedarRequestBody) target;
       JsonNode jsonNode = cedarRequestBody.asJson();
-      if (jsonNode.isNull() || jsonNode.isMissingNode() || !jsonNode.isObject()) {
+      if (jsonNode == null || jsonNode.isNull() || jsonNode.isMissingNode() || !jsonNode.isObject()) {
         return new CedarAssertionResult("You need to provide a non-null request body").badRequest();
       } else {
         return null;

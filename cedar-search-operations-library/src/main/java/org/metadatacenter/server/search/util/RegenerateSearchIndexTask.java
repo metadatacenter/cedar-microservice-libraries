@@ -58,8 +58,8 @@ public class RegenerateSearchIndexTask {
 
     boolean regenerate = true;
     try {
-      ResourcePermissionServiceSession permissionSession = CedarDataServices.getResourcePermissionServiceSession(requestContext);
-      CategoryServiceSession categorySession = CedarDataServices.getCategoryServiceSession(requestContext);
+      ResourcePermissionServiceSession permissionSession = CedarDataServices.getInstance().getResourcePermissionServiceSession(requestContext);
+      CategoryServiceSession categorySession = CedarDataServices.getInstance().getCategoryServiceSession(requestContext);
       // Get all resources
       log.info("Reading all resources from the existing search index.");
       List<FileSystemResource> resources = indexUtils.findAllResources(requestContext);
@@ -116,21 +116,20 @@ public class RegenerateSearchIndexTask {
               categories = categorySession.getArtifactMaterializedCategories((CedarArtifactId) node.getResourceId());
             }
             currentBatch.add(nodeIndexingService.createIndexDocument(node, perm, categories, requestContext, true));
-
-            if (count % 100 == 0) {
-              float progress = (float) (100 * count++) / resources.size();
-              log.info(String.format("Progress: %.0f%%", progress));
-            }
-            if (currentBatch.size() >= BATCH_SIZE) {
-              log.info(String.format("Batch progress: %d", batchCount));
-              nodeIndexingService.indexBatch(currentBatch);
-              currentBatch.clear();
-            }
-            count++;
-            batchCount++;
           } catch (Exception e) {
-            log.error("Error while indexing document: " + node.getId(), e);
+            throw new CedarProcessingException("Error while building index document: " + node.getId(), e);
           }
+          if (count % 100 == 0) {
+            float progress = (float) (100 * count) / resources.size();
+            log.info(String.format("Progress: %.0f%%", progress));
+          }
+          if (currentBatch.size() >= BATCH_SIZE) {
+            log.info(String.format("Batch progress: %d", batchCount));
+            nodeIndexingService.indexBatch(currentBatch);
+            currentBatch.clear();
+            batchCount++;
+          }
+          count++;
         }
 
         log.info(String.format("Batch progress remaining: %d", currentBatch.size()));
@@ -138,11 +137,9 @@ public class RegenerateSearchIndexTask {
           nodeIndexingService.indexBatch(currentBatch);
         }
 
-        // Point alias to new index
-        esManagementService.addAlias(newIndexName, aliasName);
-
-        // Delete any other index previously associated to the alias
-        indexUtils.deleteOldIndices(esManagementService, aliasName, newIndexName);
+        // Make all bulk-indexed documents searchable, verify that the rebuild is complete, atomically
+        // promote it, and only then remove the old concrete indices.
+        indexUtils.verifyAndPromoteIndex(esManagementService, aliasName, newIndexName, resources.size());
       } else {
         log.info(
             "After all the checks were performed, it seems that the index does not need to be regenerated this time.");
@@ -152,7 +149,9 @@ public class RegenerateSearchIndexTask {
       throw new CedarProcessingException(e);
     } finally {
       // Clear template nodes cache
-      nodeIndexingService.instanceContentExtractor.clearNodesCache();
+      if (nodeIndexingService != null) {
+        nodeIndexingService.instanceContentExtractor.clearNodesCache();
+      }
     }
   }
 

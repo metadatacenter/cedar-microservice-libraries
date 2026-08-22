@@ -43,7 +43,7 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
     return "" +
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE>)" +
         " RETURN resource" +
-        " ORDER BY " + getOrderByExpression("resource", sortList) +
+        " ORDER BY " + getOrderByExpression("resource", sortList) + ", resource.<PROP.ID>" +
         " SKIP $offset" +
         " LIMIT $limit";
   }
@@ -81,6 +81,7 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
     sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,");
     sb.append(getOrderByExpression("resource", sortList));
     sb.append(", resource.<PROP.VERSION> DESC");
+    sb.append(", resource.<PROP.ID>");
     sb.append(" SKIP $offset");
     sb.append(" LIMIT $limit");
     return sb.toString();

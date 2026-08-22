@@ -18,6 +18,8 @@ public class PagedQuery {
 
   public PagedQuery(PaginationConfig config) {
     this.config = config;
+    this.limitInput = Optional.empty();
+    this.offsetInput = Optional.empty();
   }
 
   public PagedQuery limit(Optional<Integer> limitInput) {

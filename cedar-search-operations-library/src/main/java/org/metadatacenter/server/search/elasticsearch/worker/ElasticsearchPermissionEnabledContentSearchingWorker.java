@@ -308,13 +308,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     if (fieldName.isEmpty()) { // Example: "colorectal carcinoma"
       return rewriteTermQuery(fieldName, inputQuery.toString());
     } else { // Example: disease:"colorectal carcinoma"
-      String[] phraseQueryTokens = inputQuery.toString().split(":");
-      if (phraseQueryTokens.length >= 2) {
-        String fieldValue = phraseQueryTokens[1];
-        return rewriteTermQuery(fieldName, fieldValue);
-      } else {
-        throw new IllegalArgumentException("Could not parse query");
-      }
+      return rewriteTermQuery(fieldName, inputQuery.toString(fieldName));
     }
   }
 
@@ -407,8 +401,8 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   }
 
   private String preprocessQuery(String query) throws CedarProcessingException {
-    query = encodeWildcards(query);
     query = encodeUrls(query);
+    query = encodeWildcards(query);
     query = escapeDoubleQuotesInFieldName(query);
     query = removeForwardSlashes(query);
     query = preprocessPossibleValuesQuery(query);
@@ -417,6 +411,30 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   }
 
   private String encodeWildcards(String query) {
+    StringBuilder processedQuery = new StringBuilder();
+    StringBuilder unquotedSegment = new StringBuilder();
+    boolean insideQuotes = false;
+    for (int i = 0; i < query.length(); i++) {
+      char current = query.charAt(i);
+      boolean unescapedQuote = current == '"' && (i == 0 || query.charAt(i - 1) != '\\');
+      if (unescapedQuote) {
+        if (!insideQuotes) {
+          processedQuery.append(encodeWildcardsInUnquotedSegment(unquotedSegment.toString()));
+          unquotedSegment.setLength(0);
+        }
+        processedQuery.append(current);
+        insideQuotes = !insideQuotes;
+      } else if (insideQuotes) {
+        processedQuery.append(current);
+      } else {
+        unquotedSegment.append(current);
+      }
+    }
+    processedQuery.append(encodeWildcardsInUnquotedSegment(unquotedSegment.toString()));
+    return processedQuery.toString();
+  }
+
+  private String encodeWildcardsInUnquotedSegment(String query) {
     String processedQuery = query;
 
     /**
@@ -459,7 +477,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   private String encodeUrls(String query) throws CedarProcessingException {
 
     final String URL_REGEX = "(((https?)://)" +
-        "(%[0-9A-Fa-f]{2}|[-()_.!~*';/?:@&=+$,A-Za-z0-9])+)" +
+        "(%[0-9A-Fa-f]{2}|[-()_.!~*';/?:@&=+$,#A-Za-z0-9])+)" +
         "([).!';/?:,][[:blank:]])?";
 
     Matcher matcher = Pattern.compile(URL_REGEX).matcher(query);
@@ -565,12 +583,15 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
         QueryBuilder userIdQuery = QueryBuilders.termQuery(USERS, CedarNodeMaterializedPermissions.getKey(user.getId(), permission));
         BoolQueryBuilder permissionQuery = QueryBuilders.boolQuery();
 
-        QueryBuilder everybodyReadQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION, NodeSharePermission.READ.getValue());
-        QueryBuilder everybodyWriteQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION, NodeSharePermission.WRITE.getValue());
-
         permissionQuery.should(userIdQuery);
-        permissionQuery.should(everybodyReadQuery);
-        permissionQuery.should(everybodyWriteQuery);
+        if (permission == FilesystemResourcePermission.READ) {
+          permissionQuery.should(QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION,
+              NodeSharePermission.READ.getValue()));
+        }
+        if (permission == FilesystemResourcePermission.READ || permission == FilesystemResourcePermission.WRITE) {
+          permissionQuery.should(QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION,
+              NodeSharePermission.WRITE.getValue()));
+        }
         mainQuery.must(permissionQuery);
       }
 

@@ -1,13 +1,17 @@
 package org.metadatacenter.server.neo4j.proxy;
 
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.error.CedarErrorKey;
+import org.metadatacenter.error.CedarErrorType;
 import org.metadatacenter.id.CedarGroupId;
+import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.RelationLabel;
 import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.GroupServiceSession;
 import org.metadatacenter.server.neo4j.AbstractNeo4JUserSession;
+import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarGroupUser;
@@ -83,10 +87,25 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
       CedarGroupUsers currentGroupUsers = findGroupUsers(groupId);
       CedarGroupUsers newGroupUsers = gurv.getUsers();
 
-      Neo4JUserSessionGroupOperations.updateGroupUsers(proxies.group(), groupId, currentGroupUsers, newGroupUsers,
-          RelationLabel.ADMINISTERS, Neo4JUserSessionGroupOperations.Filter.ADMINISTRATOR);
-      Neo4JUserSessionGroupOperations.updateGroupUsers(proxies.group(), groupId, currentGroupUsers, newGroupUsers,
-          RelationLabel.MEMBEROF, Neo4JUserSessionGroupOperations.Filter.MEMBER);
+      List<CypherQuery> changes = new ArrayList<>();
+      changes.addAll(Neo4JUserSessionGroupOperations.collectGroupUserChanges(proxies.group(), groupId,
+          currentGroupUsers, newGroupUsers, RelationLabel.ADMINISTERS,
+          Neo4JUserSessionGroupOperations.Filter.ADMINISTRATOR));
+      changes.addAll(Neo4JUserSessionGroupOperations.collectGroupUserChanges(proxies.group(), groupId,
+          currentGroupUsers, newGroupUsers, RelationLabel.MEMBEROF,
+          Neo4JUserSessionGroupOperations.Filter.MEMBER));
+
+      // A request describes one membership change, so the administrator and member relations commit
+      // together. Applied one statement at a time, a failure partway through left the group in a
+      // state the caller never asked for and could not see, since the error came back as a 500.
+      if (!proxies.group().applyUserGroupRelationChanges(changes)) {
+        BackendCallResult failure = new BackendCallResult();
+        failure.addError(CedarErrorType.SERVER_ERROR)
+            .errorKey(CedarErrorKey.GROUP_USERS_NOT_UPDATED)
+            .message("The group members could not be updated")
+            .parameter("groupId", groupId);
+        return failure;
+      }
 
       return new BackendCallResult();
     }
@@ -115,6 +134,15 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
       );
     }
     return ret;
+  }
+
+  /**
+   * Whether a user node exists for this id. GroupUsersRequestValidator needs it to refuse a
+   * membership request naming a user the graph does not hold: the relation queries match on id, so an
+   * unknown user would otherwise be skipped without a word and the request still reported as applied.
+   */
+  public boolean userExists(CedarUserId userId) {
+    return proxies.user().findUserById(userId) != null;
   }
 
   /**

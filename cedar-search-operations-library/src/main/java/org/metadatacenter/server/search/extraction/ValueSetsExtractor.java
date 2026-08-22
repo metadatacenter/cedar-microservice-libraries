@@ -118,11 +118,13 @@ public class ValueSetsExtractor
       if (superClassExpression.isAnonymous()) {
         String message = "Anonymous superclass " + superClassExpression + " found on ontology. Expecting named classes only";
         logger.error(message);
+        continue;
       }
 
       if (subClassExpression.isAnonymous()) {
         String message = "Anonymous subclass " + subClassExpression + " found on ontology. Expecting named classes only";
         logger.error(message);
+        continue;
       }
 
       OWLClass superClass = superClassExpression.asOWLClass();
