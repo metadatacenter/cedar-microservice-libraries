@@ -9,16 +9,11 @@ import org.apache.hc.core5.http.HttpStatus;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.constant.CedarQueryParameters;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.exception.CedarException;
-import org.metadatacenter.exception.CedarObjectNotFoundException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.*;
-import org.metadatacenter.model.BiboStatus;
 import org.metadatacenter.model.CedarResourceType;
-import org.metadatacenter.model.GraphDbObjectBuilder;
-import org.metadatacenter.model.ResourceVersion;
 import org.metadatacenter.model.folderserver.basic.*;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.rest.context.CedarRequestContext;
@@ -30,10 +25,7 @@ import org.metadatacenter.server.search.elasticsearch.service.NodeIndexingServic
 import org.metadatacenter.server.service.UserService;
 import org.metadatacenter.server.url.MicroserviceUrlUtil;
 import org.metadatacenter.server.valuerecommender.ValuerecommenderReindexQueueService;
-import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexMessage;
 import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexMessageActionType;
-import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexMessageResourceType;
-import org.metadatacenter.util.CedarResourceTypeUtil;
 import org.metadatacenter.util.ModelUtil;
 import org.metadatacenter.util.http.CedarUrlUtil;
 import org.metadatacenter.util.http.ProxyUtil;
@@ -41,7 +33,6 @@ import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
@@ -75,6 +66,16 @@ public class CloneInstancesExecutorService {
     linkedDataUtil = cedarRequestContext.getLinkedDataUtil();
   }
 
+  CloneInstancesExecutorService(FolderServiceSession folderSession,
+                                CedarRequestContext cedarRequestContext,
+                                MicroserviceUrlUtil microserviceUrlUtil,
+                                LinkedDataUtil linkedDataUtil) {
+    this.folderSession = folderSession;
+    this.cedarRequestContext = cedarRequestContext;
+    this.microserviceUrlUtil = microserviceUrlUtil;
+    this.linkedDataUtil = linkedDataUtil;
+  }
+
   public static void injectServices(NodeIndexingService nodeIndexingService,
                                     ValuerecommenderReindexQueueService valuerecommenderReindexQueueService) {
     CloneInstancesExecutorService.nodeIndexingService = nodeIndexingService;
@@ -82,16 +83,22 @@ public class CloneInstancesExecutorService {
   }
 
   // Main entry point
-  public void handleEvent(CloneInstancesQueueEvent event) {
+  public void handleEvent(CloneInstancesQueueEvent event) throws CedarException {
     cloneInstancesOfTemplate(CedarTemplateId.build(event.getOldId()), CedarTemplateId.build(event.getNewId()),
         event.getNewFolderName());
   }
 
-  private void cloneInstancesOfTemplate(CedarTemplateId oldTemplateId, CedarTemplateId newTemplateId,
-                                        String newFolderName) {
+  void cloneInstancesOfTemplate(CedarTemplateId oldTemplateId, CedarTemplateId newTemplateId,
+                                String newFolderName) throws CedarException {
+    List<String> failedInstanceIds = new ArrayList<>();
     long numberOfInstances = folderSession.getNumberOfInstances(oldTemplateId);
     if (numberOfInstances > 0) {
       List<FolderServerResourceExtract> instanceExtracts = findAllInstances(folderSession, oldTemplateId);
+
+      instanceExtracts.stream()
+          .filter(instance -> instance.getOwnedBy() == null || instance.getOwnedBy().isBlank())
+          .map(FolderServerResourceExtract::getId)
+          .forEach(failedInstanceIds::add);
 
       Map<String, List<FolderServerResourceExtract>> instancesByOwner = groupInstancesByOwner(instanceExtracts);
 
@@ -116,16 +123,26 @@ public class CloneInstancesExecutorService {
           for (FolderServerResourceExtract instanceExtract : entry.getValue()) {
             try {
               copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId.build(instanceExtract.getId()),
-                  oldTemplateId, newTemplateId,
+                  newTemplateId,
                   newTargetFolder.getResourceId(), ownerUser);
             } catch (CedarException e) {
               log.error("Error when cloning instance:" + instanceExtract.getId(), e);
+              failedInstanceIds.add(instanceExtract.getId());
             }
           }
         } else {
           log.error("User:" + ownerUser + " has no home folder");
+          entry.getValue().stream()
+              .map(FolderServerResourceExtract::getId)
+              .forEach(failedInstanceIds::add);
         }
       }
+    }
+    if (!failedInstanceIds.isEmpty()) {
+      throw new CedarProcessingException("Failed to clone instances: " + String.join(", ", failedInstanceIds))
+          .errorKey(CedarErrorKey.RESOURCE_NOT_CREATED)
+          .parameter("failedInstanceCount", failedInstanceIds.size())
+          .parameter("failedInstanceIds", failedInstanceIds);
     }
   }
 
@@ -159,11 +176,10 @@ public class CloneInstancesExecutorService {
   }
 
 
-  private Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId oldInstanceId,
-                                                       CedarTemplateId oldTemplateId,
-                                                       CedarTemplateId newTemplateId,
-                                                       CedarFolderId destinationFolderId,
-                                                       CedarUserId userId) throws CedarException {
+  protected Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId oldInstanceId,
+                                                         CedarTemplateId newTemplateId,
+                                                         CedarFolderId destinationFolderId,
+                                                         CedarUserId userId) throws CedarException {
     CedarRequestContext c = this.cedarRequestContext;
 
     FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(c);
@@ -193,7 +209,6 @@ public class CloneInstancesExecutorService {
 
     try {
       String url = microserviceUrlUtil.getArtifact().getResourceType(resourceType);
-      url += "?" + CedarQueryParameters.QP_SKIP_VALIDATION + "=true";
 
       ClassicHttpResponse templateProxyResponse = ProxyUtil.proxyPost(url, c, originalDocument);
 
@@ -211,7 +226,8 @@ public class CloneInstancesExecutorService {
         CedarArtifactId newInstanceId = CedarArtifactId.build(createdId, resourceType);
 
         FolderServerArtifact folderServerCreatedResource =
-            copyArtifactToFolderInGraphDb(c, oldInstanceId, newInstanceId, destinationFolderId, resourceType,
+            ArtifactCopyOperations.registerCopy(folderSession, oldInstanceId, newInstanceId,
+                destinationFolderId, resourceType,
                 ModelUtil.extractNameFromResource(resourceType, jsonNode).getValue(),
                 ModelUtil.extractDescriptionFromResource(resourceType, jsonNode).getValue(),
                 ModelUtil.extractIdentifierFromResource(resourceType, jsonNode).getValue(),
@@ -220,8 +236,9 @@ public class CloneInstancesExecutorService {
 
         if (templateProxyResponse.getEntity() != null) {
           // index the artifact that has been created
-          createIndexArtifact(folderServerCreatedResource, c);
-          createValuerecommenderResource(folderServerCreatedResource);
+          ArtifactCopyOperations.indexCreatedArtifact(nodeIndexingService, folderServerCreatedResource, c);
+          ArtifactCopyOperations.enqueueValuerecommenderUpdate(valuerecommenderReindexQueueService,
+              folderServerCreatedResource, ValuerecommenderReindexMessageActionType.CREATED);
           URI location = CedarUrlUtil.getLocationURI(templateProxyResponse);
           return Response.created(location).entity(templateProxyResponse.getEntity().getContent()).build();
         } else {
@@ -230,103 +247,6 @@ public class CloneInstancesExecutorService {
       }
     } catch (Exception e) {
       throw new CedarProcessingException(e);
-    }
-  }
-
-  //TODO: extract this, present in the CommandFileSystemResource as well
-  protected void createIndexArtifact(FolderServerArtifact folderServerArtifact, CedarRequestContext c) throws CedarProcessingException {
-    nodeIndexingService.indexDocument(folderServerArtifact, c);
-  }
-
-  //TODO: extract this, present in the CommandFileSystemResource as well
-  protected void createValuerecommenderResource(FolderServerArtifact folderServerArtifact) {
-    ValuerecommenderReindexMessage event = buildValuerecommenderEvent(folderServerArtifact,
-        ValuerecommenderReindexMessageActionType.CREATED);
-    if (event != null) {
-      valuerecommenderReindexQueueService.enqueueEvent(event);
-    }
-  }
-
-  //TODO: extract this, present in the CommandFileSystemResource as well
-  private ValuerecommenderReindexMessage buildValuerecommenderEvent(FolderServerArtifact folderServerResource,
-                                                                    ValuerecommenderReindexMessageActionType actionType) {
-    ValuerecommenderReindexMessage event = null;
-    if (folderServerResource.getType() == CedarResourceType.TEMPLATE) {
-      CedarTemplateId templateId = CedarTemplateId.build(folderServerResource.getId());
-      event = new ValuerecommenderReindexMessage(templateId, null,
-          ValuerecommenderReindexMessageResourceType.TEMPLATE, actionType);
-    } else if (folderServerResource.getType() == CedarResourceType.INSTANCE) {
-      FolderServerInstance instance = (FolderServerInstance) folderServerResource;
-      CedarTemplateInstanceId instanceId = CedarTemplateInstanceId.build(instance.getId());
-      event = new ValuerecommenderReindexMessage(instance.getIsBasedOn(), instanceId,
-          ValuerecommenderReindexMessageResourceType.INSTANCE,
-          actionType);
-    }
-    return event;
-  }
-
-
-  //TODO: extract this, present in the CommandFileSystemResource as well
-  private FolderServerArtifact copyArtifactToFolderInGraphDb(CedarRequestContext c, CedarArtifactId oldId,
-                                                             CedarArtifactId newId,
-                                                             CedarFolderId targetFolderId,
-                                                             CedarResourceType resourceType, String name,
-                                                             String description, String identifier,
-                                                             CedarTemplateId newTemplateId, CedarUserId userId) throws CedarException {
-
-    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(c);
-
-    if (CedarResourceTypeUtil.isNotValidForRestCall(resourceType)) {
-      throw new CedarProcessingException("You passed an illegal resourceType:'" + resourceType.getValue() +
-          "'. The allowed values are:" + CedarResourceTypeUtil.getValidResourceTypesForRestCalls()).badRequest()
-          .errorKey(CedarErrorKey.INVALID_RESOURCE_TYPE)
-          .parameter("invalidResourceTypes", resourceType.getValue())
-          .parameter("allowedResourceTypes", CedarResourceTypeUtil.getValidResourceTypeValuesForRestCalls());
-    }
-
-    ResourceVersion version = ResourceVersion.ZERO_ZERO_ONE;
-    BiboStatus publicationStatus = BiboStatus.DRAFT;
-
-    // check existence of parent folder
-    FolderServerArtifact newResource = null;
-    FolderServerFolder parentFolder = folderSession.findFolderById(targetFolderId);
-
-    if (parentFolder == null) {
-      throw new CedarObjectNotFoundException("The parent folder is not present!")
-          .parameter("targetFolderId", targetFolderId)
-          .errorKey(CedarErrorKey.PARENT_FOLDER_NOT_FOUND);
-    } else {
-      // Later we will guarantee some kind of uniqueness for the artifact names
-      // Currently we allow duplicate names, the id is the PK
-      FolderServerArtifact oldResource = folderSession.findArtifactById(oldId);
-      if (oldResource == null) {
-        throw new CedarObjectNotFoundException("The source artifact was not found!")
-            .parameter("@id", oldId)
-            .parameter("resourceType", resourceType.getValue())
-            .errorKey(CedarErrorKey.ARTIFACT_NOT_FOUND);
-      } else {
-        FolderServerArtifact brandNewResource = GraphDbObjectBuilder.forResourceType(resourceType, newId, name,
-            description, identifier, version, publicationStatus);
-        if (brandNewResource instanceof FolderServerSchemaArtifact schemaArtifact) {
-          schemaArtifact.setLatestVersion(true);
-          schemaArtifact.setLatestDraftVersion(publicationStatus == BiboStatus.DRAFT);
-          schemaArtifact.setLatestPublishedVersion(publicationStatus == BiboStatus.PUBLISHED);
-        }
-        if (resourceType == CedarResourceType.INSTANCE) {
-          ((FolderServerInstance) brandNewResource).setIsBasedOn(newTemplateId);
-        }
-        newResource = folderSession.createResourceAsChildOfId(brandNewResource, targetFolderId, userId);
-      }
-    }
-
-    if (newResource != null) {
-      folderSession.setDerivedFrom(newId, oldId);
-      return newResource;
-    } else {
-      throw new CedarProcessingException("The artifact was not created!")
-          .parameter("@id", oldId)
-          .parameter("targetFolderId", parentFolder)
-          .errorKey(CedarErrorKey.RESOURCE_NOT_CREATED);
     }
   }
 
