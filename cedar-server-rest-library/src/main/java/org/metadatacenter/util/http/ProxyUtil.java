@@ -32,6 +32,7 @@ public class ProxyUtil {
 
   private static final List<String> CEDAR_RESPONSE_HEADERS = Lists.newArrayList(
       HttpHeaders.CONTENT_TYPE,
+      HttpHeaders.ETAG,
       CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS,
       CustomHttpConstants.HEADER_CEDAR_VALIDATION_REPORT,
       HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS);
@@ -126,11 +127,17 @@ public class ProxyUtil {
   }
 
   public static ClassicHttpResponse proxyPut(String url, CedarRequestContext context, String content) throws CedarProcessingException {
+    return proxyPut(url, context, content, context.getIfMatchHeader());
+  }
+
+  public static ClassicHttpResponse proxyPut(String url, CedarRequestContext context, String content, String ifMatch)
+      throws CedarProcessingException {
     Request proxyRequest = Request.put(url)
         .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
         .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT))
         .bodyString(content, ContentType.APPLICATION_JSON);
     copyHeaders(proxyRequest, context);
+    copyHeader(proxyRequest, HttpHeaders.IF_MATCH, ifMatch);
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {

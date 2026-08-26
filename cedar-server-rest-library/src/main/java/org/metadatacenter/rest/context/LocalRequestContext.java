@@ -43,4 +43,9 @@ public class LocalRequestContext extends AbstractRequestContext {
     return null;
   }
 
+  @Override
+  public String getIfMatchHeader() {
+    return null;
+  }
+
 }

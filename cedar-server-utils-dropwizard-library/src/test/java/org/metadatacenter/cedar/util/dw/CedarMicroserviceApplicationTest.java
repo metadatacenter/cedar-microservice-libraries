@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CedarMicroserviceApplicationTest {
 
@@ -26,5 +27,10 @@ class CedarMicroserviceApplicationTest {
         CedarMicroserviceApplication.resolveCorsAllowedOrigins(Map.of(
             CedarMicroserviceApplication.CORS_ALLOWED_ORIGINS_ENV,
             " https://workspace.example.org, ,https://designer.example.org ")));
+  }
+
+  @Test
+  void exposesArtifactRevisionHeadersToBrowserClients() {
+    assertTrue(CedarMicroserviceApplication.HTTP_EXPOSED_HEADERS.contains("ETag"));
   }
 }

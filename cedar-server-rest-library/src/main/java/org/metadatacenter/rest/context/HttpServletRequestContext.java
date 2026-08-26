@@ -60,4 +60,9 @@ public class HttpServletRequestContext extends AbstractRequestContext {
   public String getSourceHashHeader() {
     return httpHeaders.getHeaderString(CedarHeaderParameters.SOURCE_HASH);
   }
+
+  @Override
+  public String getIfMatchHeader() {
+    return httpHeaders.getHeaderString(HttpHeaders.IF_MATCH);
+  }
 }

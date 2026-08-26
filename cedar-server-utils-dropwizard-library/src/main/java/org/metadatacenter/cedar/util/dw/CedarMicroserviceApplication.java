@@ -17,6 +17,7 @@ import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.ServerConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.constant.CedarHeaderParameters;
+import org.metadatacenter.constant.CustomHttpConstants;
 import org.metadatacenter.model.ServerName;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
@@ -35,6 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterRegistration;
+import jakarta.ws.rs.core.HttpHeaders;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -52,6 +54,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   static final String DEFAULT_CORS_ALLOWED_ORIGINS = "*";
   private static final List<String> HTTP_HEADERS;
   private static final List<String> HTTP_METHODS;
+  static final List<String> HTTP_EXPOSED_HEADERS;
 
   protected static CedarConfig cedarConfig;
   protected static UserService userService;
@@ -66,6 +69,12 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     HTTP_HEADERS.add("Referer");
     HTTP_HEADERS.add("User-Agent");
     HTTP_HEADERS.add("Authorization");
+    HTTP_HEADERS.add(HttpHeaders.IF_MATCH);
+
+    HTTP_EXPOSED_HEADERS = List.of(
+        HttpHeaders.ETAG,
+        CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS,
+        HttpHeaders.CONTENT_DISPOSITION);
     HTTP_HEADERS.add(CedarHeaderParameters.DEBUG);
     HTTP_HEADERS.add(CedarHeaderParameters.CLIENT_SESSION_ID);
 
@@ -212,13 +221,16 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     String httpOrigins = resolveCorsAllowedOrigins(System.getenv());
     String httpHeaders = String.join(",", HTTP_HEADERS);
     String httpMethods = String.join(",", HTTP_METHODS);
+    String httpExposedHeaders = String.join(",", HTTP_EXPOSED_HEADERS);
     log.info("Setting up CORS...");
     log.info(ALLOWED_ORIGINS_PARAM + ":" + httpOrigins);
     log.info(ALLOWED_HEADERS_PARAM + ":" + httpHeaders);
     log.info(ALLOWED_METHODS_PARAM + ":" + httpMethods);
+    log.info(EXPOSED_HEADERS_PARAM + ":" + httpExposedHeaders);
     cors.setInitParameter(ALLOWED_ORIGINS_PARAM, httpOrigins);
     cors.setInitParameter(ALLOWED_HEADERS_PARAM, httpHeaders);
     cors.setInitParameter(ALLOWED_METHODS_PARAM, httpMethods);
+    cors.setInitParameter(EXPOSED_HEADERS_PARAM, httpExposedHeaders);
     // Add URL mapping
     cors.addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), true, "/*");
   }

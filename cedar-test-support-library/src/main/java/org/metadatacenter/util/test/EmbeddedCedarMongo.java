@@ -28,8 +28,12 @@ import java.util.Map;
 public final class EmbeddedCedarMongo {
 
   private static final String DATABASE_NAME = "cedar";
+  private static final String DEFAULT_TEST_USER = "cedar-test";
+  private static final String DEFAULT_TEST_PASSWORD = "cedar-test-password";
 
   private static TransitionWalker.ReachedState<RunningMongodProcess> running;
+  private static String userName;
+  private static String password;
 
   private EmbeddedCedarMongo() {
   }
@@ -43,8 +47,8 @@ public final class EmbeddedCedarMongo {
       running = Mongod.instance().start(Version.Main.V5_0);
       ServerAddress address = running.current().getServerAddress();
 
-      String userName = CedarEnvironmentSource.get("CEDAR_MONGO_APP_USER_NAME");
-      String password = CedarEnvironmentSource.get("CEDAR_MONGO_APP_USER_PASSWORD");
+      userName = valueOrDefault(CedarEnvironmentSource.get("CEDAR_MONGO_APP_USER_NAME"), DEFAULT_TEST_USER);
+      password = valueOrDefault(CedarEnvironmentSource.get("CEDAR_MONGO_APP_USER_PASSWORD"), DEFAULT_TEST_PASSWORD);
       try (MongoClient client = MongoClients.create("mongodb://" + address.getHost() + ":" + address.getPort())) {
         client.getDatabase(DATABASE_NAME).runCommand(new Document("createUser", userName)
             .append("pwd", password)
@@ -57,8 +61,14 @@ public final class EmbeddedCedarMongo {
     Map<String, String> environment = new HashMap<>(CedarEnvironmentSource.getAll());
     environment.put("CEDAR_MONGO_HOST", address.getHost());
     environment.put("CEDAR_MONGO_PORT", String.valueOf(address.getPort()));
+    environment.put("CEDAR_MONGO_APP_USER_NAME", userName);
+    environment.put("CEDAR_MONGO_APP_USER_PASSWORD", password);
     environment.putAll(extraEnvironment);
     CedarEnvironmentSource.setOverride(environment);
+  }
+
+  private static String valueOrDefault(String value, String defaultValue) {
+    return value == null || value.isBlank() ? defaultValue : value;
   }
 
 }
