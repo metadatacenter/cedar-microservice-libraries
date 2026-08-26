@@ -16,6 +16,7 @@ import org.metadatacenter.constant.CustomHttpConstants;
 import org.metadatacenter.constant.HttpConnectionConstants;
 import org.metadatacenter.constant.HttpConstants;
 import org.metadatacenter.exception.CedarBadRequestException;
+import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.util.json.JsonMapper;
@@ -45,7 +46,7 @@ public class ProxyUtil {
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw dependencyUnavailable(e);
     }
   }
 
@@ -58,7 +59,7 @@ public class ProxyUtil {
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw dependencyUnavailable(e);
     }
   }
 
@@ -70,7 +71,7 @@ public class ProxyUtil {
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw dependencyUnavailable(e);
     }
   }
 
@@ -86,7 +87,7 @@ public class ProxyUtil {
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw dependencyUnavailable(e);
     }
   }
 
@@ -104,7 +105,7 @@ public class ProxyUtil {
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw dependencyUnavailable(e);
     }
   }
 
@@ -117,7 +118,7 @@ public class ProxyUtil {
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw dependencyUnavailable(e);
     }
   }
 
@@ -141,8 +142,15 @@ public class ProxyUtil {
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw dependencyUnavailable(e);
     }
+  }
+
+  private static CedarDependencyUnavailableException dependencyUnavailable(IOException cause) {
+    // Do not put the URL in the client-facing message: several callers carry identifiers or API
+    // credentials in their downstream path or query string. The cause remains available in the
+    // server log under the request's correlation id.
+    return new CedarDependencyUnavailableException("Downstream service is unavailable", cause);
   }
 
   public static void proxyResponseHeaders(ClassicHttpResponse proxyResponse, HttpServletResponse response) {
