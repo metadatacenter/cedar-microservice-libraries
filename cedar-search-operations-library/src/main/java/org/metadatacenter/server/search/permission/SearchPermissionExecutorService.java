@@ -39,15 +39,27 @@ public class SearchPermissionExecutorService {
   public SearchPermissionExecutorService(CedarConfig cedarConfig, IndexUtils indexUtils, NodeSearchingService nodeSearchingService,
                                          NodeIndexingService nodeIndexingService) {
     UserService userService = CedarDataServices.getInstance().getNeoUserService();
+    CedarRequestContext context = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
     this.nodeSearchingService = nodeSearchingService;
     this.nodeIndexingService = nodeIndexingService;
     this.indexUtils = indexUtils;
+    this.cedarRequestContext = context;
+    folderSession = CedarDataServices.getInstance().getFolderServiceSession(context);
+    permissionSession = CedarDataServices.getInstance().getResourcePermissionServiceSession(context);
+    categorySession = CedarDataServices.getInstance().getCategoryServiceSession(context);
+  }
 
-    this.cedarRequestContext = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
-
-    folderSession = CedarDataServices.getInstance().getFolderServiceSession(cedarRequestContext);
-    permissionSession = CedarDataServices.getInstance().getResourcePermissionServiceSession(cedarRequestContext);
-    categorySession = CedarDataServices.getInstance().getCategoryServiceSession(cedarRequestContext);
+  SearchPermissionExecutorService(IndexUtils indexUtils, NodeSearchingService nodeSearchingService,
+                                  NodeIndexingService nodeIndexingService, FolderServiceSession folderSession,
+                                  ResourcePermissionServiceSession permissionSession,
+                                  CategoryServiceSession categorySession, CedarRequestContext cedarRequestContext) {
+    this.indexUtils = indexUtils;
+    this.nodeSearchingService = nodeSearchingService;
+    this.nodeIndexingService = nodeIndexingService;
+    this.folderSession = folderSession;
+    this.permissionSession = permissionSession;
+    this.categorySession = categorySession;
+    this.cedarRequestContext = cedarRequestContext;
   }
 
   // Main entry point

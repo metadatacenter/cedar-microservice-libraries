@@ -5,6 +5,8 @@ import org.slf4j.Logger;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
+import java.util.Locale;
+
 public abstract class QueueService {
 
   public static final String SEARCH_PERMISSION_QUEUE_ID = "searchPermission";
@@ -39,6 +41,15 @@ public abstract class QueueService {
 
   public long getDroppedEventCount() {
     return droppedEventLogger.getCount();
+  }
+
+  public void verifyConnectivity() {
+    try (var jedis = pool.getResource()) {
+      String response = jedis.ping();
+      if (!"PONG".equals(response == null ? null : response.toUpperCase(Locale.ROOT))) {
+        throw new IllegalStateException("Redis ping returned " + response);
+      }
+    }
   }
 
   public abstract void close();

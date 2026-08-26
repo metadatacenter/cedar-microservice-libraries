@@ -21,12 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The blocking queue services against a real Redis: what a producer pushes is what a consumer pops,
- * in order, off the queue the configuration names.
+ * The blocking queue services against a real Redis: what a producer pushes is what a consumer
+ * claims, in order, from the queue the configuration names.
  * <p>
- * Every test has a timeout because the consumer side calls BLPOP with no deadline. A regression
- * that leaves the queue empty would otherwise hang the build rather than fail it, which is far
- * worse in CI than a red test.
+ * Every test has a timeout because a regression in the blocking claim must fail the build rather
+ * than leave CI waiting indefinitely.
  */
 @Timeout(30)
 class BlockingQueueServiceTest {
@@ -74,9 +73,9 @@ class BlockingQueueServiceTest {
     permissionQueue.initializeBlockingQueue();
     List<String> popped = permissionQueue.waitForMessages();
 
-    assertNotNull(popped, "BLPOP should return a message, not time out");
+    assertNotNull(popped, "BLMOVE should return a message, not time out");
     assertEquals(QueueTestConfig.queueName(QueueService.SEARCH_PERMISSION_QUEUE_ID), popped.get(0),
-        "BLPOP reports the queue it popped from as the first element");
+        "the compatibility result reports the claimed queue as the first element");
 
     SearchPermissionQueueEvent event = readEvent(popped.get(1));
     assertEquals("artifact-1", event.getId());
@@ -164,15 +163,18 @@ class BlockingQueueServiceTest {
   }
 
   /**
-   * A consumer pops a message before processing it, so a message it cannot handle is already off
-   * the queue when it fails. The dead-letter queue is what keeps that message rather than losing
-   * it, and it has to be a queue the consumer does not itself drain.
+   * A consumer claims a message into a processing list before handling it. The dead-letter queue
+   * keeps a poison message available for inspection without returning it to the queue the consumer
+   * drains.
    */
   @Test
   void aMessageThatCannotBeHandledIsKeptOnTheDeadLetterQueue() {
+    permissionQueue.enqueueEvent(
+        new SearchPermissionQueueEvent("artifact-1", SearchPermissionQueueEventType.RESOURCE_MOVED));
     permissionQueue.initializeBlockingQueue();
+    String rawMessage = permissionQueue.waitForMessages().get(1);
 
-    assertTrue(permissionQueue.deadLetter("{\"id\":\"artifact-1\"}"), "the message should be parked");
+    assertTrue(permissionQueue.deadLetter(rawMessage), "the message should be parked");
 
     assertEquals(1, permissionQueue.deadLetterCount(), "the dead-letter queue holds the message");
     assertEquals(0, permissionQueue.messageCount(),
@@ -181,15 +183,22 @@ class BlockingQueueServiceTest {
 
   @Test
   void deadLetteredMessagesAccumulateInOrderSoTheyCanBeReplayed() {
+    permissionQueue.enqueueEvent(
+        new SearchPermissionQueueEvent("first", SearchPermissionQueueEventType.RESOURCE_MOVED));
+    permissionQueue.enqueueEvent(
+        new SearchPermissionQueueEvent("second", SearchPermissionQueueEventType.RESOURCE_MOVED));
     permissionQueue.initializeBlockingQueue();
 
-    permissionQueue.deadLetter("first");
-    permissionQueue.deadLetter("second");
+    String first = permissionQueue.waitForMessages().get(1);
+    String second = permissionQueue.waitForMessages().get(1);
+    permissionQueue.deadLetter(first);
+    permissionQueue.deadLetter(second);
 
     assertEquals(2, permissionQueue.deadLetterCount());
     try (Jedis jedis = new Jedis("127.0.0.1", redis.port())) {
-      assertEquals(List.of("first", "second"),
-          jedis.lrange(permissionQueue.getDeadLetterQueueName(), 0, -1));
+      assertEquals(List.of("first", "second"), jedis.lrange(
+              permissionQueue.getDeadLetterQueueName(), 0, -1).stream().map(BlockingQueueServiceTest::readEvent)
+          .map(SearchPermissionQueueEvent::getId).toList());
     }
   }
 
@@ -205,6 +214,33 @@ class BlockingQueueServiceTest {
 
     assertFalse(permissionQueue.deadLetter(null));
     assertEquals(0, permissionQueue.deadLetterCount());
+  }
+
+  @Test
+  void anUnacknowledgedClaimIsRecoveredAheadOfNewerMessages() {
+    permissionQueue.enqueueEvent(
+        new SearchPermissionQueueEvent("first", SearchPermissionQueueEventType.RESOURCE_MOVED));
+    permissionQueue.initializeBlockingQueue();
+    assertEquals("first", readEvent(permissionQueue.waitForMessages().get(1)).getId());
+
+    permissionQueue.enqueueEvent(
+        new SearchPermissionQueueEvent("second", SearchPermissionQueueEventType.RESOURCE_MOVED));
+    permissionQueue.initializeBlockingQueue();
+
+    assertEquals("first", readEvent(permissionQueue.waitForMessages().get(1)).getId());
+    assertEquals("second", readEvent(permissionQueue.waitForMessages().get(1)).getId());
+  }
+
+  @Test
+  void acknowledgingAClaimRemovesItFromTheProcessingQueue() {
+    permissionQueue.enqueueEvent(
+        new SearchPermissionQueueEvent("done", SearchPermissionQueueEventType.RESOURCE_MOVED));
+    permissionQueue.initializeBlockingQueue();
+    String rawMessage = permissionQueue.waitForMessages().get(1);
+
+    assertEquals(1, permissionQueue.inFlightCount());
+    assertTrue(permissionQueue.acknowledge(rawMessage));
+    assertEquals(0, permissionQueue.inFlightCount());
   }
 
   private static SearchPermissionQueueEvent readEvent(String json) {

@@ -4,6 +4,7 @@ import org.metadatacenter.config.CacheServerPersistent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.args.ListDirection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,11 +12,17 @@ import java.util.List;
 public abstract class QueueServiceWithNonBlockingQueue extends QueueService {
 
   private static final Logger log = LoggerFactory.getLogger(QueueServiceWithNonBlockingQueue.class);
+  private static final String DEAD_LETTER_SUFFIX = "-dead-letter";
+  private static final String PROCESSING_SUFFIX = "-processing";
+  private static final String DEAD_LETTER_SCRIPT = "local removed = redis.call('LREM', KEYS[1], 1, ARGV[1]); "
+      + "if removed == 1 then redis.call('RPUSH', KEYS[2], ARGV[1]); end; return removed";
   protected String queueName;
+  protected String processingQueueName;
 
   public QueueServiceWithNonBlockingQueue(CacheServerPersistent cacheConfig, String queueId) {
     super(cacheConfig);
     queueName = cacheConfig.getQueueName(queueId);
+    processingQueueName = queueName + PROCESSING_SUFFIX;
   }
 
   @Override
@@ -29,20 +36,71 @@ public abstract class QueueServiceWithNonBlockingQueue extends QueueService {
   // service: an unreachable queue (Redis) then affects only the poll that hit it, instead of
   // breaking the service permanently - or, when acquired at startup, preventing boot altogether
 
-  public List<String> getAllMessages() {
+  public List<String> claimMessages(int maximumCount) {
+    if (maximumCount <= 0) {
+      throw new IllegalArgumentException("maximumCount must be positive");
+    }
     List<String> messages = new ArrayList<>();
     try (Jedis jedis = pool.getResource()) {
-      boolean doRead = true;
-      while (doRead) {
-        String message = jedis.lpop(queueName);
+      recoverInFlightMessages(jedis);
+      while (messages.size() < maximumCount) {
+        String message = jedis.lmove(queueName, processingQueueName,
+            ListDirection.LEFT, ListDirection.RIGHT);
         if (message != null) {
           messages.add(message);
         } else {
-          doRead = false;
+          break;
         }
       }
     }
     return messages;
+  }
+
+  public boolean acknowledge(String rawMessage) {
+    if (rawMessage == null) {
+      return false;
+    }
+    try (Jedis jedis = pool.getResource()) {
+      return jedis.lrem(processingQueueName, 1, rawMessage) == 1;
+    }
+  }
+
+  public String getDeadLetterQueueName() {
+    return queueName + DEAD_LETTER_SUFFIX;
+  }
+
+  public boolean deadLetter(String rawMessage) {
+    if (rawMessage == null) {
+      return false;
+    }
+    try (Jedis jedis = pool.getResource()) {
+      Object removed = jedis.eval(DEAD_LETTER_SCRIPT,
+          List.of(processingQueueName, getDeadLetterQueueName()), List.of(rawMessage));
+      return removed instanceof Long && ((Long) removed) == 1L;
+    } catch (Exception e) {
+      log.error("Could not move an unprocessable message from {} to {}; it remains in-flight for recovery",
+          processingQueueName, getDeadLetterQueueName(), e);
+      return false;
+    }
+  }
+
+  public long deadLetterCount() {
+    try (Jedis jedis = pool.getResource()) {
+      return jedis.llen(getDeadLetterQueueName());
+    }
+  }
+
+  public long inFlightCount() {
+    try (Jedis jedis = pool.getResource()) {
+      return jedis.llen(processingQueueName);
+    }
+  }
+
+  private void recoverInFlightMessages(Jedis jedis) {
+    while (jedis.lmove(processingQueueName, queueName,
+        ListDirection.RIGHT, ListDirection.LEFT) != null) {
+      // Atomic Redis move; see the blocking queue counterpart for ordering rationale.
+    }
   }
 
   @Override

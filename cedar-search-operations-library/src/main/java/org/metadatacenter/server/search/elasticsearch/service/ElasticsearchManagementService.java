@@ -80,6 +80,16 @@ public class ElasticsearchManagementService {
     }
   }
 
+  public void verifyConnectivity() throws CedarProcessingException {
+    try {
+      if (!getClient().ping(RequestOptions.DEFAULT)) {
+        throw new CedarProcessingException("OpenSearch ping returned false");
+      }
+    } catch (IOException | RuntimeException e) {
+      throw new CedarProcessingException("OpenSearch is unreachable", e);
+    }
+  }
+
   public void createSearchIndex(String indexName) throws CedarProcessingException {
     createIndex(indexName, searchIndexSettings, searchIndexMappings);
   }

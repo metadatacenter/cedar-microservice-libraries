@@ -69,6 +69,10 @@ public abstract class AbstractNeo4JProxy {
     }
   }
 
+  public void verifyConnectivity() {
+    driver.verifyConnectivity();
+  }
+
   private void reportQueryError(ClientException ex, CypherQuery q) {
     log.error("Error executing Cypher query:", ex);
     log.error(q.getOriginalQuery());

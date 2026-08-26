@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The non-blocking queue service against a real Redis. This side drains a whole batch per poll
+ * The non-blocking queue service against a real Redis. This side claims a bounded batch per poll
  * instead of waiting on a dequeue, and it borrows a connection per poll rather than holding one for
  * the life of the service - the property that keeps a Redis outage from breaking the consumer
  * permanently. Both are checked here.
@@ -71,26 +71,38 @@ class NonBlockingQueueServiceTest {
   }
 
   @Test
-  void aPollDrainsEverythingInTheOrderItWasQueued() {
+  void aPollClaimsOnlyTheBoundedBatchInQueueOrder() {
     queue.enqueue("one");
     queue.enqueue("two");
     queue.enqueue("three");
 
-    assertEquals(List.of("one", "two", "three"), queue.getAllMessages());
+    assertEquals(List.of("one", "two"), queue.claimMessages(2));
+    assertEquals(1, queue.messageCount());
+    assertEquals(2, queue.inFlightCount());
   }
 
   @Test
-  void aPollLeavesTheQueueEmpty() {
+  void anAcknowledgedMessageIsNotDeliveredAgain() {
     queue.enqueue("only");
 
-    assertEquals(List.of("only"), queue.getAllMessages());
-    assertEquals(0, queue.messageCount(), "a drained queue holds nothing");
-    assertEquals(List.of(), queue.getAllMessages(), "a second poll finds nothing left");
+    assertEquals(List.of("only"), queue.claimMessages(10));
+    assertTrue(queue.acknowledge("only"));
+    assertEquals(List.of(), queue.claimMessages(10));
+    assertEquals(0, queue.inFlightCount());
+  }
+
+  @Test
+  void anUnacknowledgedMessageIsRecoveredBeforeNewerWork() {
+    queue.enqueue("first");
+    assertEquals(List.of("first"), queue.claimMessages(10));
+    queue.enqueue("second");
+
+    assertEquals(List.of("first", "second"), queue.claimMessages(10));
   }
 
   @Test
   void anEmptyQueuePollsToAnEmptyListRatherThanBlocking() {
-    assertEquals(List.of(), queue.getAllMessages());
+    assertEquals(List.of(), queue.claimMessages(10));
   }
 
   @Test
@@ -100,7 +112,7 @@ class NonBlockingQueueServiceTest {
 
     assertEquals(2, queue.messageCount());
     assertEquals(2, queue.messageCount(), "counting must not consume");
-    assertEquals(2, queue.getAllMessages().size());
+    assertEquals(2, queue.claimMessages(10).size());
   }
 
   /**
@@ -113,10 +125,21 @@ class NonBlockingQueueServiceTest {
     for (int i = 0; i < 30; i++) {
       queue.enqueue("message-" + i);
       queue.messageCount();
-      queue.getAllMessages();
+      List<String> claimed = queue.claimMessages(10);
+      claimed.forEach(queue::acknowledge);
     }
 
     assertEquals(0, queue.pool.getNumActive(), "no connection may be left checked out between polls");
     assertTrue(queue.pool.getNumIdle() > 0, "the connections should be back in the pool, not discarded");
+  }
+
+  @Test
+  void anUnprocessableClaimCanBeMovedAtomicallyToDeadLetter() {
+    queue.enqueue("bad");
+    assertEquals(List.of("bad"), queue.claimMessages(10));
+
+    assertTrue(queue.deadLetter("bad"));
+    assertEquals(0, queue.inFlightCount());
+    assertEquals(1, queue.deadLetterCount());
   }
 }
