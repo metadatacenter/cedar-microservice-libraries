@@ -7,6 +7,7 @@ import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.join.ScoreMode;
 import org.metadatacenter.config.OpensearchConfig;
+import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
@@ -80,7 +81,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
       return result;
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
     }
   }
 
@@ -124,7 +125,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
       }
       return result;
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
     }
   }
 
@@ -572,7 +573,9 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     return query.substring(1, query.length() - 1);
   }
 
-  public long searchAccessibleResourceCountByUser(List<String> resourceTypes, FilesystemResourcePermission permission, CedarUser user) {
+  public long searchAccessibleResourceCountByUser(List<String> resourceTypes,
+                                                  FilesystemResourcePermission permission,
+                                                  CedarUser user) throws CedarProcessingException {
     try {
       SearchRequest searchRequest = new SearchRequest(indexName);
 
@@ -611,8 +614,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
       SearchHits hits = response.getHits();
       return hits.getTotalHits().value;
     } catch (IOException e) {
-      log.error("Error while searching accessible documents", e);
-      return 0;
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
     }
   }
 }

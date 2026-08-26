@@ -4,6 +4,7 @@ import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.config.TrustedFoldersConfig;
+import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarCategoryId;
 import org.metadatacenter.id.CedarGroupId;
@@ -91,7 +92,7 @@ public class NodeSearchingService extends AbstractSearchingService {
         }
       }
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
     }
     return null;
   }
@@ -125,6 +126,8 @@ public class NodeSearchingService extends AbstractSearchingService {
           sortList, limit, offset);
       return assembleResponse(rctx, searchResult, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
           absoluteUrl);
+    } catch (CedarDependencyUnavailableException e) {
+      throw e;
     } catch (Exception e) {
       throw new CedarProcessingException(e);
     }
@@ -135,6 +138,8 @@ public class NodeSearchingService extends AbstractSearchingService {
                                      List<String> sortList, int limit, int offset) throws CedarProcessingException {
     try {
       return permissionEnabledSearchWorker.search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset);
+    } catch (CedarDependencyUnavailableException e) {
+      throw e;
     } catch (Exception e) {
       throw new CedarProcessingException(e);
     }
@@ -148,6 +153,8 @@ public class NodeSearchingService extends AbstractSearchingService {
           categoryId, sortList, limit, offset);
       return assembleResponse(rctx, searchResult, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
           absoluteUrl);
+    } catch (CedarDependencyUnavailableException e) {
+      throw e;
     } catch (Exception e) {
       throw new CedarProcessingException(e);
     }
@@ -216,6 +223,8 @@ public class NodeSearchingService extends AbstractSearchingService {
   public long searchAccessibleResourceCountByUser(List<String> resourceTypes, FilesystemResourcePermission permission, CedarUser user) throws CedarProcessingException {
     try {
       return permissionEnabledSearchWorker.searchAccessibleResourceCountByUser(resourceTypes, permission, user);
+    } catch (CedarDependencyUnavailableException e) {
+      throw e;
     } catch (Exception e) {
       throw new CedarProcessingException(e);
     }
@@ -238,7 +247,7 @@ public class NodeSearchingService extends AbstractSearchingService {
       SearchHits hits = searchResponse.getHits();
       return hits.getTotalHits().value;
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
     }
   }
 
@@ -259,7 +268,7 @@ public class NodeSearchingService extends AbstractSearchingService {
       SearchHits hits = searchResponse.getHits();
       return hits.getTotalHits().value;
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
     }
   }
 
@@ -278,7 +287,7 @@ public class NodeSearchingService extends AbstractSearchingService {
       // Process the search hits
       return searchResponse.getHits().getTotalHits().value;
     } catch (IOException e) {
-      throw new CedarProcessingException(e);
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
     }
   }
 
