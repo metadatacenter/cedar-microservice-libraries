@@ -40,6 +40,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -218,19 +219,11 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     final FilterRegistration.Dynamic cors = environment.servlets().addFilter("CORS", CrossOriginFilter.class);
 
     // Configure CORS parameters
-    String httpOrigins = resolveCorsAllowedOrigins(System.getenv());
-    String httpHeaders = String.join(",", HTTP_HEADERS);
-    String httpMethods = String.join(",", HTTP_METHODS);
-    String httpExposedHeaders = String.join(",", HTTP_EXPOSED_HEADERS);
     log.info("Setting up CORS...");
-    log.info(ALLOWED_ORIGINS_PARAM + ":" + httpOrigins);
-    log.info(ALLOWED_HEADERS_PARAM + ":" + httpHeaders);
-    log.info(ALLOWED_METHODS_PARAM + ":" + httpMethods);
-    log.info(EXPOSED_HEADERS_PARAM + ":" + httpExposedHeaders);
-    cors.setInitParameter(ALLOWED_ORIGINS_PARAM, httpOrigins);
-    cors.setInitParameter(ALLOWED_HEADERS_PARAM, httpHeaders);
-    cors.setInitParameter(ALLOWED_METHODS_PARAM, httpMethods);
-    cors.setInitParameter(EXPOSED_HEADERS_PARAM, httpExposedHeaders);
+    corsInitParameters(System.getenv()).forEach((name, value) -> {
+      log.info(name + ":" + value);
+      cors.setInitParameter(name, value);
+    });
     // Add URL mapping
     cors.addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), true, "/*");
   }
@@ -245,6 +238,23 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
         .filter(origin -> !origin.isEmpty())
         .collect(Collectors.joining(","));
     return normalizedOrigins.isEmpty() ? DEFAULT_CORS_ALLOWED_ORIGINS : normalizedOrigins;
+  }
+
+  static Map<String, String> corsInitParameters(Map<String, String> environment) {
+    String allowedOrigins = resolveCorsAllowedOrigins(environment);
+    Map<String, String> parameters = new LinkedHashMap<>();
+    parameters.put(ALLOWED_ORIGINS_PARAM, allowedOrigins);
+    parameters.put(ALLOWED_HEADERS_PARAM, String.join(",", HTTP_HEADERS));
+    parameters.put(ALLOWED_METHODS_PARAM, String.join(",", HTTP_METHODS));
+    parameters.put(EXPOSED_HEADERS_PARAM, String.join(",", HTTP_EXPOSED_HEADERS));
+    parameters.put(ALLOW_CREDENTIALS_PARAM, Boolean.toString(corsAllowsCredentials(allowedOrigins)));
+    return parameters;
+  }
+
+  static boolean corsAllowsCredentials(String allowedOrigins) {
+    return Arrays.stream(allowedOrigins.split(","))
+        .map(String::trim)
+        .noneMatch(DEFAULT_CORS_ALLOWED_ORIGINS::equals);
   }
 
   protected abstract void initializeApp();
