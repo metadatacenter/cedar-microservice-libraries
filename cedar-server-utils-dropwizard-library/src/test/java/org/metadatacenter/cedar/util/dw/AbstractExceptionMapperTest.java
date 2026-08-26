@@ -1,5 +1,8 @@
 package org.metadatacenter.cedar.util.dw;
 
+import com.mongodb.MongoSocketOpenException;
+import com.mongodb.MongoTimeoutException;
+import com.mongodb.ServerAddress;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.error.CedarErrorPack;
 import org.metadatacenter.http.CedarResponseStatus;
@@ -43,5 +46,14 @@ class AbstractExceptionMapperTest {
     assertTrue(mapper.isNeo4jUnavailable(
         new IllegalStateException("wrapper", new SessionExpiredException("lost"))));
     assertFalse(mapper.isNeo4jUnavailable(new IllegalStateException("application defect")));
+  }
+
+  @Test
+  void recognizesDirectAndWrappedMongoOutages() {
+    assertTrue(mapper.isMongoUnavailable(new MongoTimeoutException("selection timed out")));
+    assertTrue(mapper.isMongoUnavailable(new IllegalStateException("wrapper",
+        new MongoSocketOpenException("connect failed", new ServerAddress("127.0.0.1", 1),
+            new IOException("refused")))));
+    assertFalse(mapper.isMongoUnavailable(new IllegalArgumentException("bad query")));
   }
 }

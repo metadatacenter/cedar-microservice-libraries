@@ -30,6 +30,9 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
     if (isNeo4jUnavailable(exception)) {
       return new CedarCedarExceptionMapper().toResponse(
           new CedarDependencyUnavailableException("Neo4j is unavailable", exception));
+    } else if (isMongoUnavailable(exception)) {
+      return new CedarCedarExceptionMapper().toResponse(
+          new CedarDependencyUnavailableException("MongoDB is unavailable", exception));
     } else if (exception instanceof BadRequestException) {
       return CedarResponse.badRequest().build();
     } else if (exception instanceof ForbiddenException) {

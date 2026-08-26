@@ -1,5 +1,11 @@
 package org.metadatacenter.cedar.util.dw;
 
+import com.mongodb.MongoConnectionPoolClearedException;
+import com.mongodb.MongoNodeIsRecoveringException;
+import com.mongodb.MongoNotPrimaryException;
+import com.mongodb.MongoServerUnavailableException;
+import com.mongodb.MongoSocketException;
+import com.mongodb.MongoTimeoutException;
 import org.metadatacenter.error.CedarErrorPack;
 import org.neo4j.driver.exceptions.ServiceUnavailableException;
 import org.neo4j.driver.exceptions.SessionExpiredException;
@@ -15,6 +21,30 @@ public abstract class AbstractExceptionMapper {
     Throwable current = throwable;
     while (current != null) {
       if (current instanceof ServiceUnavailableException || current instanceof SessionExpiredException) {
+        return true;
+      }
+      if (current == current.getCause()) {
+        return false;
+      }
+      current = current.getCause();
+    }
+    return false;
+  }
+
+  /**
+   * True for MongoDB connectivity and failover failures. Query, validation, authentication and
+   * application exceptions remain server errors; only failures which can recover when the store or
+   * its elected primary returns are classified as dependency outages.
+   */
+  protected boolean isMongoUnavailable(Throwable throwable) {
+    Throwable current = throwable;
+    while (current != null) {
+      if (current instanceof MongoTimeoutException
+          || current instanceof MongoSocketException
+          || current instanceof MongoServerUnavailableException
+          || current instanceof MongoConnectionPoolClearedException
+          || current instanceof MongoNodeIsRecoveringException
+          || current instanceof MongoNotPrimaryException) {
         return true;
       }
       if (current == current.getCause()) {
