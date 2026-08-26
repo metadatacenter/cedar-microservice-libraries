@@ -3,12 +3,16 @@ package org.metadatacenter.cedar.util.dw;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.error.CedarErrorPack;
 import org.metadatacenter.http.CedarResponseStatus;
+import org.neo4j.driver.exceptions.ServiceUnavailableException;
+import org.neo4j.driver.exceptions.SessionExpiredException;
 
 import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AbstractExceptionMapperTest {
 
@@ -31,5 +35,13 @@ class AbstractExceptionMapperTest {
 
     assertNotNull(original.getOriginalException(), "sanitizing the response must not erase log detail");
     assertNotNull(original.getSourceException(), "sanitizing the response must not erase log detail");
+  }
+
+  @Test
+  void recognizesDirectAndWrappedNeo4jOutages() {
+    assertTrue(mapper.isNeo4jUnavailable(new ServiceUnavailableException("down")));
+    assertTrue(mapper.isNeo4jUnavailable(
+        new IllegalStateException("wrapper", new SessionExpiredException("lost"))));
+    assertFalse(mapper.isNeo4jUnavailable(new IllegalStateException("application defect")));
   }
 }

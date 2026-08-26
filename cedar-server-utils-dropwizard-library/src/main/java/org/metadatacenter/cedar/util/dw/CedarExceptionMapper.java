@@ -1,6 +1,7 @@
 package org.metadatacenter.cedar.util.dw;
 
 import org.metadatacenter.error.CedarErrorPack;
+import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.server.logging.AppLogger;
 import org.metadatacenter.server.logging.filter.LoggingContext;
@@ -26,7 +27,10 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
   public Response toResponse(Exception exception) {
 
     log.warn(":CEM::", exception);
-    if (exception instanceof BadRequestException) {
+    if (isNeo4jUnavailable(exception)) {
+      return new CedarCedarExceptionMapper().toResponse(
+          new CedarDependencyUnavailableException("Neo4j is unavailable", exception));
+    } else if (exception instanceof BadRequestException) {
       return CedarResponse.badRequest().build();
     } else if (exception instanceof ForbiddenException) {
       return CedarResponse.forbidden().build();
