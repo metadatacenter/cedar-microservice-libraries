@@ -62,16 +62,14 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
     }
 
     CedarErrorPack errorPack = new CedarErrorPack();
-    if (!hideExceptionConditionally(errorPack)) {
-      errorPack.sourceException(exception);
-    }
+    errorPack.sourceException(exception);
 
     AppLogger.message(AppLogType.RESPONSE_EXCEPTION, AppLogSubType.START, globalRequestId, localRequestId)
         .param(AppLogParam.EXCEPTION, errorPack)
         .enqueue();
 
     return Response.status(CedarResponseStatus.INTERNAL_SERVER_ERROR.getStatusCode())
-        .entity(errorPack)
+        .entity(clientSafeCopy(errorPack))
         .type(MediaType.APPLICATION_JSON)
         .build();
   }
