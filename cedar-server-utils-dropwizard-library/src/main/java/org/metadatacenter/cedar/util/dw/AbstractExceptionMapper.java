@@ -10,6 +10,11 @@ import org.metadatacenter.error.CedarErrorPack;
 import org.neo4j.driver.exceptions.ServiceUnavailableException;
 import org.neo4j.driver.exceptions.SessionExpiredException;
 
+import java.sql.SQLException;
+import java.sql.SQLNonTransientConnectionException;
+import java.sql.SQLRecoverableException;
+import java.sql.SQLTransientConnectionException;
+
 public abstract class AbstractExceptionMapper {
 
   /**
@@ -45,6 +50,33 @@ public abstract class AbstractExceptionMapper {
           || current instanceof MongoConnectionPoolClearedException
           || current instanceof MongoNodeIsRecoveringException
           || current instanceof MongoNotPrimaryException) {
+        return true;
+      }
+      if (current == current.getCause()) {
+        return false;
+      }
+      current = current.getCause();
+    }
+    return false;
+  }
+
+  /**
+   * True for JDBC connection failures, including failures wrapped by Hibernate. SQLState class 08
+   * is reserved for connection exceptions; the standard connection exception subclasses also
+   * cover pool timeouts whose driver did not supply a SQLState. Query, constraint and transaction
+   * errors are deliberately not treated as dependency outages.
+   */
+  protected boolean isSqlUnavailable(Throwable throwable) {
+    Throwable current = throwable;
+    while (current != null) {
+      if (current instanceof SQLTransientConnectionException
+          || current instanceof SQLNonTransientConnectionException
+          || current instanceof SQLRecoverableException) {
+        return true;
+      }
+      if (current instanceof SQLException sqlException
+          && sqlException.getSQLState() != null
+          && sqlException.getSQLState().startsWith("08")) {
         return true;
       }
       if (current == current.getCause()) {

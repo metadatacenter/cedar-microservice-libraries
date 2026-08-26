@@ -10,6 +10,9 @@ import org.neo4j.driver.exceptions.ServiceUnavailableException;
 import org.neo4j.driver.exceptions.SessionExpiredException;
 
 import java.io.IOException;
+import java.sql.SQLException;
+import java.sql.SQLRecoverableException;
+import java.sql.SQLTransientConnectionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -55,5 +58,15 @@ class AbstractExceptionMapperTest {
         new MongoSocketOpenException("connect failed", new ServerAddress("127.0.0.1", 1),
             new IOException("refused")))));
     assertFalse(mapper.isMongoUnavailable(new IllegalArgumentException("bad query")));
+  }
+
+  @Test
+  void recognizesOnlySqlConnectionFailuresAsOutages() {
+    assertTrue(mapper.isSqlUnavailable(new SQLTransientConnectionException("pool timed out")));
+    assertTrue(mapper.isSqlUnavailable(
+        new IllegalStateException("Hibernate wrapper", new SQLRecoverableException("connection lost"))));
+    assertTrue(mapper.isSqlUnavailable(new SQLException("communications failure", "08S01")));
+    assertFalse(mapper.isSqlUnavailable(new SQLException("unique constraint", "23000")));
+    assertFalse(mapper.isSqlUnavailable(new IllegalArgumentException("bad query")));
   }
 }
