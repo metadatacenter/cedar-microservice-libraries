@@ -77,11 +77,6 @@
     </dependency>
 
     <dependency>
-      <groupId>org.opensearch.client</groupId>
-      <artifactId>opensearch-rest-high-level-client</artifactId>
-    </dependency>
-
-    <dependency>
       <groupId>commons-codec</groupId>
       <artifactId>commons-codec</artifactId>
     </dependency>
