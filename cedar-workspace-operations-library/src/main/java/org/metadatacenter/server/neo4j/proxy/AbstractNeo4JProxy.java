@@ -45,6 +45,11 @@ import java.util.function.Function;
 
 public abstract class AbstractNeo4JProxy {
 
+  // The shared outage override deliberately makes pool acquisition and retries fail quickly. A
+  // healthy embedded Bolt server can still need more than one second for its first handshake on a
+  // constrained CI runner, so connection establishment needs independent headroom.
+  static final long MIN_TEST_CONNECTION_TIMEOUT_MILLIS = 5_000;
+
   protected final Neo4JProxies proxies;
   protected final CedarConfig cedarConfig;
 
@@ -57,12 +62,16 @@ public abstract class AbstractNeo4JProxy {
     this.cedarConfig = cedarConfig;
     Config.ConfigBuilder driverConfig = Config.builder();
     CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> driverConfig
-        .withConnectionTimeout(timeout, TimeUnit.MILLISECONDS)
+        .withConnectionTimeout(testConnectionTimeoutMillis(timeout), TimeUnit.MILLISECONDS)
         .withConnectionAcquisitionTimeout(timeout, TimeUnit.MILLISECONDS)
         .withMaxTransactionRetryTime(timeout, TimeUnit.MILLISECONDS));
     driver = GraphDatabase.driver(proxies.config.getUri(),
         AuthTokens.basic(proxies.config.getUserName(), proxies.config.getUserPassword()),
         driverConfig.build());
+  }
+
+  static long testConnectionTimeoutMillis(long dependencyTimeoutMillis) {
+    return Math.max(dependencyTimeoutMillis, MIN_TEST_CONNECTION_TIMEOUT_MILLIS);
   }
 
   /**
