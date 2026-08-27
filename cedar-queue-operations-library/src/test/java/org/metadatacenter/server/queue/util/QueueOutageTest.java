@@ -9,6 +9,8 @@ import redis.clients.jedis.Jedis;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What happens to the producer side when Redis is not there.
@@ -33,6 +35,8 @@ class QueueOutageTest {
     try {
       assertDoesNotThrow(() -> queue.enqueueEvent(event("dropped-1")),
           "a queue outage must not propagate into the request that produced the event");
+      assertFalse(queue.enqueueEvent(event("dropped-2")),
+          "the durable producer needs an explicit signal that Redis did not accept the event");
     } finally {
       queue.close();
     }
@@ -58,7 +62,7 @@ class QueueOutageTest {
     try (EmbeddedRedis redis = EmbeddedRedis.start()) {
       PermissionQueueService queue = new PermissionQueueService(QueueTestConfig.onPort(redis.port()));
       try {
-        queue.enqueueEvent(event("delivered"));
+        assertTrue(queue.enqueueEvent(event("delivered")));
 
         assertEquals(0, queue.getDroppedEventCount());
         queue.initializeBlockingQueue();
