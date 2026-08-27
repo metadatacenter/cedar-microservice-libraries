@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.config.CedarTestRuntime;
 import org.metadatacenter.id.CedarResourceId;
 import org.metadatacenter.model.CedarResource;
 import org.metadatacenter.model.CedarResourceType;
@@ -39,6 +40,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 public abstract class AbstractNeo4JProxy {
@@ -53,7 +55,14 @@ public abstract class AbstractNeo4JProxy {
   protected AbstractNeo4JProxy(Neo4JProxies proxies, CedarConfig cedarConfig) {
     this.proxies = proxies;
     this.cedarConfig = cedarConfig;
-    driver = GraphDatabase.driver(proxies.config.getUri(), AuthTokens.basic(proxies.config.getUserName(), proxies.config.getUserPassword()));
+    Config.ConfigBuilder driverConfig = Config.builder();
+    CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> driverConfig
+        .withConnectionTimeout(timeout, TimeUnit.MILLISECONDS)
+        .withConnectionAcquisitionTimeout(timeout, TimeUnit.MILLISECONDS)
+        .withMaxTransactionRetryTime(timeout, TimeUnit.MILLISECONDS));
+    driver = GraphDatabase.driver(proxies.config.getUri(),
+        AuthTokens.basic(proxies.config.getUserName(), proxies.config.getUserPassword()),
+        driverConfig.build());
   }
 
   /**

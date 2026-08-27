@@ -29,10 +29,10 @@ public interface UserService extends IUserService {
    */
   BackendCallResult<CedarUser> addApiKey(CedarUserId userId, CedarUserApiKey newApiKey, int maxApiKeys);
 
-  BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyValue, String newKeyValue,
+  BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyId, String newKeyValue,
                                                 LocalDateTime newCreationDate);
 
-  BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyValue);
+  BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyId);
 
   List<CedarUser> findAll();
 

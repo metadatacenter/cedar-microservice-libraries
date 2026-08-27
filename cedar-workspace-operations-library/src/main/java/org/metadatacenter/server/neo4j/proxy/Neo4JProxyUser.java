@@ -165,10 +165,10 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
    * Replaces one key's value, leaving its description, service name and enabled flag as they are. The
    * key count does not change, so this always applies.
    */
-  public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyValue, String newKeyValue,
+  public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyId, String newKeyValue,
                                                        LocalDateTime newCreationDate) {
     return changeApiKeys(userId, "regenerating an API key", keys -> {
-      CedarUserApiKey target = find(keys, keyValue);
+      CedarUserApiKey target = findById(keys, keyId);
       if (target == null) {
         return notFound();
       }
@@ -182,9 +182,9 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
    * Removes an API key, refusing only when it is the user's last enabled one. A disabled key is not
    * the account's working key, so removing it cannot leave the account without one.
    */
-  public BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyValue) {
+  public BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyId) {
     return changeApiKeys(userId, "deleting an API key", keys -> {
-      CedarUserApiKey target = find(keys, keyValue);
+      CedarUserApiKey target = findById(keys, keyId);
       if (target == null) {
         return notFound();
       }
@@ -241,9 +241,9 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
     return outcome.into(result, userId);
   }
 
-  private static CedarUserApiKey find(List<CedarUserApiKey> keys, String keyValue) {
+  private static CedarUserApiKey findById(List<CedarUserApiKey> keys, String keyId) {
     for (CedarUserApiKey k : keys) {
-      if (k.getKey() != null && k.getKey().equals(keyValue)) {
+      if (k.getId() != null && k.getId().equals(keyId)) {
         return k;
       }
     }
@@ -255,7 +255,7 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
   }
 
   private static ApiKeyOutcome notFound() {
-    // The key value is a secret and is deliberately kept out of the message.
+    // Keep the supplied identifier out of the stable client-facing message.
     return ApiKeyOutcome.refused(CedarErrorType.NOT_FOUND, CedarErrorKey.INVALID_INPUT, "API key not found.");
   }
 
@@ -320,4 +320,3 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
     return executeReadGetLong(q);
   }
 }
-

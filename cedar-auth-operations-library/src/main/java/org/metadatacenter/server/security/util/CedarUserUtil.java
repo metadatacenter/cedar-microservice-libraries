@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class CedarUserUtil {
 
@@ -37,6 +38,7 @@ public class CedarUserUtil {
     LocalDateTime now = LocalDateTime.now();
     // create a default API Key
     CedarUserApiKey apiKeyObject = new CedarUserApiKey();
+    apiKeyObject.setId(UUID.randomUUID().toString());
     String adminUserName = cedarConfig.getAdminUserConfig().getUserName();
     String caDSRAdminUserName = cedarConfig.getCaDSRAdminUserConfig().getUserName();
     if (adminUserName.equals(username)) {

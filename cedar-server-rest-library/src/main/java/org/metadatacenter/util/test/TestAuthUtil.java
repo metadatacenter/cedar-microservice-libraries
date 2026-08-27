@@ -13,6 +13,7 @@ import org.metadatacenter.server.security.model.user.SortDirection;
 import org.metadatacenter.server.security.model.user.ViewMode;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Provides authenticated identities for integration tests without any live auth backend. The
@@ -108,6 +109,7 @@ public final class TestAuthUtil {
     user.setEmail(firstName.toLowerCase() + "@test.com");
 
     CedarUserApiKey apiKeyObject = new CedarUserApiKey();
+    apiKeyObject.setId(UUID.randomUUID().toString());
     apiKeyObject.setKey(apiKey);
     apiKeyObject.setServiceName("CEDAR");
     apiKeyObject.setDescription("apiKey for the integration test user");
