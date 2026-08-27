@@ -1,8 +1,11 @@
 package org.metadatacenter.server.search.permission;
 
 import org.junit.jupiter.api.Test;
+import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarUntypedFilesystemResourceId;
+import org.metadatacenter.model.CedarResourceType;
+import org.metadatacenter.model.folderserver.basic.FileSystemResource;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.CategoryServiceSession;
 import org.metadatacenter.server.FolderServiceSession;
@@ -15,13 +18,61 @@ import org.metadatacenter.server.search.util.IndexUtils;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SearchPermissionExecutorServiceTest {
+
+  @Test
+  void anIndexingFailureEscapesSoTheQueueCanRetryThePermissionEvent() throws Exception {
+    String resourceId = "https://repo.metadatacenter.orgx/templates/retry-me";
+    CedarUntypedFilesystemResourceId cedarResourceId = CedarUntypedFilesystemResourceId.build(resourceId);
+    NodeSearchingService searching = mock(NodeSearchingService.class);
+    NodeIndexingService indexing = mock(NodeIndexingService.class);
+    FolderServiceSession folders = mock(FolderServiceSession.class);
+    FileSystemResource resource = mock(FileSystemResource.class);
+    when(resource.getType()).thenReturn(CedarResourceType.TEMPLATE);
+    when(folders.findResourceById(cedarResourceId)).thenReturn(resource);
+    doThrow(new CedarProcessingException("OpenSearch is unavailable"))
+        .when(indexing).indexDocument(any(), any(), any(), any());
+
+    SearchPermissionExecutorService service = new SearchPermissionExecutorService(
+        mock(IndexUtils.class), searching, indexing, folders,
+        mock(ResourcePermissionServiceSession.class), mock(CategoryServiceSession.class),
+        mock(CedarRequestContext.class));
+
+    CedarProcessingException failure = assertThrows(CedarProcessingException.class,
+        () -> service.handleEvent(new SearchPermissionQueueEvent(
+            resourceId, SearchPermissionQueueEventType.RESOURCE_PERMISSION_CHANGED)));
+
+    assertEquals("OpenSearch is unavailable", failure.getMessage());
+    verify(indexing).removeDocumentFromIndex(cedarResourceId);
+  }
+
+  @Test
+  void anIndexLookupFailureEscapesSoADeletedGroupEventIsNotAcknowledged() throws Exception {
+    String groupId = "https://repo.metadatacenter.orgx/groups/retry-me";
+    NodeSearchingService searching = mock(NodeSearchingService.class);
+    when(searching.findAllCedarIdsForGroup(any(CedarGroupId.class)))
+        .thenThrow(new CedarProcessingException("OpenSearch is unavailable"));
+
+    SearchPermissionExecutorService service = new SearchPermissionExecutorService(
+        mock(IndexUtils.class), searching, mock(NodeIndexingService.class), mock(FolderServiceSession.class),
+        mock(ResourcePermissionServiceSession.class), mock(CategoryServiceSession.class),
+        mock(CedarRequestContext.class));
+
+    CedarProcessingException failure = assertThrows(CedarProcessingException.class,
+        () -> service.handleEvent(new SearchPermissionQueueEvent(
+            groupId, SearchPermissionQueueEventType.GROUP_DELETED)));
+
+    assertEquals("OpenSearch is unavailable", failure.getMessage());
+  }
 
   @Test
   void aDeletedGroupRemovesAnIndexedResourceThatNoLongerExistsInTheGraph() throws Exception {
