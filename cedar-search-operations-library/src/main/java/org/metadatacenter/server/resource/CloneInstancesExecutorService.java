@@ -91,6 +91,9 @@ public class CloneInstancesExecutorService {
   void cloneInstancesOfTemplate(CedarTemplateId oldTemplateId, CedarTemplateId newTemplateId,
                                 String newFolderName) throws CedarException {
     List<String> failedInstanceIds = new ArrayList<>();
+    // Cloning mutates as it goes, so once anything has been created a failure must not be retried:
+    // the queue processor would re-run the whole event and duplicate every copy that succeeded.
+    boolean mutated = false;
     long numberOfInstances = folderSession.getNumberOfInstances(oldTemplateId);
     if (numberOfInstances > 0) {
       List<FolderServerResourceExtract> instanceExtracts = findAllInstances(folderSession, oldTemplateId);
@@ -102,44 +105,60 @@ public class CloneInstancesExecutorService {
 
       Map<String, List<FolderServerResourceExtract>> instancesByOwner = groupInstancesByOwner(instanceExtracts);
 
-      for (Map.Entry<String, List<FolderServerResourceExtract>> entry : instancesByOwner.entrySet()) {
-        CedarUserId ownerUser = CedarUserId.build(entry.getKey());
-        FolderServerFolder homeFolder = folderSession.findHomeFolderOfUser(ownerUser);
-        if (homeFolder != null) {
-          FolderServerTemplate newTemplate = (FolderServerTemplate) folderSession.findResourceById(newTemplateId);
-          CedarFolderId newTargetFolderId = linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class);
-          FolderServerFolder newFolder = new FolderServerFolder();
+      try {
+        for (Map.Entry<String, List<FolderServerResourceExtract>> entry : instancesByOwner.entrySet()) {
+          CedarUserId ownerUser = CedarUserId.build(entry.getKey());
+          FolderServerFolder homeFolder = folderSession.findHomeFolderOfUser(ownerUser);
+          if (homeFolder != null) {
+            FolderServerTemplate newTemplate = (FolderServerTemplate) folderSession.findResourceById(newTemplateId);
+            CedarFolderId newTargetFolderId = linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class);
+            FolderServerFolder newFolder = new FolderServerFolder();
 
-          if (newFolderName != null && !newFolderName.trim().isEmpty()) {
-            newFolder.setName(newFolderName.trim());
-          } else {
-            newFolder.setName(newTemplate.getName() + " v " + newTemplate.getVersion().getValue() + " cloned instances");
-          }
-
-          newFolder.setDescription("Automatically created folder");
-
-          FolderServerFolder newTargetFolder = folderSession.createFolderAsChildOfId(newFolder,
-              homeFolder.getResourceId(), newTargetFolderId, ownerUser);
-          for (FolderServerResourceExtract instanceExtract : entry.getValue()) {
-            try {
-              copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId.build(instanceExtract.getId()),
-                  newTemplateId,
-                  newTargetFolder.getResourceId(), ownerUser);
-            } catch (CedarException e) {
-              log.error("Error when cloning instance:" + instanceExtract.getId(), e);
-              failedInstanceIds.add(instanceExtract.getId());
+            if (newFolderName != null && !newFolderName.trim().isEmpty()) {
+              newFolder.setName(newFolderName.trim());
+            } else {
+              newFolder.setName(newTemplate.getName() + " v " + newTemplate.getVersion().getValue() + " cloned instances");
             }
+
+            newFolder.setDescription("Automatically created folder");
+
+            FolderServerFolder newTargetFolder = folderSession.createFolderAsChildOfId(newFolder,
+                homeFolder.getResourceId(), newTargetFolderId, ownerUser);
+            mutated = true;
+            for (FolderServerResourceExtract instanceExtract : entry.getValue()) {
+              try {
+                copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId.build(instanceExtract.getId()),
+                    newTemplateId,
+                    newTargetFolder.getResourceId(), ownerUser);
+              } catch (CedarException e) {
+                log.error("Error when cloning instance:" + instanceExtract.getId(), e);
+                failedInstanceIds.add(instanceExtract.getId());
+              }
+            }
+          } else {
+            log.error("User:" + ownerUser + " has no home folder");
+            entry.getValue().stream()
+                .map(FolderServerResourceExtract::getId)
+                .forEach(failedInstanceIds::add);
           }
-        } else {
-          log.error("User:" + ownerUser + " has no home folder");
-          entry.getValue().stream()
-              .map(FolderServerResourceExtract::getId)
-              .forEach(failedInstanceIds::add);
         }
+      } catch (Exception e) {
+        if (mutated) {
+          throw new CloneInstancesNotRetryableException("Cloning the instances of " + oldTemplateId.getId()
+              + " failed after part of the clone was created; re-running the event would duplicate what "
+              + "succeeded.", e);
+        }
+        if (e instanceof CedarException cedarException) {
+          throw cedarException;
+        }
+        throw new CedarProcessingException(e);
       }
     }
     if (!failedInstanceIds.isEmpty()) {
-      throw new CedarProcessingException("Failed to clone instances: " + String.join(", ", failedInstanceIds))
+      // Not retryable either way: the failures are per-instance and deterministic, and any copies
+      // that did succeed would be duplicated by a re-run.
+      throw new CloneInstancesNotRetryableException(
+          "Failed to clone instances: " + String.join(", ", failedInstanceIds))
           .errorKey(CedarErrorKey.RESOURCE_NOT_CREATED)
           .parameter("failedInstanceCount", failedInstanceIds.size())
           .parameter("failedInstanceIds", failedInstanceIds);

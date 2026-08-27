@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -120,11 +121,112 @@ class CloneInstancesExecutorServiceTest {
       }
     };
 
-    CedarProcessingException error = assertThrows(CedarProcessingException.class,
+    // Not retryable: the succeeding instance was cloned, so a re-run would duplicate it, and the
+    // failing instance fails the same way every time.
+    CloneInstancesNotRetryableException error = assertThrows(CloneInstancesNotRetryableException.class,
         () -> service.handleEvent(new CloneInstancesQueueEvent(oldTemplateId, newTemplateId, null)));
 
     assertEquals(2, attempts.get());
     assertTrue(error.getMessage().contains(failing.getId()));
+  }
+
+  @Test
+  void aFailureBeforeAnythingIsClonedStaysRetryable() {
+    CedarTemplateId oldTemplateId = CedarTemplateId.build("template-old");
+    CedarTemplateId newTemplateId = CedarTemplateId.build("template-new");
+    CedarUserId ownerId = CedarUserId.build("owner-a");
+
+    FolderServerResourceExtract instance = instance(1);
+    instance.setOwnedBy(ownerId.getId());
+    FolderServiceSession repository = mock(FolderServiceSession.class);
+    when(repository.getNumberOfInstances(oldTemplateId)).thenReturn(1L);
+    when(repository.searchIsBasedOn(any(), any(), anyInt(), anyInt(), any())).thenReturn(List.of(instance));
+    FolderServerFolder homeFolder = new FolderServerFolder();
+    homeFolder.setId(CedarFolderId.build("home-folder").getId());
+    when(repository.findHomeFolderOfUser(ownerId)).thenReturn(homeFolder);
+    FolderServerTemplate newTemplate = new FolderServerTemplate();
+    newTemplate.setName("New template");
+    newTemplate.setVersion("2.0.0");
+    when(repository.findResourceById(newTemplateId)).thenReturn(newTemplate);
+    // The very first mutation fails, so nothing exists that a re-run would duplicate.
+    when(repository.createFolderAsChildOfId(any(FolderServerFolder.class), any(CedarFolderId.class),
+        any(CedarFolderId.class), any(CedarUserId.class))).thenThrow(new IllegalStateException("graph unreachable"));
+    LinkedDataUtil linkedDataUtil = mock(LinkedDataUtil.class);
+    when(linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class))
+        .thenReturn(CedarFolderId.build("target-folder"));
+
+    CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil);
+
+    CedarProcessingException error = assertThrows(CedarProcessingException.class,
+        () -> service.handleEvent(new CloneInstancesQueueEvent(oldTemplateId, newTemplateId, null)));
+    assertFalse(error instanceof CloneInstancesNotRetryableException,
+        "nothing was created, so the queue processor may retry");
+  }
+
+  @Test
+  void aCrashAfterProgressIsNotRetryable() {
+    CedarTemplateId oldTemplateId = CedarTemplateId.build("template-old");
+    CedarTemplateId newTemplateId = CedarTemplateId.build("template-new");
+    CedarUserId ownerA = CedarUserId.build("owner-a");
+    CedarUserId ownerB = CedarUserId.build("owner-b");
+
+    FolderServerResourceExtract first = instance(1); first.setOwnedBy(ownerA.getId());
+    FolderServerResourceExtract second = instance(2); second.setOwnedBy(ownerB.getId());
+    FolderServiceSession repository = mock(FolderServiceSession.class);
+    when(repository.getNumberOfInstances(oldTemplateId)).thenReturn(2L);
+    when(repository.searchIsBasedOn(any(), any(), anyInt(), anyInt(), any())).thenReturn(List.of(first, second));
+    FolderServerFolder homeFolder = new FolderServerFolder();
+    homeFolder.setId(CedarFolderId.build("home-folder").getId());
+    when(repository.findHomeFolderOfUser(any(CedarUserId.class))).thenReturn(homeFolder);
+    FolderServerTemplate newTemplate = new FolderServerTemplate();
+    newTemplate.setName("New template");
+    newTemplate.setVersion("2.0.0");
+    when(repository.findResourceById(newTemplateId)).thenReturn(newTemplate);
+    FolderServerFolder targetFolder = new FolderServerFolder();
+    targetFolder.setId(CedarFolderId.build("target-folder").getId());
+    // Owner A's folder is created and their instance cloned; owner B's folder creation dies.
+    when(repository.createFolderAsChildOfId(any(FolderServerFolder.class), any(CedarFolderId.class),
+        any(CedarFolderId.class), any(CedarUserId.class)))
+        .thenReturn(targetFolder)
+        .thenThrow(new IllegalStateException("graph unreachable"));
+    LinkedDataUtil linkedDataUtil = mock(LinkedDataUtil.class);
+    when(linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class))
+        .thenReturn(CedarFolderId.build("target-folder"));
+
+    CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil) {
+      @Override
+      protected Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId ignoredOldInstanceId,
+                                                             CedarTemplateId ignoredNewTemplateId,
+                                                             CedarFolderId ignoredDestinationFolderId,
+                                                             CedarUserId ignoredUserId) {
+        return Response.ok().build();
+      }
+    };
+
+    assertThrows(CloneInstancesNotRetryableException.class,
+        () -> service.handleEvent(new CloneInstancesQueueEvent(oldTemplateId, newTemplateId, null)));
+  }
+
+  @Test
+  void ownerlessInstancesFailTheJobWithoutInvitingARetry() {
+    CedarTemplateId oldTemplateId = CedarTemplateId.build("template-old");
+    CedarTemplateId newTemplateId = CedarTemplateId.build("template-new");
+
+    FolderServerResourceExtract ownerless = instance(1);
+    ownerless.setOwnedBy(null);
+    FolderServiceSession repository = mock(FolderServiceSession.class);
+    when(repository.getNumberOfInstances(oldTemplateId)).thenReturn(1L);
+    when(repository.searchIsBasedOn(any(), any(), anyInt(), anyInt(), any())).thenReturn(List.of(ownerless));
+
+    CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), mock(LinkedDataUtil.class));
+
+    // Deterministic per-instance failures: a retry reproduces them, so the job dead-letters once.
+    CloneInstancesNotRetryableException error = assertThrows(CloneInstancesNotRetryableException.class,
+        () -> service.handleEvent(new CloneInstancesQueueEvent(oldTemplateId, newTemplateId, null)));
+    assertTrue(error.getMessage().contains(ownerless.getId()));
   }
 
   private static FolderServerResourceExtract instance(int index) {
