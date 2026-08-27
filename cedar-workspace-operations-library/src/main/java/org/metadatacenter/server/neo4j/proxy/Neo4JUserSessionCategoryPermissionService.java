@@ -60,8 +60,9 @@ public class Neo4JUserSessionCategoryPermissionService extends AbstractNeo4JUser
 
       CedarUserId oldOwnerId = currentPermissions.getOwner().getResourceId();
       CedarUserId newOwnerId = newPermissions.getOwner().getResourceId();
+      CedarUserId changedOwnerId = null;
       if (oldOwnerId != null && !oldOwnerId.equals(newOwnerId)) {
-        Neo4JUserSessionCategoryOperations.updateCategoryOwner(proxies.category(), categoryId, newOwnerId);
+        changedOwnerId = newOwnerId;
       }
 
       Set<CategoryPermissionUserPermissionPair> oldUserPermissions = new HashSet<>();
@@ -75,17 +76,9 @@ public class Neo4JUserSessionCategoryPermissionService extends AbstractNeo4JUser
 
       Set<CategoryPermissionUserPermissionPair> toRemoveUserPermissions = new HashSet<>(oldUserPermissions);
       toRemoveUserPermissions.removeAll(newUserPermissions);
-      if (!toRemoveUserPermissions.isEmpty()) {
-        Neo4JUserSessionCategoryOperations.removeCategoryUserPermissions(proxies.categoryPermission(), categoryId,
-            toRemoveUserPermissions);
-      }
 
       Set<CategoryPermissionUserPermissionPair> toAddUserPermissions = new HashSet<>(newUserPermissions);
       toAddUserPermissions.removeAll(oldUserPermissions);
-      if (!toAddUserPermissions.isEmpty()) {
-        Neo4JUserSessionCategoryOperations.addCategoryUserPermissions(proxies.categoryPermission(), categoryId,
-            toAddUserPermissions);
-      }
 
       Set<CategoryPermissionGroupPermissionPair> oldGroupPermissions = new HashSet<>();
       for (CategoryGroupPermission gp : currentPermissions.getGroupPermissions()) {
@@ -98,17 +91,13 @@ public class Neo4JUserSessionCategoryPermissionService extends AbstractNeo4JUser
 
       Set<CategoryPermissionGroupPermissionPair> toRemoveGroupPermissions = new HashSet<>(oldGroupPermissions);
       toRemoveGroupPermissions.removeAll(newGroupPermissions);
-      if (!toRemoveGroupPermissions.isEmpty()) {
-        Neo4JUserSessionCategoryOperations.removeCategoryGroupPermissions(proxies.categoryPermission(), categoryId,
-            toRemoveGroupPermissions);
-      }
 
       Set<CategoryPermissionGroupPermissionPair> toAddGroupPermissions = new HashSet<>(newGroupPermissions);
       toAddGroupPermissions.removeAll(oldGroupPermissions);
-      if (!toAddGroupPermissions.isEmpty()) {
-        Neo4JUserSessionCategoryOperations.addCategoryGroupPermissions(proxies.categoryPermission(), categoryId,
-            toAddGroupPermissions);
-      }
+
+      proxies.categoryPermission().updatePermissionsAtomically(categoryId, changedOwnerId,
+          toRemoveUserPermissions, toAddUserPermissions,
+          toRemoveGroupPermissions, toAddGroupPermissions);
 
       return new BackendCallResult();
     }

@@ -12,12 +12,19 @@ import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFilesystemResource;
+import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderResource;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFilesystemResourcePermission;
+import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFilesystemResource;
+import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderResource;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
 import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionGroupPermissionPair;
+import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUserPermissionPair;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
 
@@ -25,32 +32,95 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
     super(proxies, cedarConfig);
   }
 
+  boolean updatePermissionsAtomically(CedarFilesystemResourceId resourceId, CedarUserId newOwnerId,
+                                      Set<ResourcePermissionUserPermissionPair> removeUserPermissions,
+                                      Set<ResourcePermissionUserPermissionPair> addUserPermissions,
+                                      Set<ResourcePermissionGroupPermissionPair> removeGroupPermissions,
+                                      Set<ResourcePermissionGroupPermissionPair> addGroupPermissions,
+                                      NodeSharePermission everybodyPermission) {
+    List<CypherQuery> changes = new ArrayList<>();
+
+    if (newOwnerId != null) {
+      changes.add(removeOwnerQuery(resourceId));
+      changes.add(setOwnerQuery(resourceId, newOwnerId));
+    }
+    for (ResourcePermissionUserPermissionPair pair : removeUserPermissions) {
+      changes.add(removePermissionQuery(resourceId, pair.getUser().getResourceIds(), pair.getPermission()));
+    }
+    for (ResourcePermissionUserPermissionPair pair : addUserPermissions) {
+      changes.add(addPermissionQuery(resourceId, pair.getUser().getResourceIds(), pair.getPermission()));
+    }
+    for (ResourcePermissionGroupPermissionPair pair : removeGroupPermissions) {
+      changes.add(removePermissionQuery(resourceId, pair.getGroup().getResourceId(), pair.getPermission()));
+    }
+    for (ResourcePermissionGroupPermissionPair pair : addGroupPermissions) {
+      changes.add(addPermissionQuery(resourceId, pair.getGroup().getResourceId(), pair.getPermission()));
+    }
+    if (everybodyPermission != null) {
+      changes.add(setEverybodyPermissionQuery(resourceId, everybodyPermission));
+    }
+
+    return executeWriteBatch(changes, "updating resource permissions");
+  }
+
   boolean addPermission(CedarFilesystemResourceId resourceId, CedarGroupId groupId, FilesystemResourcePermission permission) {
-    String cypher = CypherQueryBuilderFilesystemResourcePermission.addPermissionToFilesystemResourceForGroup(permission);
-    CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResourceAndGroup(resourceId, groupId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "adding permission");
+    return executeWrite(addPermissionQuery(resourceId, groupId, permission), "adding permission");
   }
 
   boolean removePermission(CedarFilesystemResourceId resourceId, CedarGroupId groupId, FilesystemResourcePermission permission) {
-    String cypher = CypherQueryBuilderFilesystemResourcePermission.removePermissionForFilesystemResourceFromGroup(permission);
-    CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResourceAndGroup(resourceId, groupId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "removing permission");
+    return executeWrite(removePermissionQuery(resourceId, groupId, permission), "removing permission");
   }
 
   boolean addPermission(CedarFilesystemResourceId resourceId, CedarUserId userId, FilesystemResourcePermission permission) {
-    String cypher = CypherQueryBuilderFilesystemResourcePermission.addPermissionToFilesystemResourceForUser(permission);
-    CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResourceAndUser(resourceId, userId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "adding permission");
+    return executeWrite(addPermissionQuery(resourceId, userId, permission), "adding permission");
   }
 
   boolean removePermission(CedarFilesystemResourceId resourceId, CedarUserId userId, FilesystemResourcePermission permission) {
-    String cypher = CypherQueryBuilderFilesystemResourcePermission.removePermissionForFilesystemResourceFromUser(permission);
-    CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResourceAndUser(resourceId, userId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "removing permission");
+    return executeWrite(removePermissionQuery(resourceId, userId, permission), "removing permission");
+  }
+
+  private CypherQuery removeOwnerQuery(CedarFilesystemResourceId resourceId) {
+    return new CypherQueryWithParameters(CypherQueryBuilderResource.removeResourceOwner(),
+        CypherParamBuilderResource.matchId(resourceId));
+  }
+
+  private CypherQuery setOwnerQuery(CedarFilesystemResourceId resourceId, CedarUserId userId) {
+    return new CypherQueryWithParameters(CypherQueryBuilderResource.setResourceOwner(),
+        CypherParamBuilderResource.matchResourceAndUser(resourceId, userId));
+  }
+
+  private CypherQuery setEverybodyPermissionQuery(CedarFilesystemResourceId resourceId,
+                                                  NodeSharePermission everybodyPermission) {
+    return new CypherQueryWithParameters(CypherQueryBuilderFilesystemResource.setEverybodyPermission(),
+        CypherParamBuilderFilesystemResource.matchResourceIdAndEverybodyPermission(resourceId, everybodyPermission));
+  }
+
+  private CypherQuery addPermissionQuery(CedarFilesystemResourceId resourceId, CedarGroupId groupId,
+                                         FilesystemResourcePermission permission) {
+    return new CypherQueryWithParameters(
+        CypherQueryBuilderFilesystemResourcePermission.addPermissionToFilesystemResourceForGroup(permission),
+        CypherParamBuilderFilesystemResource.matchFilesystemResourceAndGroup(resourceId, groupId));
+  }
+
+  private CypherQuery removePermissionQuery(CedarFilesystemResourceId resourceId, CedarGroupId groupId,
+                                            FilesystemResourcePermission permission) {
+    return new CypherQueryWithParameters(
+        CypherQueryBuilderFilesystemResourcePermission.removePermissionForFilesystemResourceFromGroup(permission),
+        CypherParamBuilderFilesystemResource.matchFilesystemResourceAndGroup(resourceId, groupId));
+  }
+
+  private CypherQuery addPermissionQuery(CedarFilesystemResourceId resourceId, CedarUserId userId,
+                                         FilesystemResourcePermission permission) {
+    return new CypherQueryWithParameters(
+        CypherQueryBuilderFilesystemResourcePermission.addPermissionToFilesystemResourceForUser(permission),
+        CypherParamBuilderFilesystemResource.matchFilesystemResourceAndUser(resourceId, userId));
+  }
+
+  private CypherQuery removePermissionQuery(CedarFilesystemResourceId resourceId, CedarUserId userId,
+                                            FilesystemResourcePermission permission) {
+    return new CypherQueryWithParameters(
+        CypherQueryBuilderFilesystemResourcePermission.removePermissionForFilesystemResourceFromUser(permission),
+        CypherParamBuilderFilesystemResource.matchFilesystemResourceAndUser(resourceId, userId));
   }
 
   void addPermissionToUser(CedarFilesystemResourceId resourceId, CedarUserId userId, FilesystemResourcePermission permission) {
