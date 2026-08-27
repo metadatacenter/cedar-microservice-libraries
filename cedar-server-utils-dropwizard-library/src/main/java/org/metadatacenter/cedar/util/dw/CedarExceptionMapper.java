@@ -36,6 +36,9 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
     } else if (isSqlUnavailable(exception)) {
       return new CedarCedarExceptionMapper().toResponse(
           new CedarDependencyUnavailableException("SQL database is unavailable", exception));
+    } else if (isRedisUnavailable(exception)) {
+      return new CedarCedarExceptionMapper().toResponse(
+          new CedarDependencyUnavailableException("Redis is unavailable", exception));
     } else if (exception instanceof BadRequestException) {
       return CedarResponse.badRequest().build();
     } else if (exception instanceof ForbiddenException) {

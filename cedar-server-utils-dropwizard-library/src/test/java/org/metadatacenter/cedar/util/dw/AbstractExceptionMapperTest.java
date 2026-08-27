@@ -8,6 +8,7 @@ import org.metadatacenter.error.CedarErrorPack;
 import org.metadatacenter.http.CedarResponseStatus;
 import org.neo4j.driver.exceptions.ServiceUnavailableException;
 import org.neo4j.driver.exceptions.SessionExpiredException;
+import redis.clients.jedis.exceptions.JedisConnectionException;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -68,5 +69,13 @@ class AbstractExceptionMapperTest {
     assertTrue(mapper.isSqlUnavailable(new SQLException("communications failure", "08S01")));
     assertFalse(mapper.isSqlUnavailable(new SQLException("unique constraint", "23000")));
     assertFalse(mapper.isSqlUnavailable(new IllegalArgumentException("bad query")));
+  }
+
+  @Test
+  void recognizesDirectAndWrappedRedisOutages() {
+    assertTrue(mapper.isRedisUnavailable(new JedisConnectionException("connection refused")));
+    assertTrue(mapper.isRedisUnavailable(new IllegalStateException("wrapper",
+        new JedisConnectionException("connection lost"))));
+    assertFalse(mapper.isRedisUnavailable(new IllegalArgumentException("bad command")));
   }
 }

@@ -9,6 +9,7 @@ import com.mongodb.MongoTimeoutException;
 import org.metadatacenter.error.CedarErrorPack;
 import org.neo4j.driver.exceptions.ServiceUnavailableException;
 import org.neo4j.driver.exceptions.SessionExpiredException;
+import redis.clients.jedis.exceptions.JedisConnectionException;
 
 import java.sql.SQLException;
 import java.sql.SQLNonTransientConnectionException;
@@ -77,6 +78,25 @@ public abstract class AbstractExceptionMapper {
       if (current instanceof SQLException sqlException
           && sqlException.getSQLState() != null
           && sqlException.getSQLState().startsWith("08")) {
+        return true;
+      }
+      if (current == current.getCause()) {
+        return false;
+      }
+      current = current.getCause();
+    }
+    return false;
+  }
+
+  /**
+   * True when Redis cannot be reached or an established Redis connection is lost. Command and
+   * data errors remain server errors; only the Jedis transport exception is a retryable dependency
+   * outage.
+   */
+  protected boolean isRedisUnavailable(Throwable throwable) {
+    Throwable current = throwable;
+    while (current != null) {
+      if (current instanceof JedisConnectionException) {
         return true;
       }
       if (current == current.getCause()) {
