@@ -4,8 +4,12 @@ import org.keycloak.adapters.KeycloakDeployment;
 import org.keycloak.adapters.KeycloakDeploymentBuilder;
 import org.keycloak.representations.adapters.config.AdapterConfig;
 import org.metadatacenter.config.KeycloakConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class KeycloakDeploymentProvider {
+
+  private static final Logger log = LoggerFactory.getLogger(KeycloakDeploymentProvider.class);
 
   public KeycloakDeploymentProvider() {
   }
@@ -19,6 +23,10 @@ public class KeycloakDeploymentProvider {
    * HTTP client that fetches the realm's signing keys — which is what makes real verification possible.
    */
   public KeycloakDeployment buildDeployment(KeycloakConfig keycloakConfig) {
+    return KeycloakDeploymentBuilder.build(buildAdapterConfig(keycloakConfig));
+  }
+
+  AdapterConfig buildAdapterConfig(KeycloakConfig keycloakConfig) {
     AdapterConfig adapterConfig = new AdapterConfig();
     adapterConfig.setRealm(keycloakConfig.getRealm());
     adapterConfig.setAuthServerUrl(keycloakConfig.getAuthServerUrl());
@@ -28,13 +36,13 @@ public class KeycloakDeploymentProvider {
     // These servers only ever verify incoming tokens; they never drive a login, so bearer-only is the
     // correct mode and it avoids needing a client secret for a public client.
     adapterConfig.setBearerOnly(true);
-    // The realm is served over the local self-signed .orgx leaves from the CEDAR CA, so the client that
-    // fetches its signing keys must trust them. The admin client (KeycloakUtils.buildKeycloak) already
-    // trusts them for the same reason. A production deployment behind a real certificate should drop
-    // both of these and let the default trust manager validate the chain — tracked on the roadmap.
-    adapterConfig.setDisableTrustManager(true);
-    adapterConfig.setAllowAnyHostname(true);
-    return KeycloakDeploymentBuilder.build(adapterConfig);
+    boolean allowInsecureTls = keycloakConfig.isAllowInsecureTls();
+    adapterConfig.setDisableTrustManager(allowInsecureTls);
+    adapterConfig.setAllowAnyHostname(allowInsecureTls);
+    if (allowInsecureTls) {
+      log.warn("Keycloak certificate and hostname verification are disabled by explicit development opt-in");
+    }
+    return adapterConfig;
   }
 
 }

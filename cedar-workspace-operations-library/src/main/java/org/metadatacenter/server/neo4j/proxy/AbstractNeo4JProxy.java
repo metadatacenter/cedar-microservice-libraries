@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.config.CedarTestRuntime;
 import org.metadatacenter.id.CedarResourceId;
 import org.metadatacenter.model.CedarResource;
 import org.metadatacenter.model.CedarResourceType;
@@ -39,9 +40,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 public abstract class AbstractNeo4JProxy {
+
+  // The shared outage override deliberately makes pool acquisition and retries fail quickly. A
+  // healthy embedded Bolt server can still need more than one second for its first handshake on a
+  // constrained CI runner, so connection establishment needs independent headroom.
+  static final long MIN_TEST_CONNECTION_TIMEOUT_MILLIS = 5_000;
 
   protected final Neo4JProxies proxies;
   protected final CedarConfig cedarConfig;
@@ -53,7 +60,18 @@ public abstract class AbstractNeo4JProxy {
   protected AbstractNeo4JProxy(Neo4JProxies proxies, CedarConfig cedarConfig) {
     this.proxies = proxies;
     this.cedarConfig = cedarConfig;
-    driver = GraphDatabase.driver(proxies.config.getUri(), AuthTokens.basic(proxies.config.getUserName(), proxies.config.getUserPassword()));
+    Config.ConfigBuilder driverConfig = Config.builder();
+    CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> driverConfig
+        .withConnectionTimeout(testConnectionTimeoutMillis(timeout), TimeUnit.MILLISECONDS)
+        .withConnectionAcquisitionTimeout(timeout, TimeUnit.MILLISECONDS)
+        .withMaxTransactionRetryTime(timeout, TimeUnit.MILLISECONDS));
+    driver = GraphDatabase.driver(proxies.config.getUri(),
+        AuthTokens.basic(proxies.config.getUserName(), proxies.config.getUserPassword()),
+        driverConfig.build());
+  }
+
+  static long testConnectionTimeoutMillis(long dependencyTimeoutMillis) {
+    return Math.max(dependencyTimeoutMillis, MIN_TEST_CONNECTION_TIMEOUT_MILLIS);
   }
 
   /**
@@ -67,6 +85,10 @@ public abstract class AbstractNeo4JProxy {
     } catch (RuntimeException e) {
       log.warn("Error closing the Neo4j driver", e);
     }
+  }
+
+  public void verifyConnectivity() {
+    driver.verifyConnectivity();
   }
 
   private void reportQueryError(ClientException ex, CypherQuery q) {

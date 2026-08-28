@@ -7,7 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class LoadValueSetsOntologyTask {
-  private static final Logger log = LoggerFactory.getLogger(GenerateEmptyRulesIndexTask.class);
+  private static final Logger log = LoggerFactory.getLogger(LoadValueSetsOntologyTask.class);
 
   private final CedarConfig cedarConfig;
 

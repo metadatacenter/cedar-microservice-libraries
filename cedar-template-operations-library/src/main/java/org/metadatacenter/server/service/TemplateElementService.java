@@ -1,6 +1,7 @@
 package org.metadatacenter.server.service;
 
 import org.metadatacenter.exception.ArtifactServerResourceNotFoundException;
+import org.metadatacenter.server.dao.ArtifactWithRevision;
 
 import java.io.IOException;
 import java.util.List;
@@ -18,7 +19,12 @@ public interface TemplateElementService<K, T> {
 
   T findTemplateElement(K templateElementId) throws IOException;
 
-  T updateTemplateElement(K templateElementId, T content) throws ArtifactServerResourceNotFoundException, IOException;
+  ArtifactWithRevision<T> findTemplateElementWithRevision(K templateElementId) throws IOException;
+
+  long getTemplateElementRevision(K templateElementId) throws ArtifactServerResourceNotFoundException;
+
+  T updateTemplateElement(K templateElementId, T content, long expectedRevision)
+      throws ArtifactServerResourceNotFoundException, IOException;
 
   void deleteTemplateElement(K templateElementId) throws ArtifactServerResourceNotFoundException, IOException;
 

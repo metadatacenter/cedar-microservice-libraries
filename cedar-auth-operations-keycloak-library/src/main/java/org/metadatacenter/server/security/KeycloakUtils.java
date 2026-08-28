@@ -36,12 +36,8 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.security.cert.X509Certificate;
-import javax.net.ssl.X509TrustManager;
-import java.security.cert.X509Certificate;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.HttpsURLConnection;
 
 public class KeycloakUtils {
 
@@ -111,6 +107,7 @@ public class KeycloakUtils {
     kcInfo.setCedarAdminUserPassword(cedarConfig.getAdminUserConfig().getPassword());
     kcInfo.setCedarAdminUserApiKey(cedarConfig.getAdminUserConfig().getApiKey());
     kcInfo.setKeycloakClientId(cedarConfig.getKeycloakConfig().getClientId());
+    kcInfo.setAllowInsecureTls(cedarConfig.getKeycloakConfig().isAllowInsecureTls());
 
     KeycloakDeploymentProvider keycloakDeploymentProvider = new KeycloakDeploymentProvider();
     KeycloakDeployment keycloakDeployment = keycloakDeploymentProvider.buildDeployment(cedarConfig.getKeycloakConfig());
@@ -145,28 +142,35 @@ public class KeycloakUtils {
     return jacksonJsonProvider;
   }
 
-  public static Keycloak buildKeycloak(KeycloakUtilInfo kcInfo)
-  {
-    SSLContext sslContext = null;
+  static SSLContext buildInsecureSslContext(boolean allowInsecureTls) {
+    if (!allowInsecureTls) {
+      return null;
+    }
     try {
       TrustManager[] trustAllCerts = new TrustManager[] {
-              new X509TrustManager() {
-                public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                  return null;
-                }
-                public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
-                }
-                public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
-                }
-              }
+          new X509TrustManager() {
+            public X509Certificate[] getAcceptedIssuers() {
+              return new X509Certificate[0];
+            }
+
+            public void checkClientTrusted(X509Certificate[] certs, String authType) {
+            }
+
+            public void checkServerTrusted(X509Certificate[] certs, String authType) {
+            }
+          }
       };
 
-      sslContext = SSLContext.getInstance("SSL");
+      SSLContext sslContext = SSLContext.getInstance("TLS");
       sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+      return sslContext;
+    } catch (GeneralSecurityException e) {
+      throw new IllegalStateException("Unable to initialize the development-only Keycloak TLS bypass", e);
     }
-    catch (Exception ex) {
-      throw new RuntimeException(ex);
-    }
+  }
+
+  public static Keycloak buildKeycloak(KeycloakUtilInfo kcInfo) {
+    SSLContext insecureSslContext = buildInsecureSslContext(kcInfo.isAllowInsecureTls());
 
     JacksonJsonProvider jacksonJsonProvider = getCustomizedJacksonJsonProvider();
 
@@ -175,10 +179,13 @@ public class KeycloakUtils {
     // under jakarta ws.rs 3.0 the ClientBuilder ServiceLoader also finds Jersey on the classpath and
     // may resolve to it, and the Keycloak admin client requires a genuine RESTEasy client (it casts
     // the WebTarget to ResteasyWebTarget).
-    Client resteasyClient = new ResteasyClientBuilderImpl()
-            .register(jacksonJsonProvider)
-            .sslContext(sslContext)
-            .build();
+    ResteasyClientBuilderImpl resteasyClientBuilder = new ResteasyClientBuilderImpl();
+    resteasyClientBuilder.register(jacksonJsonProvider);
+    if (insecureSslContext != null) {
+      log.warn("Keycloak admin-client certificate verification is disabled by explicit development opt-in");
+      resteasyClientBuilder.sslContext(insecureSslContext);
+    }
+    Client resteasyClient = resteasyClientBuilder.build();
 
     return KeycloakBuilder.builder()
         .serverUrl(kcInfo.getKeycloakBaseURI())

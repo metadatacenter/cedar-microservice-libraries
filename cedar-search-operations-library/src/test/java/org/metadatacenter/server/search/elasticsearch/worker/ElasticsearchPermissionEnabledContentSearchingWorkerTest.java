@@ -8,6 +8,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.metadatacenter.config.OpensearchConfig;
+import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
@@ -25,14 +26,17 @@ import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 
 import java.util.List;
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -71,7 +75,8 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
   @ParameterizedTest
   @MethodSource("accessiblePermissionQueries")
   void accessibleCountMapsRequestedPermissionWithoutInflatingWriteAccess(
-      FilesystemResourcePermission permission, String userKey, boolean everybodyRead, boolean everybodyWrite) {
+      FilesystemResourcePermission permission, String userKey, boolean everybodyRead,
+      boolean everybodyWrite) throws Exception {
     long count = worker.searchAccessibleResourceCountByUser(List.of("template", "instance"), permission, user);
 
     String query = capturedQuery();
@@ -84,7 +89,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
   }
 
   @Test
-  void administrativeReadOverrideRemovesAllAccessClausesButRetainsTypeFilter() {
+  void administrativeReadOverrideRemovesAllAccessClausesButRetainsTypeFilter() throws Exception {
     user.setPermissions(List.of(CedarPermission.READ_NOT_READABLE_NODE.getPermissionName()));
 
     worker.searchAccessibleResourceCountByUser(List.of("field"), FilesystemResourcePermission.READ, user);
@@ -216,6 +221,19 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
 
     assertTrue(error.getMessage().contains("Error processing query"), error.getMessage());
     assertEquals(null, capturedRequest.get());
+  }
+
+  @Test
+  void transportFailureIsUnavailableAndNeverAnEmptyResult() throws Exception {
+    doThrow(new IOException("connection refused"))
+        .when(client).search(any(SearchRequest.class), any(RequestOptions.class));
+
+    assertThrows(CedarDependencyUnavailableException.class,
+        () -> executeSearch("kidney", null, ResourceVersionFilter.ALL,
+            ResourcePublicationStatusFilter.ALL, null, null, 10, 0));
+    assertThrows(CedarDependencyUnavailableException.class,
+        () -> worker.searchAccessibleResourceCountByUser(
+            List.of("template"), FilesystemResourcePermission.READ, user));
   }
 
   private SearchResponseResult executeSearch(String query, List<String> resourceTypes, ResourceVersionFilter version,

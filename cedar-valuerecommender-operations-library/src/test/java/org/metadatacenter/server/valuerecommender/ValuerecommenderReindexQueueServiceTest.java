@@ -74,7 +74,7 @@ class ValuerecommenderReindexQueueServiceTest {
   void anEnqueuedMessageComesBackFromThePoll() throws Exception {
     reindexQueue.enqueueEvent(message(ValuerecommenderReindexMessageActionType.CREATED));
 
-    List<String> drained = reindexQueue.getAllMessages();
+    List<String> drained = reindexQueue.claimMessages(100);
 
     assertEquals(1, drained.size());
     ValuerecommenderReindexMessage read =
@@ -90,7 +90,7 @@ class ValuerecommenderReindexQueueServiceTest {
     reindexQueue.enqueueEvent(message(ValuerecommenderReindexMessageActionType.UPDATED));
     reindexQueue.enqueueEvent(message(ValuerecommenderReindexMessageActionType.DELETED));
 
-    List<String> drained = reindexQueue.getAllMessages();
+    List<String> drained = reindexQueue.claimMessages(100);
 
     assertEquals(3, drained.size(), "the consumer reads a whole batch per poll");
     assertEquals(List.of(
@@ -101,12 +101,14 @@ class ValuerecommenderReindexQueueServiceTest {
   }
 
   @Test
-  void aDrainedQueueIsLeftEmpty() {
+  void anAcknowledgedBatchIsLeftEmpty() {
     reindexQueue.enqueueEvent(message(ValuerecommenderReindexMessageActionType.CREATED));
 
-    assertEquals(1, reindexQueue.getAllMessages().size());
+    List<String> claimed = reindexQueue.claimMessages(100);
+    assertEquals(1, claimed.size());
+    claimed.forEach(reindexQueue::acknowledge);
     assertEquals(0, reindexQueue.messageCount());
-    assertEquals(List.of(), reindexQueue.getAllMessages(), "the next poll finds nothing left");
+    assertEquals(List.of(), reindexQueue.claimMessages(100), "the next poll finds nothing left");
   }
 
   @Test

@@ -16,20 +16,22 @@ public class PermissionQueueService extends QueueServiceWithBlockingQueue {
     super(cacheConfig, SEARCH_PERMISSION_QUEUE_ID);
   }
 
-  public void enqueueEvent(SearchPermissionQueueEvent event) {
-    // Enqueueing is best-effort: a failure is logged and the event dropped, so an
-    // unreachable queue (Redis) can not fail the request that produced the event
+  public boolean enqueueEvent(SearchPermissionQueueEvent event) {
+    // This low-level Redis operation is best-effort and reports whether Redis accepted the event.
+    // SearchPermissionEnqueueService uses the result to retain or remove its durable outbox entry.
     String json;
     try {
       json = JsonMapper.MAPPER.writeValueAsString(event);
     } catch (JsonProcessingException e) {
       log.error("The permission event could not be serialized. Dropping it.", e);
-      return;
+      return false;
     }
     try (Jedis jedis = pool.getResource()) {
       jedis.rpush(queueName, json);
+      return true;
     } catch (Exception e) {
       reportDroppedEvent(log, "permission event", e);
+      return false;
     }
   }
 }

@@ -16,6 +16,12 @@ public class ElasticsearchServiceFactory {
     if (instance == null) {
       instance = new ElasticsearchServiceFactory();
       instance.init(cedarConfig);
+    } else if (instance.cedarConfig != cedarConfig) {
+      // Production initializes the factory once. A shared test JVM boots multiple applications
+      // with distinct CedarConfig instances; keeping the first client silently directs later
+      // applications at the first fixture's OpenSearch endpoint and leaks that client's threads.
+      instance.managementService.closeClient();
+      instance.init(cedarConfig);
     }
     return instance;
   }

@@ -6,7 +6,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.metadatacenter.config.OpensearchConfig;
-import org.metadatacenter.exception.CedarProcessingException;
+import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchScrollRequest;
@@ -22,7 +22,6 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doReturn;
@@ -92,9 +91,9 @@ class ElasticsearchSearchingWorkerTest {
   void initialIoFailureEscapesInsteadOfLookingLikeAnEmptyIndex() throws Exception {
     doThrow(new IOException("offline")).when(client).search(any(SearchRequest.class), any(RequestOptions.class));
 
-    CedarProcessingException error = assertThrows(CedarProcessingException.class,
+    CedarDependencyUnavailableException error = assertThrows(CedarDependencyUnavailableException.class,
         () -> worker.findAllValuesForField("info.id"));
-    assertTrue(error.getMessage().contains("scrolling all values"));
+    assertEquals("OpenSearch is unavailable", error.getMessage());
   }
 
   @Test
@@ -103,9 +102,9 @@ class ElasticsearchSearchingWorkerTest {
         .search(any(SearchRequest.class), any(RequestOptions.class));
     doThrow(new IOException("offline")).when(client).scroll(any(SearchScrollRequest.class), any(RequestOptions.class));
 
-    CedarProcessingException error = assertThrows(CedarProcessingException.class,
+    CedarDependencyUnavailableException error = assertThrows(CedarDependencyUnavailableException.class,
         () -> worker.findAllValuesForField("info.id"));
-    assertTrue(error.getMessage().contains("scrolling all values"));
+    assertEquals("OpenSearch is unavailable", error.getMessage());
   }
 
   @SafeVarargs

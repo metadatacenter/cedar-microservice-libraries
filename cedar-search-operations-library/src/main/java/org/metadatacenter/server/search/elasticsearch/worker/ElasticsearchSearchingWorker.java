@@ -1,6 +1,7 @@
 package org.metadatacenter.server.search.elasticsearch.worker;
 
 import org.metadatacenter.config.OpensearchConfig;
+import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
@@ -71,7 +72,7 @@ public class ElasticsearchSearchingWorker {
         response = client.scroll(scrollRequest, RequestOptions.DEFAULT);
       } while (response.getHits().getHits().length != 0);
     } catch (IOException e) {
-      throw new CedarProcessingException("Error while scrolling all values for field " + fieldName, e);
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
     }
 
     return fieldValues;

@@ -55,14 +55,14 @@ public class UserServiceNeo4j implements UserService {
   }
 
   @Override
-  public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyValue, String newKeyValue,
+  public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyId, String newKeyValue,
                                                        LocalDateTime newCreationDate) {
-    return userProxy.regenerateApiKey(userId, keyValue, newKeyValue, newCreationDate);
+    return userProxy.regenerateApiKey(userId, keyId, newKeyValue, newCreationDate);
   }
 
   @Override
-  public BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyValue) {
-    return userProxy.deleteApiKey(userId, keyValue);
+  public BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyId) {
+    return userProxy.deleteApiKey(userId, keyId);
   }
 
   @Override

@@ -1,6 +1,7 @@
 package org.metadatacenter.cedar.util.dw;
 
 import org.metadatacenter.error.CedarErrorPack;
+import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.server.logging.AppLogger;
 import org.metadatacenter.server.logging.filter.LoggingContext;
@@ -26,7 +27,19 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
   public Response toResponse(Exception exception) {
 
     log.warn(":CEM::", exception);
-    if (exception instanceof BadRequestException) {
+    if (isNeo4jUnavailable(exception)) {
+      return new CedarCedarExceptionMapper().toResponse(
+          new CedarDependencyUnavailableException("Neo4j is unavailable", exception));
+    } else if (isMongoUnavailable(exception)) {
+      return new CedarCedarExceptionMapper().toResponse(
+          new CedarDependencyUnavailableException("MongoDB is unavailable", exception));
+    } else if (isSqlUnavailable(exception)) {
+      return new CedarCedarExceptionMapper().toResponse(
+          new CedarDependencyUnavailableException("SQL database is unavailable", exception));
+    } else if (isRedisUnavailable(exception)) {
+      return new CedarCedarExceptionMapper().toResponse(
+          new CedarDependencyUnavailableException("Redis is unavailable", exception));
+    } else if (exception instanceof BadRequestException) {
       return CedarResponse.badRequest().build();
     } else if (exception instanceof ForbiddenException) {
       return CedarResponse.forbidden().build();
@@ -62,16 +75,14 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
     }
 
     CedarErrorPack errorPack = new CedarErrorPack();
-    if (!hideExceptionConditionally(errorPack)) {
-      errorPack.sourceException(exception);
-    }
+    errorPack.sourceException(exception);
 
     AppLogger.message(AppLogType.RESPONSE_EXCEPTION, AppLogSubType.START, globalRequestId, localRequestId)
         .param(AppLogParam.EXCEPTION, errorPack)
         .enqueue();
 
     return Response.status(CedarResponseStatus.INTERNAL_SERVER_ERROR.getStatusCode())
-        .entity(errorPack)
+        .entity(clientSafeCopy(errorPack))
         .type(MediaType.APPLICATION_JSON)
         .build();
   }

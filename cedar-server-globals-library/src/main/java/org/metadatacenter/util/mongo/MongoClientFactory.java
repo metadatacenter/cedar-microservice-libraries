@@ -5,9 +5,11 @@ import com.mongodb.MongoCredential;
 import com.mongodb.ServerAddress;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import org.metadatacenter.config.CedarTestRuntime;
 import org.metadatacenter.config.MongoConnection;
 
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 
 public class MongoClientFactory {
 
@@ -27,12 +29,18 @@ public class MongoClientFactory {
         mongoConnection.getPassword().toCharArray()
     );
 
-    MongoClientSettings settings = MongoClientSettings.builder()
+    MongoClientSettings.Builder settingsBuilder = MongoClientSettings.builder()
         .applyToClusterSettings(builder -> builder.hosts(Collections.singletonList(address)))
-        .credential(credential)
-        .build();
+        .credential(credential);
 
-    this.mongoClient = MongoClients.create(settings);
+    CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> {
+      settingsBuilder.applyToClusterSettings(
+          builder -> builder.serverSelectionTimeout(timeout, TimeUnit.MILLISECONDS));
+      settingsBuilder.applyToSocketSettings(
+          builder -> builder.connectTimeout(timeout, TimeUnit.MILLISECONDS));
+    });
+
+    this.mongoClient = MongoClients.create(settingsBuilder.build());
   }
 
   public MongoClient getClient() {

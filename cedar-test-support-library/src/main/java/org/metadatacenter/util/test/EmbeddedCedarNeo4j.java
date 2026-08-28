@@ -61,6 +61,21 @@ public final class EmbeddedCedarNeo4j {
     CedarEnvironmentSource.setOverride(environment);
   }
 
+  /**
+   * Stop the current harness so an already-booted application observes a real graph outage. The
+   * next {@link #startAndRedirectEnvironment(Map)} call creates a fresh harness, and its first
+   * {@link #seed(CedarConfig)} call rebuilds the global test fixtures. The application's existing
+   * drivers are deliberately left open and pointed at the now-dead port; closing them would test a
+   * client-lifecycle error rather than an unavailable Neo4j server.
+   */
+  public static synchronized void stopAndReset() {
+    if (embedded != null) {
+      embedded.close();
+      embedded = null;
+    }
+    seeded = false;
+  }
+
   public static synchronized void startRedirectAndSeed(SystemComponent systemComponent) {
     startAndRedirectEnvironment();
 

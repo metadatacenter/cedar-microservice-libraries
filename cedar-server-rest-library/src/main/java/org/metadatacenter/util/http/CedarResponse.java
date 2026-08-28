@@ -13,6 +13,7 @@ import org.metadatacenter.server.result.BackendCallResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
 import java.util.HashMap;
@@ -82,7 +83,8 @@ public abstract class CedarResponse {
         }
       }
       responseBuilder.header(HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS,
-          CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS + "," + HttpConstants.HTTP_HEADER_CONTENT_DISPOSITION);
+          CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS + "," + HttpConstants.HTTP_HEADER_CONTENT_DISPOSITION
+              + "," + HttpHeaders.ETAG);
       if (createdResourceUri != null) {
         responseBuilder.status(CedarResponseStatus.CREATED.getStatusCode()).location(createdResourceUri);
       }

@@ -45,7 +45,10 @@ public class QuerySortOptions {
   }
 
   public static String getFieldName(String name) {
-    return knownSortKeys.get(name) != null ? Neo4JUtil.escapePropertyName(knownSortKeys.get(name).getFieldName()) :
-        name;
+    QuerySortField field = knownSortKeys.get(name);
+    if (field == null) {
+      throw new IllegalArgumentException("Unknown sort field: " + name);
+    }
+    return Neo4JUtil.escapePropertyName(field.getFieldName());
   }
 }

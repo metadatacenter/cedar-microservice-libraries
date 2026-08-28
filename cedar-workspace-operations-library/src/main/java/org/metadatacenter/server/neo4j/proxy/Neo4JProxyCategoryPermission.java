@@ -11,17 +11,50 @@ import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.cypher.parameter.AbstractCypherParamBuilder;
+import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderCategory;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFilesystemResource;
+import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderCategory;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderCategoryPermission;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermission;
+import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroupPermissionPair;
+import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUserPermissionPair;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class Neo4JProxyCategoryPermission extends AbstractNeo4JProxy {
 
   Neo4JProxyCategoryPermission(Neo4JProxies proxies, CedarConfig cedarConfig) {
     super(proxies, cedarConfig);
+  }
+
+  boolean updatePermissionsAtomically(CedarCategoryId categoryId, CedarUserId newOwnerId,
+                                      Set<CategoryPermissionUserPermissionPair> removeUserPermissions,
+                                      Set<CategoryPermissionUserPermissionPair> addUserPermissions,
+                                      Set<CategoryPermissionGroupPermissionPair> removeGroupPermissions,
+                                      Set<CategoryPermissionGroupPermissionPair> addGroupPermissions) {
+    List<CypherQuery> changes = new ArrayList<>();
+
+    if (newOwnerId != null) {
+      changes.add(removeOwnerQuery(categoryId));
+      changes.add(setOwnerQuery(categoryId, newOwnerId));
+    }
+    for (CategoryPermissionUserPermissionPair pair : removeUserPermissions) {
+      changes.add(removePermissionQuery(categoryId, pair.getUser().getResourceId(), pair.getPermission()));
+    }
+    for (CategoryPermissionUserPermissionPair pair : addUserPermissions) {
+      changes.add(addPermissionQuery(categoryId, pair.getUser().getResourceId(), pair.getPermission()));
+    }
+    for (CategoryPermissionGroupPermissionPair pair : removeGroupPermissions) {
+      changes.add(removePermissionQuery(categoryId, pair.getGroup().getResourceId(), pair.getPermission()));
+    }
+    for (CategoryPermissionGroupPermissionPair pair : addGroupPermissions) {
+      changes.add(addPermissionQuery(categoryId, pair.getGroup().getResourceId(), pair.getPermission()));
+    }
+
+    return executeWriteBatch(changes, "updating category permissions");
   }
 
   void addCategoryPermissionToUser(CedarCategoryId categoryId, CedarUserId userId, CategoryPermission permission) {
@@ -65,31 +98,53 @@ public class Neo4JProxyCategoryPermission extends AbstractNeo4JProxy {
   }
 
   private boolean addCategoryPermission(CedarCategoryId categoryId, CedarUserId userId, CategoryPermission permission) {
-    String cypher = CypherQueryBuilderCategoryPermission.addPermissionToCategoryForUser(permission);
-    CypherParameters params = AbstractCypherParamBuilder.matchUserIdAndCategoryId(userId, categoryId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "adding permission");
+    return executeWrite(addPermissionQuery(categoryId, userId, permission), "adding permission");
   }
 
   private boolean addCategoryPermission(CedarCategoryId category, CedarGroupId group, CategoryPermission permission) {
-    String cypher = CypherQueryBuilderCategoryPermission.addPermissionToCategoryForGroup(permission);
-    CypherParameters params = AbstractCypherParamBuilder.matchGroupIdAndCategoryId(group, category);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "adding permission");
+    return executeWrite(addPermissionQuery(category, group, permission), "adding permission");
   }
 
   private boolean removeCategoryPermission(CedarCategoryId categoryId, CedarUserId userId, CategoryPermission permission) {
-    String cypher = CypherQueryBuilderCategoryPermission.removePermissionForCategoryFromUser(permission);
-    CypherParameters params = AbstractCypherParamBuilder.matchUserIdAndCategoryId(userId, categoryId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "removing permission");
+    return executeWrite(removePermissionQuery(categoryId, userId, permission), "removing permission");
   }
 
   private boolean removeCategoryPermission(CedarCategoryId categoryId, CedarGroupId groupId, CategoryPermission permission) {
-    String cypher = CypherQueryBuilderCategoryPermission.removePermissionForCategoryFromGroup(permission);
-    CypherParameters params = AbstractCypherParamBuilder.matchGroupIdAndCategoryId(groupId, categoryId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "removing permission");
+    return executeWrite(removePermissionQuery(categoryId, groupId, permission), "removing permission");
+  }
+
+  private CypherQuery removeOwnerQuery(CedarCategoryId categoryId) {
+    return new CypherQueryWithParameters(CypherQueryBuilderCategory.removeCategoryOwner(),
+        CypherParamBuilderCategory.matchId(categoryId));
+  }
+
+  private CypherQuery setOwnerQuery(CedarCategoryId categoryId, CedarUserId userId) {
+    return new CypherQueryWithParameters(CypherQueryBuilderCategory.setCategoryOwner(),
+        CypherParamBuilderCategory.matchCategoryAndUser(categoryId, userId));
+  }
+
+  private CypherQuery addPermissionQuery(CedarCategoryId categoryId, CedarUserId userId,
+                                         CategoryPermission permission) {
+    return new CypherQueryWithParameters(CypherQueryBuilderCategoryPermission.addPermissionToCategoryForUser(permission),
+        AbstractCypherParamBuilder.matchUserIdAndCategoryId(userId, categoryId));
+  }
+
+  private CypherQuery addPermissionQuery(CedarCategoryId categoryId, CedarGroupId groupId,
+                                         CategoryPermission permission) {
+    return new CypherQueryWithParameters(CypherQueryBuilderCategoryPermission.addPermissionToCategoryForGroup(permission),
+        AbstractCypherParamBuilder.matchGroupIdAndCategoryId(groupId, categoryId));
+  }
+
+  private CypherQuery removePermissionQuery(CedarCategoryId categoryId, CedarUserId userId,
+                                            CategoryPermission permission) {
+    return new CypherQueryWithParameters(CypherQueryBuilderCategoryPermission.removePermissionForCategoryFromUser(permission),
+        AbstractCypherParamBuilder.matchUserIdAndCategoryId(userId, categoryId));
+  }
+
+  private CypherQuery removePermissionQuery(CedarCategoryId categoryId, CedarGroupId groupId,
+                                            CategoryPermission permission) {
+    return new CypherQueryWithParameters(CypherQueryBuilderCategoryPermission.removePermissionForCategoryFromGroup(permission),
+        AbstractCypherParamBuilder.matchGroupIdAndCategoryId(groupId, categoryId));
   }
 
   public boolean userHasWriteAccessToCategory(CedarUserId userId, CedarCategoryId categoryId) {

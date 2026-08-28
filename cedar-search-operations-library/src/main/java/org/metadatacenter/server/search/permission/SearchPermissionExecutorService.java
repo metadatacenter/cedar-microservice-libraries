@@ -39,19 +39,31 @@ public class SearchPermissionExecutorService {
   public SearchPermissionExecutorService(CedarConfig cedarConfig, IndexUtils indexUtils, NodeSearchingService nodeSearchingService,
                                          NodeIndexingService nodeIndexingService) {
     UserService userService = CedarDataServices.getInstance().getNeoUserService();
+    CedarRequestContext context = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
     this.nodeSearchingService = nodeSearchingService;
     this.nodeIndexingService = nodeIndexingService;
     this.indexUtils = indexUtils;
+    this.cedarRequestContext = context;
+    folderSession = CedarDataServices.getInstance().getFolderServiceSession(context);
+    permissionSession = CedarDataServices.getInstance().getResourcePermissionServiceSession(context);
+    categorySession = CedarDataServices.getInstance().getCategoryServiceSession(context);
+  }
 
-    this.cedarRequestContext = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
-
-    folderSession = CedarDataServices.getInstance().getFolderServiceSession(cedarRequestContext);
-    permissionSession = CedarDataServices.getInstance().getResourcePermissionServiceSession(cedarRequestContext);
-    categorySession = CedarDataServices.getInstance().getCategoryServiceSession(cedarRequestContext);
+  SearchPermissionExecutorService(IndexUtils indexUtils, NodeSearchingService nodeSearchingService,
+                                  NodeIndexingService nodeIndexingService, FolderServiceSession folderSession,
+                                  ResourcePermissionServiceSession permissionSession,
+                                  CategoryServiceSession categorySession, CedarRequestContext cedarRequestContext) {
+    this.indexUtils = indexUtils;
+    this.nodeSearchingService = nodeSearchingService;
+    this.nodeIndexingService = nodeIndexingService;
+    this.folderSession = folderSession;
+    this.permissionSession = permissionSession;
+    this.categorySession = categorySession;
+    this.cedarRequestContext = cedarRequestContext;
   }
 
   // Main entry point
-  public void handleEvent(SearchPermissionQueueEvent event) {
+  public void handleEvent(SearchPermissionQueueEvent event) throws CedarProcessingException {
     switch (event.getEventType()) {
       case RESOURCE_MOVED:
         updateOneArtifact(CedarUntypedArtifactId.build(event.getId()));
@@ -74,14 +86,14 @@ public class SearchPermissionExecutorService {
     }
   }
 
-  private void updateOneArtifact(CedarArtifactId artifactId) {
+  private void updateOneArtifact(CedarArtifactId artifactId) throws CedarProcessingException {
     log.debug("Update one artifact:" + artifactId);
     // upsertOnePermissions resolves the artifact itself, and removes the index document when the
     // artifact no longer exists
     upsertOnePermissions(Upsert.UPDATE, artifactId);
   }
 
-  private void updateFolderRecursively(CedarFolderId folderId) {
+  private void updateFolderRecursively(CedarFolderId folderId) throws CedarProcessingException {
     log.debug("Update recursive folder:");
     List<FileSystemResource> subtree = folderSession.findAllDescendantNodesById(folderId);
     for (FileSystemResource n : subtree) {
@@ -89,7 +101,7 @@ public class SearchPermissionExecutorService {
     }
   }
 
-  private void updateAllByUpdatedGroup(CedarGroupId groupId) {
+  private void updateAllByUpdatedGroup(CedarGroupId groupId) throws CedarProcessingException {
     log.debug("Update all visible by group:");
     List<FileSystemResource> collection = folderSession.findAllNodesVisibleByGroupId(groupId);
     for (FileSystemResource n : collection) {
@@ -101,44 +113,36 @@ public class SearchPermissionExecutorService {
     }
   }
 
-  private void updateAllByDeletedGroup(CedarGroupId groupId) {
+  private void updateAllByDeletedGroup(CedarGroupId groupId) throws CedarProcessingException {
     log.debug("Update all visible by group:");
-    List<String> allCedarIdsForGroup = null;
-    try {
-      allCedarIdsForGroup = nodeSearchingService.findAllCedarIdsForGroup(groupId);
-      for (String cid : allCedarIdsForGroup) {
-        log.info("Need to update permissions for:" + cid);
-        upsertOnePermissions(Upsert.UPDATE, CedarUntypedFilesystemResourceId.build(cid));
-      }
-    } catch (CedarProcessingException e) {
-      log.error("Error while retrieving all the affected documents for group:" + groupId);
+    List<String> allCedarIdsForGroup = nodeSearchingService.findAllCedarIdsForGroup(groupId);
+    for (String cid : allCedarIdsForGroup) {
+      log.info("Need to update permissions for:" + cid);
+      upsertOnePermissions(Upsert.UPDATE, CedarUntypedFilesystemResourceId.build(cid));
     }
   }
 
-  private void upsertOnePermissions(Upsert upsert, CedarFilesystemResourceId resourceId) {
+  private void upsertOnePermissions(Upsert upsert, CedarFilesystemResourceId resourceId)
+      throws CedarProcessingException {
     log.debug("upsertOneDocument for permissions:" + upsert.getValue() + ":" + resourceId);
-    try {
-      FileSystemResource node = folderSession.findResourceById(resourceId);
-      if (node == null) {
-        // The resource is gone from the graph, so any document the index still holds for it is
-        // an orphan: a permission update has nothing to write, and leaving the document in place
-        // would keep the resource visible to search and keep feeding it back to this service,
-        // which sources its work list from the index. Remove it instead.
-        log.info("The resource no longer exists, removing it from the index:" + resourceId);
-        nodeIndexingService.removeDocumentFromIndex(resourceId);
-        return;
-      }
-      CedarNodeMaterializedPermissions perm = permissionSession.getResourceMaterializedPermission(resourceId);
-      CedarNodeMaterializedCategories categories = null;
-      if (node.getType() != CedarResourceType.FOLDER) {
-        categories = categorySession.getArtifactMaterializedCategories(CedarUntypedArtifactId.build(resourceId.getId()));
-      }
-      if (upsert == Upsert.UPDATE) {
-        nodeIndexingService.removeDocumentFromIndex(resourceId);
-      }
-      nodeIndexingService.indexDocument(node, perm, categories, cedarRequestContext);
-    } catch (Exception e) {
-      log.error("Error while upserting permissions", e);
+    FileSystemResource node = folderSession.findResourceById(resourceId);
+    if (node == null) {
+      // The resource is gone from the graph, so any document the index still holds for it is
+      // an orphan: a permission update has nothing to write, and leaving the document in place
+      // would keep the resource visible to search and keep feeding it back to this service,
+      // which sources its work list from the index. Remove it instead.
+      log.info("The resource no longer exists, removing it from the index:" + resourceId);
+      nodeIndexingService.removeDocumentFromIndex(resourceId);
+      return;
     }
+    CedarNodeMaterializedPermissions perm = permissionSession.getResourceMaterializedPermission(resourceId);
+    CedarNodeMaterializedCategories categories = null;
+    if (node.getType() != CedarResourceType.FOLDER) {
+      categories = categorySession.getArtifactMaterializedCategories(CedarUntypedArtifactId.build(resourceId.getId()));
+    }
+    if (upsert == Upsert.UPDATE) {
+      nodeIndexingService.removeDocumentFromIndex(resourceId);
+    }
+    nodeIndexingService.indexDocument(node, perm, categories, cedarRequestContext);
   }
 }

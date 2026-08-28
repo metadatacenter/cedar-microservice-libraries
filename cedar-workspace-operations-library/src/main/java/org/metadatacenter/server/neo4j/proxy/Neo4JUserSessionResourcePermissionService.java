@@ -73,8 +73,9 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
 
       CedarUserId oldOwnerId = currentPermissions.getOwner().getResourceId();
       CedarUserId newOwnerId = newPermissions.getOwner().getResourceId();
+      CedarUserId changedOwnerId = null;
       if (oldOwnerId != null && !oldOwnerId.equals(newOwnerId)) {
-        proxies.resource().updateResourceOwner(resourceId, newOwnerId);
+        changedOwnerId = newOwnerId;
       }
 
       Set<ResourcePermissionUserPermissionPair> oldUserPermissions = new HashSet<>();
@@ -88,15 +89,9 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
 
       Set<ResourcePermissionUserPermissionPair> toRemoveUserPermissions = new HashSet<>(oldUserPermissions);
       toRemoveUserPermissions.removeAll(newUserPermissions);
-      if (!toRemoveUserPermissions.isEmpty()) {
-        removeUserPermissions(resourceId, toRemoveUserPermissions);
-      }
 
       Set<ResourcePermissionUserPermissionPair> toAddUserPermissions = new HashSet<>(newUserPermissions);
       toAddUserPermissions.removeAll(oldUserPermissions);
-      if (!toAddUserPermissions.isEmpty()) {
-        addUserPermissions(resourceId, toAddUserPermissions);
-      }
 
       Set<ResourcePermissionGroupPermissionPair> oldGroupPermissions = new HashSet<>();
       for (CedarNodeGroupPermission gp : currentPermissions.getGroupPermissions()) {
@@ -109,20 +104,14 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
 
       Set<ResourcePermissionGroupPermissionPair> toRemoveGroupPermissions = new HashSet<>(oldGroupPermissions);
       toRemoveGroupPermissions.removeAll(newGroupPermissions);
-      if (!toRemoveGroupPermissions.isEmpty()) {
-        removeGroupPermissions(resourceId, toRemoveGroupPermissions);
-      }
 
       Set<ResourcePermissionGroupPermissionPair> toAddGroupPermissions = new HashSet<>(newGroupPermissions);
       toAddGroupPermissions.removeAll(oldGroupPermissions);
-      if (!toAddGroupPermissions.isEmpty()) {
-        addGroupPermissions(resourceId, toAddGroupPermissions);
-      }
 
+      NodeSharePermission setEverybodyPermission = null;
       ResourceWithEverybodyPermission node = proxies.filesystemResource().findResourceById(resourceId);
       if (node != null) {
         FolderServerGroup everybody = proxies.group().getEverybodyGroup();
-        NodeSharePermission setEverybodyPermission = null;
         for (ResourcePermissionGroupPermissionPair groupPermission : newGroupPermissions) {
           if (groupPermission.getGroup().getId().equals(everybody.getId())) {
             NodeSharePermission everybodyPermissionCandidate = NodeSharePermission.fromGroupPermission(groupPermission);
@@ -134,11 +123,11 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
         if (setEverybodyPermission == null && node.getEverybodyPermission() != NodeSharePermission.NONE) {
           setEverybodyPermission = NodeSharePermission.NONE;
         }
-
-        if (setEverybodyPermission != null) {
-          proxies.resource().setEverybodyPermission(resourceId, setEverybodyPermission);
-        }
       }
+
+      proxies.permission().updatePermissionsAtomically(resourceId, changedOwnerId,
+          toRemoveUserPermissions, toAddUserPermissions,
+          toRemoveGroupPermissions, toAddGroupPermissions, setEverybodyPermission);
 
       return new BackendCallResult();
     }
@@ -287,30 +276,6 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
 
   private List<CedarGroupId> getGroupIdsWithTransitivePermission(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
     return proxies.permission().getGroupIdsWithTransitivePermissionOnResource(resourceId, permission);
-  }
-
-  private void addGroupPermissions(CedarFilesystemResourceId resourceId, Set<ResourcePermissionGroupPermissionPair> toAddGroupPermissions) {
-    for (ResourcePermissionGroupPermissionPair pair : toAddGroupPermissions) {
-      proxies.permission().addPermissionToGroup(resourceId, pair.getGroup().getResourceId(), pair.getPermission());
-    }
-  }
-
-  private void removeGroupPermissions(CedarFilesystemResourceId resourceId, Set<ResourcePermissionGroupPermissionPair> toRemoveGroupPermissions) {
-    for (ResourcePermissionGroupPermissionPair pair : toRemoveGroupPermissions) {
-      proxies.permission().removePermissionFromGroup(resourceId, pair.getGroup().getResourceId(), pair.getPermission());
-    }
-  }
-
-  private void addUserPermissions(CedarFilesystemResourceId resourceId, Set<ResourcePermissionUserPermissionPair> toAddUserPermissions) {
-    for (ResourcePermissionUserPermissionPair pair : toAddUserPermissions) {
-      proxies.permission().addPermissionToUser(resourceId, pair.getUser().getResourceIds(), pair.getPermission());
-    }
-  }
-
-  private void removeUserPermissions(CedarFilesystemResourceId resourceId, Set<ResourcePermissionUserPermissionPair> toRemoveUserPermissions) {
-    for (ResourcePermissionUserPermissionPair pair : toRemoveUserPermissions) {
-      proxies.permission().removePermissionFromUser(resourceId, pair.getUser().getResourceIds(), pair.getPermission());
-    }
   }
 
 }

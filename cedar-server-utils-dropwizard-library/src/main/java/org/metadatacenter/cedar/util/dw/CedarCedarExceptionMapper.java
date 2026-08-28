@@ -32,7 +32,6 @@ public class CedarCedarExceptionMapper extends AbstractExceptionMapper implement
     }
 
     CedarErrorPack errorPack = exception.getErrorPack();
-    hideExceptionConditionally(errorPack);
 
     AppLogger.message(AppLogType.RESPONSE_EXCEPTION, AppLogSubType.START, globalRequestId, localRequestId)
         .param(AppLogParam.EXCEPTION, errorPack)
@@ -44,7 +43,7 @@ public class CedarCedarExceptionMapper extends AbstractExceptionMapper implement
       log.warn(":CCEM:msg :" + exception.getMessage());
     }
     return Response.status(errorPack.getStatus().getStatusCode())
-        .entity(errorPack)
+        .entity(clientSafeCopy(errorPack))
         .type(MediaType.APPLICATION_JSON)
         .build();
   }

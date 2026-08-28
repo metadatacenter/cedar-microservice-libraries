@@ -110,10 +110,10 @@ public class InMemoryUserService implements UserService {
   }
 
   @Override
-  public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyValue, String newKeyValue,
+  public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyId, String newKeyValue,
                                                        LocalDateTime newCreationDate) {
     return changeApiKeys(userId, keys -> {
-      CedarUserApiKey target = find(keys, keyValue);
+      CedarUserApiKey target = findById(keys, keyId);
       if (target == null) {
         return API_KEY_NOT_FOUND;
       }
@@ -124,9 +124,9 @@ public class InMemoryUserService implements UserService {
   }
 
   @Override
-  public BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyValue) {
+  public BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyId) {
     return changeApiKeys(userId, keys -> {
-      CedarUserApiKey target = find(keys, keyValue);
+      CedarUserApiKey target = findById(keys, keyId);
       if (target == null) {
         return API_KEY_NOT_FOUND;
       }
@@ -168,9 +168,9 @@ public class InMemoryUserService implements UserService {
     return result;
   }
 
-  private static CedarUserApiKey find(List<CedarUserApiKey> keys, String keyValue) {
+  private static CedarUserApiKey findById(List<CedarUserApiKey> keys, String keyId) {
     for (CedarUserApiKey k : keys) {
-      if (k.getKey() != null && k.getKey().equals(keyValue)) {
+      if (k.getId() != null && k.getId().equals(keyId)) {
         return k;
       }
     }

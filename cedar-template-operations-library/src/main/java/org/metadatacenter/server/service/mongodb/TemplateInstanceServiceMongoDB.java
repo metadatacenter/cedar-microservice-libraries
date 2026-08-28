@@ -3,6 +3,7 @@ package org.metadatacenter.server.service.mongodb;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mongodb.client.MongoClient;
 import org.metadatacenter.exception.ArtifactServerResourceNotFoundException;
+import org.metadatacenter.server.dao.ArtifactWithRevision;
 import org.metadatacenter.server.dao.mongodb.TemplateInstanceDaoMongoDB;
 import org.metadatacenter.server.service.FieldNameInEx;
 import org.metadatacenter.server.service.TemplateInstanceService;
@@ -46,9 +47,19 @@ public class TemplateInstanceServiceMongoDB extends GenericTemplateServiceMongoD
   }
 
   @Override
-  public JsonNode updateTemplateInstance(String templateInstanceId, JsonNode content) throws
+  public ArtifactWithRevision<JsonNode> findTemplateInstanceWithRevision(String templateInstanceId) throws IOException {
+    return templateInstanceDao.findWithRevision(templateInstanceId);
+  }
+
+  @Override
+  public long getTemplateInstanceRevision(String templateInstanceId) throws ArtifactServerResourceNotFoundException {
+    return templateInstanceDao.getRevision(templateInstanceId);
+  }
+
+  @Override
+  public JsonNode updateTemplateInstance(String templateInstanceId, JsonNode content, long expectedRevision) throws
       ArtifactServerResourceNotFoundException, IOException {
-    return templateInstanceDao.update(templateInstanceId, content);
+    return templateInstanceDao.update(templateInstanceId, content, expectedRevision);
   }
 
   @Override

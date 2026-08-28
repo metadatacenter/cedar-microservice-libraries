@@ -9,7 +9,6 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.InclusionSubgraphServiceSession;
 import org.metadatacenter.server.neo4j.cypher.sort.QuerySortOptions;
-import org.metadatacenter.server.neo4j.util.Neo4JUtil;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 import org.slf4j.Logger;
@@ -39,7 +38,7 @@ public class RegenerateInclusionSubgraphTask {
     List<CedarResourceType> resourceTypeList = new ArrayList<>(List.of(CedarResourceType.TEMPLATE, CedarResourceType.ELEMENT));
     ResourceVersionFilter version = ResourceVersionFilter.ALL;
     ResourcePublicationStatusFilter publicationStatus = ResourcePublicationStatusFilter.ALL;
-    List<String> sortList = new ArrayList<>(List.of(Neo4JUtil.escapePropertyName(QuerySortOptions.DEFAULT_SORT_FIELD.getFieldName())));
+    List<String> sortList = new ArrayList<>(List.of(QuerySortOptions.DEFAULT_SORT_FIELD.getName()));
 
     long total = folderSession.viewAllCount(resourceTypeList, version, publicationStatus);
     log.warn("INCLUSION-SUBGRAPH Total count:" + total);

@@ -57,16 +57,16 @@ public class ValueSetsExtractor
 
   private final Logger logger = LoggerFactory.getLogger(ValueSetsExtractor.class);
 
-  private Map<String, Set<String>> classHierarchy = new HashMap<>();
-  private Map<Annotation, Map<String, String>> annotations = new HashMap<>();
+  private record Snapshot(Map<String, Set<String>> classHierarchy,
+                          Map<Annotation, Map<String, String>> annotations) {
+  }
 
-  private static ValueSetsExtractor singleInstance;
+  private static final ValueSetsExtractor SINGLE_INSTANCE = new ValueSetsExtractor();
+
+  private volatile Snapshot snapshot = new Snapshot(Map.of(), Map.of());
 
   public static ValueSetsExtractor getInstance() {
-    if (singleInstance == null) {
-      singleInstance = new ValueSetsExtractor();
-    }
-    return singleInstance;
+    return SINGLE_INSTANCE;
   }
 
   private ValueSetsExtractor()
@@ -80,8 +80,9 @@ public class ValueSetsExtractor
       logger.info("Reading OWL value sets ontology " + ontologyFilePath + " ...");
       OWLOntology ontology = manager.loadOntologyFromOntologyDocument(new File(ontologyFilePath));
 
-      classHierarchy = getClassHierarchy(ontology);
-      annotations = getAnnotations(ontology);
+      Map<String, Set<String>> classHierarchy = immutableClassHierarchy(getClassHierarchy(ontology));
+      Map<Annotation, Map<String, String>> annotations = immutableAnnotations(getAnnotations(ontology));
+      snapshot = new Snapshot(classHierarchy, annotations);
 
       logger.info("Finished processing OWL value sets ontology");
     } catch (OWLOntologyCreationException e) {
@@ -91,20 +92,33 @@ public class ValueSetsExtractor
 
   public Set<String> getBaseClassURIs()
   {
-    return classHierarchy.keySet();
+    return snapshot.classHierarchy().keySet();
   }
 
   public Set<String> getSubClassURIs(String superclassURI)
   {
-    return classHierarchy.getOrDefault(superclassURI, Collections.EMPTY_SET);
+    return snapshot.classHierarchy().getOrDefault(superclassURI, Collections.emptySet());
   }
 
   public Optional<String> getAnnotation(String classURI, Annotation annotation)
   {
-    if (annotations.containsKey(annotation) && annotations.get(annotation).containsKey(classURI))
-      return Optional.of(annotations.get(annotation).get(classURI));
-    else
-      return Optional.empty();
+    Map<String, String> values = snapshot.annotations().get(annotation);
+    return values == null ? Optional.empty() : Optional.ofNullable(values.get(classURI));
+  }
+
+  private static Map<String, Set<String>> immutableClassHierarchy(Map<String, Set<String>> classHierarchy)
+  {
+    Map<String, Set<String>> immutableHierarchy = new HashMap<>();
+    classHierarchy.forEach((classURI, subclasses) -> immutableHierarchy.put(classURI, Set.copyOf(subclasses)));
+    return Map.copyOf(immutableHierarchy);
+  }
+
+  private static Map<Annotation, Map<String, String>> immutableAnnotations(
+      Map<Annotation, Map<String, String>> annotations)
+  {
+    Map<Annotation, Map<String, String>> immutableAnnotations = new HashMap<>();
+    annotations.forEach((annotation, values) -> immutableAnnotations.put(annotation, Map.copyOf(values)));
+    return Map.copyOf(immutableAnnotations);
   }
 
   private Map<String, Set<String>> getClassHierarchy(OWLOntology ontology)

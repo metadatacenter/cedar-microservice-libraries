@@ -19,7 +19,11 @@ public interface GenericDao<K, T> {
 
   T find(K id) throws IOException;
 
-  T update(K id, T content) throws ArtifactServerResourceNotFoundException, IOException;
+  ArtifactWithRevision<T> findWithRevision(K id) throws IOException;
+
+  long getRevision(K id) throws ArtifactServerResourceNotFoundException;
+
+  T update(K id, T content, long expectedRevision) throws ArtifactServerResourceNotFoundException, IOException;
 
   void delete(K id) throws ArtifactServerResourceNotFoundException, IOException;
 

@@ -18,6 +18,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ValueSetsExtractorTest {
@@ -26,6 +28,11 @@ class ValueSetsExtractorTest {
 
   @TempDir
   Path tempDir;
+
+  @Test
+  void returnsSameInstance() {
+    assertSame(ValueSetsExtractor.getInstance(), ValueSetsExtractor.getInstance());
+  }
 
   @Test
   void loadsDirectHierarchyAndEverySupportedAnnotationFromARealOntology() throws Exception {
@@ -71,6 +78,9 @@ class ValueSetsExtractorTest {
         ValueSetsExtractor.Annotation.START_TIME).orElseThrow());
     assertEquals("2025-01-01", extractor.getAnnotation(child.getIRI().toString(),
         ValueSetsExtractor.Annotation.END_TIME).orElseThrow());
+    assertThrows(UnsupportedOperationException.class, () -> extractor.getBaseClassURIs().clear());
+    assertThrows(UnsupportedOperationException.class,
+        () -> extractor.getSubClassURIs(base.getIRI().toString()).add("https://example.org/injected"));
   }
 
   @Test

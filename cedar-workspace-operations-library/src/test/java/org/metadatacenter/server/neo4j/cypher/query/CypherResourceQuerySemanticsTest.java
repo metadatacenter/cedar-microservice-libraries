@@ -6,6 +6,7 @@ import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CypherResourceQuerySemanticsTest {
@@ -42,5 +43,12 @@ class CypherResourceQuerySemanticsTest {
     String folderContents = CypherQueryBuilderFolderContent.getFolderContentsFilteredLookupQuery(
         List.of("name"), ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL);
     assertTrue(folderContents.matches("(?s).*ORDER BY.*child\\.<PROP\\.ID>\\s*SKIP \\$offset.*"), folderContents);
+  }
+
+  @Test
+  void resourceQueriesRejectUnknownSortFieldsBeforeBuildingCypher() {
+    assertThrows(IllegalArgumentException.class,
+        () -> CypherQueryBuilderFilesystemResource.getAllResourcesLookupQuery(
+            List.of("name DESC MATCH (injected) RETURN injected")));
   }
 }

@@ -11,6 +11,8 @@ import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.metadatacenter.exception.ArtifactServerResourceNotFoundException;
+import org.metadatacenter.server.dao.ArtifactRevisionConflictException;
+import org.metadatacenter.server.dao.ArtifactWithRevision;
 import org.metadatacenter.server.dao.GenericDao;
 import org.metadatacenter.server.service.FieldNameInEx;
 import org.metadatacenter.util.json.JsonMapper;
@@ -22,12 +24,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
 /**
  * Service to manage elements in a MongoDB database
  */
 public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
+
+  static final String INTERNAL_REVISION_FIELD = "_cedarRevision";
 
   protected final MongoCollection<Document> entityCollection;
   private final JsonUtils jsonUtils;
@@ -53,9 +58,10 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     JsonNode fixedElement = jsonUtils.fixMongoDB(element, FixMongoDirection.WRITE_TO_MONGO);
     Map<String, Object> elementMap = JsonMapper.MAPPER.convertValue(fixedElement, Map.class);
     Document elementDoc = new Document(elementMap);
+    elementDoc.put(INTERNAL_REVISION_FIELD, 1L);
     entityCollection.insertOne(elementDoc);
     // Returns the document created (all keys adapted for MongoDB are restored)
-    return jsonUtils.fixMongoDB(JsonMapper.MAPPER.readTree(elementDoc.toJson()), FixMongoDirection.READ_FROM_MONGO);
+    return toPublicJson(elementDoc);
   }
 
   /**
@@ -97,8 +103,7 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     List<JsonNode> docs = new ArrayList<>();
     try (MongoCursor<Document> cursor = findIterable.iterator()) {
       while (cursor.hasNext()) {
-        JsonNode node = jsonUtils.fixMongoDB(JsonMapper.MAPPER.readTree(cursor.next().toJson()), FixMongoDirection
-            .READ_FROM_MONGO);
+        JsonNode node = toPublicJson(cursor.next());
         docs.add(node);
       }
     }
@@ -115,6 +120,12 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
    */
   @Override
   public JsonNode find(String id) throws IOException {
+    ArtifactWithRevision<JsonNode> artifact = findWithRevision(id);
+    return artifact == null ? null : artifact.content();
+  }
+
+  @Override
+  public ArtifactWithRevision<JsonNode> findWithRevision(String id) throws IOException {
     if ((id == null) || (id.length() == 0)) {
       throw new IllegalArgumentException();
     }
@@ -122,7 +133,23 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     if (doc == null) {
       return null;
     }
-    return jsonUtils.fixMongoDB(JsonMapper.MAPPER.readTree(doc.toJson()), FixMongoDirection.READ_FROM_MONGO);
+    Number revision = doc.get(INTERNAL_REVISION_FIELD, Number.class);
+    return new ArtifactWithRevision<>(toPublicJson(doc), revision == null ? 0L : revision.longValue());
+  }
+
+  @Override
+  public long getRevision(String id) throws ArtifactServerResourceNotFoundException {
+    if ((id == null) || id.isEmpty()) {
+      throw new IllegalArgumentException();
+    }
+    Document doc = entityCollection.find(eq("@id", id))
+        .projection(Projections.include(INTERNAL_REVISION_FIELD))
+        .first();
+    if (doc == null) {
+      throw new ArtifactServerResourceNotFoundException();
+    }
+    Number revision = doc.get(INTERNAL_REVISION_FIELD, Number.class);
+    return revision == null ? 0L : revision.longValue();
   }
 
   /**
@@ -136,26 +163,34 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
    * @throws IOException                             If an error occurs during update
    */
   @Override
-  public JsonNode update(String id, JsonNode content)
+  public JsonNode update(String id, JsonNode content, long expectedRevision)
       throws ArtifactServerResourceNotFoundException, IOException {
     if ((id == null) || (id.length() == 0)) {
       throw new IllegalArgumentException();
-    }
-    if (!exists(id)) {
-      throw new ArtifactServerResourceNotFoundException();
     }
     // Adapts all keys not accepted by MongoDB
     content = jsonUtils.fixMongoDB(content, FixMongoDirection.WRITE_TO_MONGO);
     Map<String, Object> contentMap = JsonMapper.MAPPER.convertValue(content, Map.class);
     Document contentDocument = new Document(contentMap);
-    UpdateResult updateResult = entityCollection.replaceOne(eq("@id", id), contentDocument);
+    contentDocument.put(INTERNAL_REVISION_FIELD, Math.addExact(expectedRevision, 1L));
+    Bson revisionFilter = expectedRevision == 0L
+        ? com.mongodb.client.model.Filters.exists(INTERNAL_REVISION_FIELD, false)
+        : eq(INTERNAL_REVISION_FIELD, expectedRevision);
+    UpdateResult updateResult = entityCollection.replaceOne(and(eq("@id", id), revisionFilter), contentDocument);
     if (updateResult.getMatchedCount() == 1) {
       return find(id);
+    } else if (!exists(id)) {
+      throw new ArtifactServerResourceNotFoundException();
     } else {
-      // Invariant violation (the document existed a moment ago), not JVM corruption: a RuntimeException
-      // flows through catch (Exception) and the CedarExceptionMapper, giving a clean 500 with an errorId.
-      throw new IllegalStateException("Update matched no document for @id=" + id);
+      throw new ArtifactRevisionConflictException(id, expectedRevision);
     }
+  }
+
+  private JsonNode toPublicJson(Document storedDocument) throws IOException {
+    Document publicDocument = new Document(storedDocument);
+    publicDocument.remove(INTERNAL_REVISION_FIELD);
+    return jsonUtils.fixMongoDB(JsonMapper.MAPPER.readTree(publicDocument.toJson()),
+        FixMongoDirection.READ_FROM_MONGO);
   }
 
   /**

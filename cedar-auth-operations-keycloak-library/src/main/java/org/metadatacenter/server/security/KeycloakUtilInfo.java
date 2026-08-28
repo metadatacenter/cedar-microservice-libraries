@@ -8,6 +8,7 @@ public class KeycloakUtilInfo {
   protected String cedarAdminUserName;
   protected String cedarAdminUserPassword;
   protected String cedarAdminUserApiKey;
+  protected boolean allowInsecureTls;
 
   public String getKeycloakBaseURI() {
     return keycloakBaseURI;
@@ -55,5 +56,13 @@ public class KeycloakUtilInfo {
 
   public void setCedarAdminUserApiKey(String cedarAdminUserApiKey) {
     this.cedarAdminUserApiKey = cedarAdminUserApiKey;
+  }
+
+  public boolean isAllowInsecureTls() {
+    return allowInsecureTls;
+  }
+
+  public void setAllowInsecureTls(boolean allowInsecureTls) {
+    this.allowInsecureTls = allowInsecureTls;
   }
 }
