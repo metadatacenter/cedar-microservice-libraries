@@ -29,7 +29,24 @@ class RevisionPreconditionParserTest {
   }
 
   @Test
+  void representationSpecificStrongTagsCarryTheUnderlyingRevision() {
+    RevisionPrecondition parsed = RevisionPreconditionParser.parse(
+        "\"3-yaml\", \"7-yaml-compact\", \"11-rdf-nquad\"");
+    assertTrue(parsed.matches(3));
+    assertTrue(parsed.matches(7));
+    assertTrue(parsed.matches(11));
+    assertFalse(parsed.matches(8));
+  }
+
+  @Test
   void formatsNumericStrongEntityTags() {
     assertEquals("\"12\"", RevisionPreconditionParser.format(12));
+    assertEquals("\"12-yaml-compact\"", RevisionPreconditionParser.format(12, "yaml-compact"));
+  }
+
+  @Test
+  void rejectsUnsafeRepresentationSuffixes() {
+    org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+        () -> RevisionPreconditionParser.format(12, "yaml\""));
   }
 }

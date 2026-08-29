@@ -7,10 +7,12 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Parses CEDAR's numeric strong ETags from an If-Match field value. */
+/** Parses CEDAR's revision-bearing strong ETags from an If-Match field value. */
 public final class RevisionPreconditionParser {
 
-  private static final Pattern NUMERIC_STRONG_ETAG = Pattern.compile("\\\"([0-9]+)\\\"");
+  private static final Pattern REVISION_STRONG_ETAG =
+      Pattern.compile("\\\"([0-9]+)(?:-([A-Za-z0-9][A-Za-z0-9._-]*))?\\\"");
+  private static final Pattern REPRESENTATION = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]*");
 
   private RevisionPreconditionParser() {
   }
@@ -21,7 +23,7 @@ public final class RevisionPreconditionParser {
     }
     Set<Long> revisions = new HashSet<>();
     for (String candidate : ifMatch.split(",")) {
-      Matcher matcher = NUMERIC_STRONG_ETAG.matcher(candidate.trim());
+      Matcher matcher = REVISION_STRONG_ETAG.matcher(candidate.trim());
       if (matcher.matches()) {
         try {
           revisions.add(Long.parseLong(matcher.group(1)));
@@ -36,5 +38,17 @@ public final class RevisionPreconditionParser {
 
   public static String format(long revision) {
     return "\"" + revision + "\"";
+  }
+
+  /**
+   * Formats a strong validator for a non-canonical representation of a revision. The suffix keeps
+   * byte-different YAML, compact YAML, JSON, and RDF renderings from claiming the same strong ETag,
+   * while {@link #parse(String)} still recovers the datastore revision used for write exclusion.
+   */
+  public static String format(long revision, String representation) {
+    if (representation == null || !REPRESENTATION.matcher(representation).matches()) {
+      throw new IllegalArgumentException("Invalid ETag representation suffix: " + representation);
+    }
+    return "\"" + revision + "-" + representation + "\"";
   }
 }

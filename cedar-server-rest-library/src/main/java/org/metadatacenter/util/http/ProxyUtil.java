@@ -34,6 +34,7 @@ public class ProxyUtil {
   private static final List<String> CEDAR_RESPONSE_HEADERS = Lists.newArrayList(
       HttpHeaders.CONTENT_TYPE,
       HttpHeaders.ETAG,
+      HttpHeaders.VARY,
       CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS,
       CustomHttpConstants.HEADER_CEDAR_VALIDATION_REPORT,
       HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS);
@@ -161,7 +162,7 @@ public class ProxyUtil {
 
   public static void proxyResponseHeaders(ClassicHttpResponse proxyResponse, HttpServletResponse response) {
     for (Header header : proxyResponse.getHeaders()) {
-      if (CEDAR_RESPONSE_HEADERS.contains(header.getName())) {
+      if (CEDAR_RESPONSE_HEADERS.stream().anyMatch(name -> name.equalsIgnoreCase(header.getName()))) {
         response.setHeader(header.getName(), header.getValue());
       }
     }
