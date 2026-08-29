@@ -11,7 +11,8 @@ import io.dropwizard.jetty.HttpConnectorFactory;
 import io.dropwizard.core.server.DefaultServerFactory;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
-import org.eclipse.jetty.servlets.CrossOriginFilter;
+import org.eclipse.jetty.ee10.servlets.CrossOriginFilter;
+import org.eclipse.jetty.http.UriCompliance;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.ServerConfig;
@@ -46,7 +47,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static org.eclipse.jetty.servlets.CrossOriginFilter.*;
+import static org.eclipse.jetty.ee10.servlets.CrossOriginFilter.*;
 
 public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceConfiguration> extends Application<T> {
 
@@ -143,7 +144,17 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     initializeApp();
 
     DefaultServerFactory serverFactory = (DefaultServerFactory) configuration.getServerFactory();
-    ((HttpConnectorFactory) serverFactory.getApplicationConnectors().get(0)).setPort(getApplicationHttpPort(configuration));
+    HttpConnectorFactory applicationConnector =
+        (HttpConnectorFactory) serverFactory.getApplicationConnectors().get(0);
+    applicationConnector.setPort(getApplicationHttpPort(configuration));
+    // Artifact identifiers are IRIs carried as one percent-encoded path parameter, so their
+    // encoded "https://" contains %2F by design. Jetty 12 rejects encoded separators by default;
+    // allow precisely that case without enabling its broader Jetty 11 or legacy URI modes.
+    applicationConnector.setUriCompliance(cedarUriCompliance());
+    // Jetty's EE10 Servlet layer has its own guard for ambiguous paths. It must permit decoding
+    // before Jersey can expose the encoded IRI as a path parameter; the connector-level mode above
+    // remains the security boundary and admits only encoded separators.
+    environment.getApplicationContext().getServletHandler().setDecodeAmbiguousURIs(true);
     HttpConnectorFactory adminConnector = (HttpConnectorFactory) serverFactory.getAdminConnectors().get(0);
     adminConnector.setPort(getApplicationAdminPort(configuration));
     // The admin connector answers /metrics and /threads to anyone who reaches it — no credentials, a
@@ -176,6 +187,11 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   private Integer getApplicationHttpPort(T configuration) {
     ServerConfig serverConfig = cedarConfig.getServers().get(getServerName());
     return configuration.getTestPort().orElse(serverConfig.getHttpPort());
+  }
+
+  static UriCompliance cedarUriCompliance() {
+    return UriCompliance.DEFAULT.with(
+        "CEDAR_ARTIFACT_IRI_PATHS", UriCompliance.Violation.AMBIGUOUS_PATH_SEPARATOR);
   }
 
   private Integer getApplicationAdminPort(T configuration) {
