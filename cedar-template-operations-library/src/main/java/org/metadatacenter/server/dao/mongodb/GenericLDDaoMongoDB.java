@@ -178,7 +178,8 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
         : eq(INTERNAL_REVISION_FIELD, expectedRevision);
     UpdateResult updateResult = entityCollection.replaceOne(and(eq("@id", id), revisionFilter), contentDocument);
     if (updateResult.getMatchedCount() == 1) {
-      return find(id);
+      // A fresh read could observe a later writer and return a body that does not match the response ETag.
+      return toPublicJson(contentDocument);
     } else if (!exists(id)) {
       throw new ArtifactServerResourceNotFoundException();
     } else {
