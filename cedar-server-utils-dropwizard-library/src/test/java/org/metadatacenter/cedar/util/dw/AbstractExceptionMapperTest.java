@@ -1,5 +1,9 @@
 package org.metadatacenter.cedar.util.dw;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.mongodb.MongoSocketOpenException;
 import com.mongodb.MongoTimeoutException;
 import com.mongodb.ServerAddress;
@@ -14,6 +18,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.SQLRecoverableException;
 import java.sql.SQLTransientConnectionException;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -77,5 +82,42 @@ class AbstractExceptionMapperTest {
     assertTrue(mapper.isRedisUnavailable(new IllegalStateException("wrapper",
         new JedisConnectionException("connection lost"))));
     assertFalse(mapper.isRedisUnavailable(new IllegalArgumentException("bad command")));
+  }
+
+  @Test
+  void onlyServerResponsesUseOperationalErrorLogging() {
+    assertFalse(mapper.isServerErrorStatus(400));
+    assertFalse(mapper.isServerErrorStatus(404));
+    assertFalse(mapper.isServerErrorStatus(409));
+    assertFalse(mapper.isServerErrorStatus(412));
+    assertFalse(mapper.isServerErrorStatus(428));
+    assertTrue(mapper.isServerErrorStatus(500));
+    assertTrue(mapper.isServerErrorStatus(502));
+    assertTrue(mapper.isServerErrorStatus(503));
+  }
+
+  @Test
+  void mappedClientOutcomesLogAtDebugAndServerFailuresLogAtError() {
+    Logger logger = (Logger) org.slf4j.LoggerFactory.getLogger(
+        AbstractExceptionMapperTest.class.getName() + "." + UUID.randomUUID());
+    logger.setLevel(Level.DEBUG);
+    logger.setAdditive(false);
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    logger.addAppender(appender);
+
+    try {
+      mapper.logMappedException(logger, ":TEST:", new IllegalArgumentException("missing"), 404, false);
+      mapper.logMappedException(logger, ":TEST:", new IllegalStateException("broken"), 500, true);
+
+      assertEquals(2, appender.list.size());
+      assertEquals(Level.DEBUG, appender.list.get(0).getLevel());
+      assertNull(appender.list.get(0).getThrowableProxy());
+      assertEquals(Level.ERROR, appender.list.get(1).getLevel());
+      assertNotNull(appender.list.get(1).getThrowableProxy());
+    } finally {
+      logger.detachAppender(appender);
+      appender.stop();
+    }
   }
 }

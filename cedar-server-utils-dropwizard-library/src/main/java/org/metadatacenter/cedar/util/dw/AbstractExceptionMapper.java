@@ -9,6 +9,7 @@ import com.mongodb.MongoTimeoutException;
 import org.metadatacenter.error.CedarErrorPack;
 import org.neo4j.driver.exceptions.ServiceUnavailableException;
 import org.neo4j.driver.exceptions.SessionExpiredException;
+import org.slf4j.Logger;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
 import java.sql.SQLException;
@@ -17,6 +18,27 @@ import java.sql.SQLRecoverableException;
 import java.sql.SQLTransientConnectionException;
 
 public abstract class AbstractExceptionMapper {
+
+  /**
+   * Log mapped client outcomes quietly and server failures prominently. A thrown exception is an
+   * implementation detail of many ordinary REST outcomes (404, 409 and 412 among them); it does not
+   * turn the response into an operational warning. Access logs remain the authoritative record of
+   * every response status.
+   */
+  protected void logMappedException(Logger logger, String marker, Throwable exception, int statusCode,
+                                    boolean includeClientStackTrace) {
+    if (isServerErrorStatus(statusCode)) {
+      logger.error(marker + "full:", exception);
+    } else if (includeClientStackTrace) {
+      logger.debug(marker + "full:", exception);
+    } else {
+      logger.debug(marker + "msg :{}", exception.getMessage());
+    }
+  }
+
+  protected boolean isServerErrorStatus(int statusCode) {
+    return statusCode >= 500;
+  }
 
   /**
    * True when Neo4j could not service the request because the graph is unreachable or the session

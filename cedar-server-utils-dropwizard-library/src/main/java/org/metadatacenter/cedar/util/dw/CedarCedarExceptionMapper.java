@@ -37,12 +37,9 @@ public class CedarCedarExceptionMapper extends AbstractExceptionMapper implement
         .param(AppLogParam.EXCEPTION, errorPack)
         .enqueue();
 
-    if (exception.isShowFullStackTrace()) {
-      log.warn(":CCEM:full:", exception);
-    } else {
-      log.warn(":CCEM:msg :" + exception.getMessage());
-    }
-    return Response.status(errorPack.getStatus().getStatusCode())
+    int statusCode = errorPack.getStatus().getStatusCode();
+    logMappedException(log, ":CCEM:", exception, statusCode, exception.isShowFullStackTrace());
+    return Response.status(statusCode)
         .entity(clientSafeCopy(errorPack))
         .type(MediaType.APPLICATION_JSON)
         .build();

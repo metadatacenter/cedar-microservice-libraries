@@ -22,11 +22,10 @@ import jakarta.ws.rs.ext.Provider;
 @Provider
 public class CedarExceptionMapper extends AbstractExceptionMapper implements ExceptionMapper<Exception> {
 
-  private static final Logger log = LoggerFactory.getLogger(CedarCedarExceptionMapper.class);
+  private static final Logger log = LoggerFactory.getLogger(CedarExceptionMapper.class);
 
   public Response toResponse(Exception exception) {
 
-    log.warn(":CEM::", exception);
     if (isNeo4jUnavailable(exception)) {
       return new CedarCedarExceptionMapper().toResponse(
           new CedarDependencyUnavailableException("Neo4j is unavailable", exception));
@@ -39,7 +38,40 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
     } else if (isRedisUnavailable(exception)) {
       return new CedarCedarExceptionMapper().toResponse(
           new CedarDependencyUnavailableException("Redis is unavailable", exception));
-    } else if (exception instanceof BadRequestException) {
+    }
+
+    Response clientResponse = clientResponse(exception);
+    if (clientResponse != null) {
+      logMappedException(log, ":CEM:", exception, clientResponse.getStatus(), false);
+      return clientResponse;
+    }
+
+    logMappedException(log, ":CEM:", exception,
+        CedarResponseStatus.INTERNAL_SERVER_ERROR.getStatusCode(), true);
+
+    LoggingContext loggingContext = ThreadLocalRequestIdHolder.getLoggingContext();
+    String globalRequestId = null;
+    String localRequestId = null;
+    if (loggingContext != null) {
+      globalRequestId = loggingContext.getGlobalRequestId();
+      localRequestId = loggingContext.getLocalRequestId();
+    }
+
+    CedarErrorPack errorPack = new CedarErrorPack();
+    errorPack.sourceException(exception);
+
+    AppLogger.message(AppLogType.RESPONSE_EXCEPTION, AppLogSubType.START, globalRequestId, localRequestId)
+        .param(AppLogParam.EXCEPTION, errorPack)
+        .enqueue();
+
+    return Response.status(CedarResponseStatus.INTERNAL_SERVER_ERROR.getStatusCode())
+        .entity(clientSafeCopy(errorPack))
+        .type(MediaType.APPLICATION_JSON)
+        .build();
+  }
+
+  private Response clientResponse(Exception exception) {
+    if (exception instanceof BadRequestException) {
       return CedarResponse.badRequest().build();
     } else if (exception instanceof ForbiddenException) {
       return CedarResponse.forbidden().build();
@@ -65,26 +97,7 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
       int status = webApplicationException.getResponse().getStatus();
       return Response.status(status).build();
     }
-
-    LoggingContext loggingContext = ThreadLocalRequestIdHolder.getLoggingContext();
-    String globalRequestId = null;
-    String localRequestId = null;
-    if (loggingContext != null) {
-      globalRequestId = loggingContext.getGlobalRequestId();
-      localRequestId = loggingContext.getLocalRequestId();
-    }
-
-    CedarErrorPack errorPack = new CedarErrorPack();
-    errorPack.sourceException(exception);
-
-    AppLogger.message(AppLogType.RESPONSE_EXCEPTION, AppLogSubType.START, globalRequestId, localRequestId)
-        .param(AppLogParam.EXCEPTION, errorPack)
-        .enqueue();
-
-    return Response.status(CedarResponseStatus.INTERNAL_SERVER_ERROR.getStatusCode())
-        .entity(clientSafeCopy(errorPack))
-        .type(MediaType.APPLICATION_JSON)
-        .build();
+    return null;
   }
 
 }
