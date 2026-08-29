@@ -45,10 +45,10 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
   }
 
   boolean deleteFolderById(CedarFolderId folderId) {
-    String cypher = CypherQueryBuilderFolder.deleteFolderContentsRecursivelyById();
+    String cypher = CypherQueryBuilderFolder.deleteEmptyFolderById();
     CypherParameters params = CypherParamBuilderFolder.matchId(folderId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "deleting folder");
+    return executeWriteGetOne(q, FolderServerFolder.class) != null;
   }
 
   List<FolderServerFolder> findFolderPathByPath(String path) {

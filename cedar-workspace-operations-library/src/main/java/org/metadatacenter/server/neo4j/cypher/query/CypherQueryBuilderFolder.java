@@ -47,12 +47,24 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " RETURN folder";
   }
 
-  public static String deleteFolderContentsRecursivelyById() {
-    return "" +
-        " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
-        " MATCH (folder)-[relation:<REL.CONTAINS>*0..]->(child)" +
-        " DETACH DELETE child" +
-        " DETACH DELETE folder";
+  /**
+   * Deletes one folder only when it is still empty. The no-op property write locks the folder
+   * before the emptiness check, serializing this mutation with concurrent child relationship
+   * creation. Returning the parent lets the caller distinguish deletion from a missing or
+   * non-empty folder without a separate read.
+   */
+  public static String deleteEmptyFolderById() {
+    return """
+        MATCH (parent:<LABEL.FOLDER>)-[:<REL.CONTAINS>]->
+              (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})
+        SET folder.<PROP.ID> = folder.<PROP.ID>
+        WITH parent, folder
+        WHERE NOT EXISTS {
+          MATCH (folder)-[:<REL.CONTAINS>]->()
+        }
+        DETACH DELETE folder
+        RETURN parent
+        """;
   }
 
   public static String getFolderLookupQueryById() {

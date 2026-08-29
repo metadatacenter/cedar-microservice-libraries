@@ -232,4 +232,21 @@ public class WorkspacePermissionIntegrationTest {
         "The deleted parent should no longer be found by id");
   }
 
+  @Test
+  public void deletingANonEmptyFolderPreservesItsWholeSubtree() {
+    FolderServiceSession user1Folders = foldersOf(user1Context);
+    FolderServerFolder parent = createFolderUnderUser1Home("Protected Nonempty Parent");
+    FolderServerFolder child = createFolderUnder(parent.getResourceId(), "Protected Child");
+
+    Assertions.assertFalse(user1Folders.deleteFolderById(parent.getResourceId()),
+        "Deleting a non-empty folder should be refused atomically");
+    Assertions.assertNotNull(user1Folders.findFolderById(parent.getResourceId()),
+        "The refused deletion must preserve the parent");
+    Assertions.assertNotNull(user1Folders.findFolderById(child.getResourceId()),
+        "The refused deletion must preserve the child");
+    Assertions.assertNotNull(user1Folders.findFilesystemResourceByParentFolderIdAndName(
+            parent.getResourceId(), child.getName()),
+        "The refused deletion must preserve the parent-child relationship");
+  }
+
 }
