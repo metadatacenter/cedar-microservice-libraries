@@ -29,36 +29,11 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     if (sourceFolderId.getId().equals(targetFolderId.getId())) {
       return false;
     }
-    if (folderIsAncestorOf(sourceFolderId, targetFolderId)) {
-      return false;
-    }
-    boolean unlink = unlinkFolderFromParent(sourceFolderId);
-    if (unlink) {
-      return linkFolderUnderFolder(sourceFolderId, targetFolderId);
-    }
-    return false;
-  }
-
-  private boolean folderIsAncestorOf(CedarFolderId parentFolderId, CedarFolderId folderId) {
-    String cypher = CypherQueryBuilderFolder.folderIsAncestorOf();
-    CypherParameters params = CypherParamBuilderFolder.matchFolderIdAndParentFolderId(folderId, parentFolderId);
+    String cypher = CypherQueryBuilderFolder.moveFolder();
+    CypherParameters params = CypherParamBuilderFolder.matchFolderIdAndParentFolderId(
+        sourceFolderId, targetFolderId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    FolderServerFolder parent = executeReadGetOne(q, FolderServerFolder.class);
-    return parent != null;
-  }
-
-  private boolean unlinkFolderFromParent(CedarFolderId folderId) {
-    String cypher = CypherQueryBuilderFolder.unlinkFolderFromParent();
-    CypherParameters params = CypherParamBuilderFolder.matchId(folderId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "unlinking folder");
-  }
-
-  private boolean linkFolderUnderFolder(CedarFolderId folderId, CedarFolderId parentFolderId) {
-    String cypher = CypherQueryBuilderFolder.linkFolderUnderFolder();
-    CypherParameters params = CypherParamBuilderFolder.matchFolderIdAndParentFolderId(folderId, parentFolderId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "linking folder");
+    return executeWriteGetOne(q, FolderServerFolder.class) != null;
   }
 
   FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields,

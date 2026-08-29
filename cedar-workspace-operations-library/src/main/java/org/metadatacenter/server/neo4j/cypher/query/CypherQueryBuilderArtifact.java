@@ -47,6 +47,20 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
         " RETURN artifact";
   }
 
+  /** Reparents an artifact atomically, returning no row when either endpoint is absent. */
+  public static String moveArtifact() {
+    return """
+        MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ARTIFACT_ID>}})
+        SET artifact.<PROP.ID> = artifact.<PROP.ID>
+        WITH artifact
+        MATCH (oldParent:<LABEL.FOLDER>)-[oldRelation:<REL.CONTAINS>]->(artifact)
+        MATCH (newParent:<LABEL.FOLDER> {<PROP.ID>:{<PH.PARENT_FOLDER_ID>}})
+        DELETE oldRelation
+        MERGE (newParent)-[:<REL.CONTAINS>]->(artifact)
+        RETURN artifact
+        """;
+  }
+
   public static String setArtifactOwner() {
     return "" +
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +

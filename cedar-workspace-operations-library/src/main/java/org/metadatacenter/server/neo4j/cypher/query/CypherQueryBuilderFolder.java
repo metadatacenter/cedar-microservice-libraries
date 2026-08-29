@@ -79,6 +79,28 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " RETURN folder";
   }
 
+  /**
+   * Reparents a folder in one statement. The root no-op write serializes all folder moves before
+   * the cycle check; matching both parents before DELETE means a missing target leaves the old edge
+   * intact.
+   */
+  public static String moveFolder() {
+    return """
+        MATCH (treeRoot:<LABEL.FOLDER> {<PROP.IS_ROOT>:true})
+        SET treeRoot.<PROP.ID> = treeRoot.<PROP.ID>
+        WITH treeRoot
+        MATCH (oldParent:<LABEL.FOLDER>)-[oldRelation:<REL.CONTAINS>]->
+              (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.FOLDER_ID>}})
+        MATCH (newParent:<LABEL.FOLDER> {<PROP.ID>:{<PH.PARENT_FOLDER_ID>}})
+        WHERE NOT EXISTS {
+          MATCH (folder)-[:<REL.CONTAINS>*0..]->(newParent)
+        }
+        DELETE oldRelation
+        MERGE (newParent)-[:<REL.CONTAINS>]->(folder)
+        RETURN folder
+        """;
+  }
+
   public static String setFolderOwner() {
     return "" +
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +

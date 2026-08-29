@@ -9,7 +9,6 @@ import org.metadatacenter.model.folderserver.extract.FolderServerArtifactExtract
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
-import org.metadatacenter.server.neo4j.cypher.parameter.AbstractCypherParamBuilder;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderArtifact;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFolder;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderResource;
@@ -49,25 +48,11 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
   }
 
   boolean moveArtifact(CedarArtifactId sourceArtifactId, CedarFolderId targetFolderId) {
-    boolean unlink = unlinkResourceFromParent(sourceArtifactId);
-    if (unlink) {
-      return linkArtifactUnderFolder(sourceArtifactId, targetFolderId);
-    }
-    return false;
-  }
-
-  private boolean unlinkResourceFromParent(CedarArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.unlinkArtifactFromParentFolder();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
+    String cypher = CypherQueryBuilderArtifact.moveArtifact();
+    CypherParameters params = CypherParamBuilderArtifact.matchArtifactIdAndParentFolderId(
+        sourceArtifactId, targetFolderId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "unlinking artifact");
-  }
-
-  private boolean linkArtifactUnderFolder(CedarArtifactId artifactId, CedarFolderId parentFolderId) {
-    String cypher = CypherQueryBuilderArtifact.linkArtifactUnderFolder();
-    CypherParameters params = AbstractCypherParamBuilder.matchArtifactIdAndParentFolderId(artifactId, parentFolderId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "linking artifact");
+    return executeWriteGetOne(q, FolderServerArtifact.class) != null;
   }
 
   private boolean setOwner(CedarArtifactId artifactId, CedarUserId newOwnerId) {
