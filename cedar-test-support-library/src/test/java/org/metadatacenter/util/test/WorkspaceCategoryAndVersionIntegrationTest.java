@@ -22,6 +22,7 @@ import org.metadatacenter.model.folderserver.extract.FolderServerCategoryExtract
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.CategoryPermissionServiceSession;
+import org.metadatacenter.server.CategoryNotEmptyException;
 import org.metadatacenter.server.CategoryServiceSession;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.GroupServiceSession;
@@ -157,6 +158,31 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
     Assertions.assertEquals("newer description",
         categories.getCategoryById(category.getResourceId()).getDescription());
     Assertions.assertTrue(categories.deleteCategoryById(category.getResourceId(), RevisionPrecondition.any()));
+  }
+
+  @Test
+  public void categoryDeletionRefusesChildrenAndAttachedArtifacts() {
+    CategoryServiceSession categories = categoriesOf(user1Context);
+    FolderServerCategory parent = createCategoryAsUser1(rootCategoryId, "Delete Guard Parent");
+    FolderServerCategory child = createCategoryAsUser1(parent.getResourceId(), "Delete Guard Child");
+
+    CategoryNotEmptyException childConflict = Assertions.assertThrows(CategoryNotEmptyException.class,
+        () -> categories.deleteCategoryById(parent.getResourceId(), RevisionPrecondition.any()));
+    Assertions.assertEquals(1L, childConflict.getChildCategoryCount());
+    Assertions.assertEquals(0L, childConflict.getArtifactCount());
+    Assertions.assertNotNull(categories.getCategoryById(parent.getResourceId()));
+    Assertions.assertNotNull(categories.getCategoryById(child.getResourceId()));
+
+    FolderServerCategory attached = createCategoryAsUser1(rootCategoryId, "Delete Guard Attached");
+    FolderServerArtifact artifact = createTemplateUnderUser1Home(newTemplate("Delete Guard Template", "1.0.0"));
+    Assertions.assertTrue(categories.attachCategoryToArtifact(
+        attached.getResourceId(), CedarTemplateId.build(artifact.getId())));
+
+    CategoryNotEmptyException artifactConflict = Assertions.assertThrows(CategoryNotEmptyException.class,
+        () -> categories.deleteCategoryById(attached.getResourceId(), RevisionPrecondition.any()));
+    Assertions.assertEquals(0L, artifactConflict.getChildCategoryCount());
+    Assertions.assertEquals(1L, artifactConflict.getArtifactCount());
+    Assertions.assertNotNull(categories.getCategoryById(attached.getResourceId()));
   }
 
   @Test

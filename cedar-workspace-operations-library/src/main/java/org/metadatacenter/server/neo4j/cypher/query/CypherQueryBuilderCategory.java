@@ -98,10 +98,20 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
   }
 
   public static String deleteCategoryById() {
-    return "" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
-        " DETACH DELETE category" +
-        " RETURN true AS deleted";
+    return " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})"
+        + " OPTIONAL MATCH ()-[incoming]->(category)"
+        + " WITH category, collect(incoming) AS incomingRelations"
+        + " FOREACH (relation IN incomingRelations | DELETE relation)"
+        + " DELETE category"
+        + " RETURN true AS deleted";
+  }
+
+  public static String getCategoryDeletionBlockers() {
+    return " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})"
+        + " OPTIONAL MATCH (category)-[:<REL.CONTAINSCATEGORY>]->(child:<LABEL.CATEGORY>)"
+        + " WITH category, count(DISTINCT child) AS childCategoryCount"
+        + " OPTIONAL MATCH (category)-[:<REL.CONTAINSARTIFACT>]->(artifact:<LABEL.RESOURCE>)"
+        + " RETURN childCategoryCount, count(DISTINCT artifact) AS artifactCount";
   }
 
   public static String getCategoryOwner() {

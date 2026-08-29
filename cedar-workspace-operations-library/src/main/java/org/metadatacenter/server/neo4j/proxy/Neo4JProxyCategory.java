@@ -19,6 +19,7 @@ import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.metadatacenter.server.RevisionConflictException;
 import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.VersionedResource;
+import org.metadatacenter.server.CategoryNotEmptyException;
 import org.metadatacenter.util.json.JsonMapper;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Result;
@@ -113,6 +114,14 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
       long currentRevision = locked.next().get("revision").asLong();
       if (!precondition.matches(currentRevision)) {
         throw new RevisionConflictException(currentRevision);
+      }
+      CypherQueryWithParameters blockersQuery = new CypherQueryWithParameters(
+          CypherQueryBuilderCategory.getCategoryDeletionBlockers(), CypherParamBuilderCategory.matchId(categoryId));
+      Record blockers = run(tx, blockersQuery).single();
+      long childCategoryCount = blockers.get("childCategoryCount").asLong();
+      long artifactCount = blockers.get("artifactCount").asLong();
+      if (childCategoryCount > 0 || artifactCount > 0) {
+        throw new CategoryNotEmptyException(childCategoryCount, artifactCount);
       }
       CypherQueryWithParameters delete = new CypherQueryWithParameters(
           CypherQueryBuilderCategory.deleteCategoryById(), CypherParamBuilderCategory.matchId(categoryId));
