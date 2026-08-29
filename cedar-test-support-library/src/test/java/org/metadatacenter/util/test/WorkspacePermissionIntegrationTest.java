@@ -15,7 +15,10 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.GroupServiceSession;
+import org.metadatacenter.server.RevisionConflictException;
+import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
+import org.metadatacenter.server.VersionedGroupUsers;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarGroupUserRequest;
@@ -247,6 +250,42 @@ public class WorkspacePermissionIntegrationTest {
     Assertions.assertNotNull(user1Folders.findFilesystemResourceByParentFolderIdAndName(
             parent.getResourceId(), child.getName()),
         "The refused deletion must preserve the parent-child relationship");
+  }
+
+  @Test
+  public void staleGroupMembershipReplacementIsRejectedWithoutChangingTheAggregate() {
+    GroupServiceSession groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
+    FolderServerGroup group = groups.createGroup("versioned-membership-integration-group",
+        "Group for the membership revision test");
+    Assertions.assertNotNull(group);
+
+    VersionedGroupUsers initial = groups.findVersionedGroupUsers(group.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+    Assertions.assertEquals(1, initial.content().getUsers().size());
+
+    CedarGroupUsersRequest twoUsers = new CedarGroupUsersRequest();
+    twoUsers.getUsers().add(new CedarGroupUserRequest(
+        new ResourcePermissionUser(user1.getId()), true, true));
+    twoUsers.getUsers().add(new CedarGroupUserRequest(
+        new ResourcePermissionUser(user2.getId()), false, true));
+    BackendCallResult<VersionedGroupUsers> first = groups.updateGroupUsers(
+        group.getResourceId(), twoUsers, RevisionPrecondition.exact(initial.revision()));
+    Assertions.assertFalse(first.isError(), () -> first.getFirstErrorMessage());
+    Assertions.assertEquals(2L, first.getPayload().revision());
+    Assertions.assertEquals(2, first.getPayload().content().getUsers().size());
+
+    CedarGroupUsersRequest staleReplacement = new CedarGroupUsersRequest();
+    staleReplacement.getUsers().add(new CedarGroupUserRequest(
+        new ResourcePermissionUser(user1.getId()), true, true));
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> groups.updateGroupUsers(group.getResourceId(), staleReplacement,
+            RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+
+    VersionedGroupUsers after = groups.findVersionedGroupUsers(group.getResourceId());
+    Assertions.assertEquals(2L, after.revision());
+    Assertions.assertEquals(2, after.content().getUsers().size(),
+        "The stale replacement must not remove the second member");
   }
 
 }

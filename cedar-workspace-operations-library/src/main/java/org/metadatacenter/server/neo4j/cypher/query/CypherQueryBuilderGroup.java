@@ -22,7 +22,8 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
     sb.append(buildCreateAssignment(NodeProperty.LAST_UPDATED_ON)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.LAST_UPDATED_ON_TS)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.SPECIAL_GROUP)).append(",");
-    sb.append(buildCreateAssignment(NodeProperty.RESOURCE_TYPE));
+    sb.append(buildCreateAssignment(NodeProperty.RESOURCE_TYPE)).append(",");
+    sb.append("_cedarMembershipRevision:1");
     sb.append("})");
 
     sb.append(" RETURN group");
@@ -44,7 +45,8 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
     sb.append(buildCreateAssignment(NodeProperty.LAST_UPDATED_ON)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.LAST_UPDATED_ON_TS)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.SPECIAL_GROUP)).append(",");
-    sb.append(buildCreateAssignment(NodeProperty.RESOURCE_TYPE));
+    sb.append(buildCreateAssignment(NodeProperty.RESOURCE_TYPE)).append(",");
+    sb.append("_cedarMembershipRevision:1");
     sb.append("})");
 
     sb.append(" WITH group");
@@ -90,6 +92,62 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
         " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})" +
         " MATCH (user)-[:" + relationLabel + "]->(group)" +
         " RETURN user";
+  }
+
+  /** Reads the complete membership and its validator from one Neo4j transaction. */
+  public static String getVersionedGroupUsers() {
+    return """
+        MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})
+        OPTIONAL MATCH (user:<LABEL.USER>)-[relation:<REL.MEMBEROF>|<REL.ADMINISTERS>]->(group)
+        WITH group, user, collect(type(relation)) AS relationTypes
+        RETURN coalesce(group._cedarMembershipRevision, 1) AS revision,
+               user AS user,
+               '<REL.ADMINISTERS>' IN relationTypes AS administrator,
+               '<REL.MEMBEROF>' IN relationTypes AS member
+        ORDER BY user.<PROP.ID>
+        """;
+  }
+
+  /** Acquires the aggregate lock and returns the revision that must still match If-Match. */
+  public static String lockGroupMembership() {
+    return """
+        MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})
+        SET group.<PROP.ID> = group.<PROP.ID>
+        RETURN coalesce(group._cedarMembershipRevision, 1) AS revision
+        """;
+  }
+
+  /**
+   * Replaces both membership relation families after the caller has locked the group. All named
+   * users are matched before any old relation is deleted, so a disappearing user changes nothing.
+   * The result rows are the exact post-image paired with the incremented aggregate revision.
+   */
+  public static String replaceGroupUsers() {
+    return """
+        MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})
+        MATCH (requestedUser:<LABEL.USER>)
+        WHERE requestedUser.<PROP.ID> IN {<PH.USER_ID_LIST>}
+        WITH group, collect(requestedUser) AS requestedUsers
+        WHERE size(requestedUsers) = size({<PH.USER_ID_LIST>})
+        OPTIONAL MATCH (oldUser:<LABEL.USER>)-[oldRelation:<REL.MEMBEROF>|<REL.ADMINISTERS>]->(group)
+        DELETE oldRelation
+        WITH DISTINCT group, requestedUsers
+        FOREACH (user IN [candidate IN requestedUsers
+                          WHERE candidate.<PROP.ID> IN {<PH.ADMINISTRATOR_ID_LIST>}] |
+          MERGE (user)-[:<REL.ADMINISTERS>]->(group))
+        FOREACH (user IN [candidate IN requestedUsers
+                          WHERE candidate.<PROP.ID> IN {<PH.MEMBER_ID_LIST>}] |
+          MERGE (user)-[:<REL.MEMBEROF>]->(group))
+        SET group._cedarMembershipRevision = {<PH.CURRENT_REVISION>} + 1
+        WITH group
+        OPTIONAL MATCH (user:<LABEL.USER>)-[relation:<REL.MEMBEROF>|<REL.ADMINISTERS>]->(group)
+        WITH group, user, collect(type(relation)) AS relationTypes
+        RETURN group._cedarMembershipRevision AS revision,
+               user AS user,
+               '<REL.ADMINISTERS>' IN relationTypes AS administrator,
+               '<REL.MEMBEROF>' IN relationTypes AS member
+        ORDER BY user.<PROP.ID>
+        """;
   }
 
   public static String getGroupBySpecialValue() {

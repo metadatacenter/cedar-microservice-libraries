@@ -186,6 +186,16 @@ public abstract class AbstractNeo4JProxy {
     }
   }
 
+  /** Runs caller-supplied work against one consistent read transaction. */
+  protected <T> T executeInReadTransaction(Function<Transaction, T> work, String eventDescription) {
+    try (Session session = driver.session()) {
+      return session.readTransaction(work::apply);
+    } catch (ClientException ex) {
+      log.error("Error while " + eventDescription, ex);
+      throw new RuntimeException("Error while " + eventDescription + ": " + ex.getMessage());
+    }
+  }
+
   /**
    * Runs one query on an already-open transaction and returns the single resource it yields.
    * <p>
@@ -620,7 +630,7 @@ public abstract class AbstractNeo4JProxy {
     return filtered;
   }
 
-  private <T extends CedarResource> T buildClass(JsonNode node, Class<T> type) {
+  protected <T extends CedarResource> T buildClass(JsonNode node, Class<T> type) {
     T cn = null;
     if (node != null && !node.isMissingNode()) {
       try {

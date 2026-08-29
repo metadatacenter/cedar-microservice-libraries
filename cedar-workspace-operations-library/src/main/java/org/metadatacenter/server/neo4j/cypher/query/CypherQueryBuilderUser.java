@@ -118,7 +118,9 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
     return """
         MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
         MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.GROUP_ID>}})
-        MERGE (user)-[:<REL.MEMBEROF>]->(group)
+        MERGE (user)-[membership:<REL.MEMBEROF>]->(group)
+        ON CREATE SET group._cedarMembershipRevision =
+          coalesce(group._cedarMembershipRevision, 1) + 1
         RETURN user
         """;
   }

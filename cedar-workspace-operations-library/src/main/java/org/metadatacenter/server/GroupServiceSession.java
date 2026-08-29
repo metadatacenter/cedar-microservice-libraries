@@ -26,7 +26,16 @@ public interface GroupServiceSession {
 
   CedarGroupUsers findGroupUsers(CedarGroupId groupId);
 
-  BackendCallResult updateGroupUsers(CedarGroupId groupId, CedarGroupUsersRequest request);
+  VersionedGroupUsers findVersionedGroupUsers(CedarGroupId groupId);
+
+  BackendCallResult<VersionedGroupUsers> updateGroupUsers(CedarGroupId groupId, CedarGroupUsersRequest request,
+                                                          RevisionPrecondition precondition);
+
+  /** Non-HTTP callers with explicit last-arrival intent may opt into wildcard replacement. */
+  default BackendCallResult<VersionedGroupUsers> updateGroupUsers(CedarGroupId groupId,
+                                                                  CedarGroupUsersRequest request) {
+    return updateGroupUsers(groupId, request, RevisionPrecondition.any());
+  }
 
   boolean userAdministersGroup(CedarGroupId groupId);
 

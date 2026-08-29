@@ -6,12 +6,11 @@ import org.metadatacenter.error.CedarErrorType;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.CedarResourceType;
-import org.metadatacenter.model.RelationLabel;
 import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
-import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.GroupServiceSession;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedGroupUsers;
 import org.metadatacenter.server.neo4j.AbstractNeo4JUserSession;
-import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarGroupUser;
@@ -77,28 +76,17 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
   }
 
   @Override
-  public BackendCallResult updateGroupUsers(CedarGroupId groupId, CedarGroupUsersRequest request) {
+  public BackendCallResult<VersionedGroupUsers> updateGroupUsers(CedarGroupId groupId, CedarGroupUsersRequest request,
+                                                                 RevisionPrecondition precondition) {
 
     GroupUsersRequestValidator gurv = new GroupUsersRequestValidator(this, groupId, request);
-    BackendCallResult bcr = gurv.getCallResult();
+    BackendCallResult<VersionedGroupUsers> bcr = gurv.getCallResult();
     if (bcr.isError()) {
       return bcr;
     } else {
-      CedarGroupUsers currentGroupUsers = findGroupUsers(groupId);
       CedarGroupUsers newGroupUsers = gurv.getUsers();
-
-      List<CypherQuery> changes = new ArrayList<>();
-      changes.addAll(Neo4JUserSessionGroupOperations.collectGroupUserChanges(proxies.group(), groupId,
-          currentGroupUsers, newGroupUsers, RelationLabel.ADMINISTERS,
-          Neo4JUserSessionGroupOperations.Filter.ADMINISTRATOR));
-      changes.addAll(Neo4JUserSessionGroupOperations.collectGroupUserChanges(proxies.group(), groupId,
-          currentGroupUsers, newGroupUsers, RelationLabel.MEMBEROF,
-          Neo4JUserSessionGroupOperations.Filter.MEMBER));
-
-      // A request describes one membership change, so the administrator and member relations commit
-      // together. Applied one statement at a time, a failure partway through left the group in a
-      // state the caller never asked for and could not see, since the error came back as a 500.
-      if (!proxies.group().applyUserGroupRelationChanges(changes)) {
+      VersionedGroupUsers updated = proxies.group().replaceGroupUsers(groupId, newGroupUsers, precondition);
+      if (updated == null) {
         BackendCallResult failure = new BackendCallResult();
         failure.addError(CedarErrorType.SERVER_ERROR)
             .errorKey(CedarErrorKey.GROUP_USERS_NOT_UPDATED)
@@ -106,34 +94,20 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
             .parameter("groupId", groupId);
         return failure;
       }
-
-      return new BackendCallResult();
+      bcr.setPayload(updated);
+      return bcr;
     }
   }
 
   @Override
   public CedarGroupUsers findGroupUsers(CedarGroupId groupId) {
-    Set<String> memberIds = new HashSet<>();
-    Set<String> administratorsIds = new HashSet<>();
-    Map<String, FolderServerUser> users = new HashMap<>();
-    List<FolderServerUser> groupMembers = proxies.group().findGroupMembers(groupId);
-    for (FolderServerUser member : groupMembers) {
-      memberIds.add(member.getId());
-      users.put(member.getId(), member);
-    }
-    List<FolderServerUser> groupAdministrators = proxies.group().findGroupAdministrators(groupId);
-    for (FolderServerUser administrator : groupAdministrators) {
-      administratorsIds.add(administrator.getId());
-      users.put(administrator.getId(), administrator);
-    }
-    CedarGroupUsers ret = new CedarGroupUsers();
-    for (String userURL : users.keySet()) {
-      ret.addUser(new CedarGroupUser(users.get(userURL).buildExtract(),
-          administratorsIds.contains(userURL),
-          memberIds.contains(userURL))
-      );
-    }
-    return ret;
+    VersionedGroupUsers versioned = findVersionedGroupUsers(groupId);
+    return versioned == null ? null : versioned.content();
+  }
+
+  @Override
+  public VersionedGroupUsers findVersionedGroupUsers(CedarGroupId groupId) {
+    return proxies.group().findVersionedGroupUsers(groupId);
   }
 
   /**
