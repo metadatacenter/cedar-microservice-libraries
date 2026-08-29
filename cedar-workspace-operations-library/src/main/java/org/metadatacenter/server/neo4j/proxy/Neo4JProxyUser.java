@@ -19,6 +19,8 @@ import org.metadatacenter.server.result.BackendCallError;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.CedarUserApiKey;
+import org.metadatacenter.server.security.model.user.CedarUserRole;
+import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
 import org.metadatacenter.server.user.UserServiceUtil;
 import org.metadatacenter.util.json.JsonMapper;
 
@@ -65,28 +67,43 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
     return executeReadGetOne(q, FolderServerUser.class);
   }
 
-  public BackendCallResult<CedarUser> updateUser(CedarUser user) {
-    BackendCallResult<CedarUser> result = new BackendCallResult<>();
-    String cypher = CypherQueryBuilderUser.updateUser();
+  public BackendCallResult<CedarUser> setHomeFolderId(CedarUserId userId, String homeFolderId) {
+    CypherQuery query = new CypherQueryWithParameters(CypherQueryBuilderUser.setUserHomeFolderId(),
+        CypherParamBuilderUser.setUserHomeFolderId(userId, homeFolderId));
+    return executeUserPropertyWrite(userId, query);
+  }
+
+  public BackendCallResult<CedarUser> replaceRolesAndPermissions(CedarUserId userId, List<CedarUserRole> roles,
+                                                                 List<String> permissions) {
+    CypherQuery query = new CypherQueryWithParameters(CypherQueryBuilderUser.replaceUserRolesAndPermissions(),
+        CypherParamBuilderUser.replaceUserRolesAndPermissions(userId, roles, permissions));
+    return executeUserPropertyWrite(userId, query);
+  }
+
+  public BackendCallResult<CedarUser> replaceUiPreferences(CedarUserId userId,
+                                                            CedarUserUIPreferences uiPreferences) {
     CypherParameters params;
     try {
-      params = CypherParamBuilderUser.updateUser(user, cedarConfig);
+      params = CypherParamBuilderUser.updateUserProfile(userId, uiPreferences);
     } catch (CedarProcessingException e) {
+      BackendCallResult<CedarUser> result = new BackendCallResult<>();
       result.addError(CedarErrorType.SERVER_ERROR)
           .sourceException(e)
-          .message("There was an error while updating the user")
-          .parameter("id", user.getId());
+          .message("There was an error while updating the user preferences")
+          .parameter("id", userId.getId());
       return result;
     }
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    FolderServerUser updatedUser = executeWriteGetOne(q, FolderServerUser.class);
-    // The update matches on id and returns nothing when no such node exists, which happens if the
-    // user is deleted between the request's own lookup and this write. Reported rather than
-    // dereferenced: buildUser() on the null threw, turning the race into a 500.
+    CypherQuery query = new CypherQueryWithParameters(CypherQueryBuilderUser.updateUserProfile(), params);
+    return executeUserPropertyWrite(userId, query);
+  }
+
+  private BackendCallResult<CedarUser> executeUserPropertyWrite(CedarUserId userId, CypherQuery query) {
+    BackendCallResult<CedarUser> result = new BackendCallResult<>();
+    FolderServerUser updatedUser = executeWriteGetOne(query, FolderServerUser.class);
     if (updatedUser == null) {
       result.addError(CedarErrorType.NOT_FOUND)
           .message("The user can not be found by id")
-          .parameter("id", user.getId());
+          .parameter("id", userId.getId());
       return result;
     }
     result.setPayload(updatedUser.buildUser());

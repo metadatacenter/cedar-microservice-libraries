@@ -6,6 +6,8 @@ import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.CedarUserApiKey;
+import org.metadatacenter.server.security.model.user.CedarUserRole;
+import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
 import org.metadatacenter.server.service.UserService;
 import org.metadatacenter.server.user.UserServiceUtil;
 import org.metadatacenter.util.json.JsonMapper;
@@ -67,11 +69,23 @@ public class InMemoryUserService implements UserService {
   }
 
   @Override
-  public BackendCallResult<CedarUser> updateUser(CedarUser user) {
-    BackendCallResult<CedarUser> result = new BackendCallResult<>();
-    users.put(user.getId(), user);
-    result.setPayload(user);
-    return result;
+  public BackendCallResult<CedarUser> setHomeFolderId(CedarUserId userId, String homeFolderId) {
+    return changeUser(userId, user -> user.setHomeFolderId(homeFolderId));
+  }
+
+  @Override
+  public BackendCallResult<CedarUser> replaceRolesAndPermissions(CedarUserId userId, List<CedarUserRole> roles,
+                                                                 List<String> permissions) {
+    return changeUser(userId, user -> {
+      user.setRoles(new ArrayList<>(roles));
+      user.setPermissions(new ArrayList<>(permissions));
+    });
+  }
+
+  @Override
+  public BackendCallResult<CedarUser> replaceUiPreferences(CedarUserId userId,
+                                                            CedarUserUIPreferences uiPreferences) {
+    return changeUser(userId, user -> user.setUiPreferences(uiPreferences));
   }
 
   @Override
@@ -168,6 +182,20 @@ public class InMemoryUserService implements UserService {
     return result;
   }
 
+  private BackendCallResult<CedarUser> changeUser(CedarUserId userId, UserChange change) {
+    BackendCallResult<CedarUser> result = new BackendCallResult<>();
+    CedarUser user = users.get(userId.getId());
+    if (user == null) {
+      result.addError(CedarErrorType.NOT_FOUND)
+          .message("The user can not be found by id")
+          .parameter("id", userId.getId());
+      return result;
+    }
+    change.apply(user);
+    result.setPayload(user);
+    return result;
+  }
+
   private static CedarUserApiKey findById(List<CedarUserApiKey> keys, String keyId) {
     for (CedarUserApiKey k : keys) {
       if (k.getId() != null && k.getId().equals(keyId)) {
@@ -183,6 +211,11 @@ public class InMemoryUserService implements UserService {
   @FunctionalInterface
   private interface ApiKeyChange {
     String apply(List<CedarUserApiKey> keys);
+  }
+
+  @FunctionalInterface
+  private interface UserChange {
+    void apply(CedarUser user);
   }
 
   @Override

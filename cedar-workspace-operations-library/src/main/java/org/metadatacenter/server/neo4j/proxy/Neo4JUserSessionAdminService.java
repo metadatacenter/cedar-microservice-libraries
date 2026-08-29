@@ -153,7 +153,7 @@ public class Neo4JUserSessionAdminService extends AbstractNeo4JUserSession imple
 
     log.info("Linking home folder of caDSR Admin");
     caDSRAdmin.setHomeFolderId(currentUserHomeFolder.getId());
-    proxies.user().updateUser(caDSRAdmin);
+    proxies.user().setHomeFolderId(caDSRAdmin.getResourceId(), currentUserHomeFolder.getId());
     proxies.folder().setOwner(currentUserHomeFolder.getResourceId(), caDSRAdmin.getResourceId());
 
     // TODO: refactor this, present above as well

@@ -27,22 +27,23 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
         " RETURN user";
   }
 
-  public static String updateUser() {
+  public static String setUserHomeFolderId() {
     StringBuilder sb = new StringBuilder();
     sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})");
-    sb.append(buildSetter("user", NodeProperty.NAME));
-    sb.append(buildSetter("user", NodeProperty.NAME_LOWER));
-    sb.append(buildSetter("user", NodeProperty.FIRST_NAME));
-    sb.append(buildSetter("user", NodeProperty.LAST_NAME));
-    sb.append(buildSetter("user", NodeProperty.EMAIL));
     sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON));
     sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON_TS));
     sb.append(buildSetter("user", NodeProperty.HOME_FOLDER_ID));
-    sb.append(buildSetter("user", NodeProperty.API_KEYS));
-    sb.append(buildSetter("user", NodeProperty.API_KEY_MAP));
+    sb.append(" RETURN user");
+    return sb.toString();
+  }
+
+  public static String replaceUserRolesAndPermissions() {
+    StringBuilder sb = new StringBuilder();
+    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})");
+    sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON));
+    sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON_TS));
     sb.append(buildSetter("user", NodeProperty.ROLES));
     sb.append(buildSetter("user", NodeProperty.PERMISSIONS));
-    sb.append(buildSetter("user", NodeProperty.UI_PREFERENCES));
     sb.append(" RETURN user");
     return sb.toString();
   }
@@ -94,9 +95,8 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
   }
 
   /**
-   * Writes the API key properties and nothing else. {@link #updateUser()} sets every field of the
-   * node from one in-memory snapshot, so using it to change a key also wrote back the name, email,
-   * roles, permissions and UI preferences as they stood when that snapshot was read.
+   * Writes the API key properties and nothing else, so a credential change cannot write an older
+   * copy of the profile or authorization fields back over a concurrent change.
    */
   public static String updateUserApiKeys() {
     StringBuilder sb = new StringBuilder();

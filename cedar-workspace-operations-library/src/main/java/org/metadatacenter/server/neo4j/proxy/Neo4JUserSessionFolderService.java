@@ -282,7 +282,7 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
     if (currentUserHomeFolder == null) {
       currentUserHomeFolder = createUserHomeFolder();
       cu.setHomeFolderId(currentUserHomeFolder.getId());
-      proxies.user().updateUser(cu);
+      proxies.user().setHomeFolderId(cu.getResourceId(), currentUserHomeFolder.getId());
     }
     return currentUserHomeFolder;
   }
