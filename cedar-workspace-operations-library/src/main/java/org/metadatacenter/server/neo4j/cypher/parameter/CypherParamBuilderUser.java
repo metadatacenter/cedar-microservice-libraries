@@ -12,6 +12,7 @@ import org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.CedarUserApiKey;
 import org.metadatacenter.server.security.model.user.CedarUserRole;
+import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
 import org.metadatacenter.util.CedarUserNameUtil;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
@@ -94,6 +95,17 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
     params.put(NodeProperty.ID, userId.getId());
     params.put(NodeProperty.LAST_UPDATED_ON, CedarConstants.xsdDateTimeFormatter.format(now));
     params.put(NodeProperty.LAST_UPDATED_ON_TS, now.getEpochSecond());
+    return params;
+  }
+
+  public static CypherParameters updateUserProfile(CedarUserId userId, CedarUserUIPreferences uiPreferences)
+      throws CedarProcessingException {
+    CypherParameters params = touchUser(userId);
+    try {
+      params.put(NodeProperty.UI_PREFERENCES, JsonMapper.MAPPER.writeValueAsString(uiPreferences));
+    } catch (JsonProcessingException e) {
+      throw new CedarProcessingException(e);
+    }
     return params;
   }
 

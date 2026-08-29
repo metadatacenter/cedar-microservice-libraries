@@ -70,6 +70,30 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
   }
 
   /**
+   * Takes the user node's write lock without changing its value, then returns the state protected by
+   * that lock. Profile patches are computed in Java, so their read must be serialized with the write
+   * or two patches can both be derived from the same preferences snapshot.
+   */
+  public static String lockAndReadUserProfile() {
+    return """
+        MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})
+        SET user.<PROP.UI_PREFERENCES> = user.<PROP.UI_PREFERENCES>
+        RETURN user
+        """;
+  }
+
+  /** Writes profile preferences and timestamps, leaving credentials and authorization state alone. */
+  public static String updateUserProfile() {
+    StringBuilder sb = new StringBuilder();
+    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})");
+    sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON));
+    sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON_TS));
+    sb.append(buildSetter("user", NodeProperty.UI_PREFERENCES));
+    sb.append(" RETURN user");
+    return sb.toString();
+  }
+
+  /**
    * Writes the API key properties and nothing else. {@link #updateUser()} sets every field of the
    * node from one in-memory snapshot, so using it to change a key also wrote back the name, email,
    * roles, permissions and UI preferences as they stood when that snapshot was read.
