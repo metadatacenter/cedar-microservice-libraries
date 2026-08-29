@@ -79,6 +79,26 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
     return executeWriteGetOne(q, FolderServerGroup.class);
   }
 
+  VersionedResource<FolderServerGroup> updateGroupById(CedarGroupId groupId,
+                                                        Map<NodeProperty, String> updateFields,
+                                                        CedarUserId updatedBy,
+                                                        RevisionPrecondition precondition) {
+    return executeInWriteTransaction(tx -> {
+      CypherParameters params = CypherParamBuilderGroup.updateGroupById(groupId, updateFields, updatedBy);
+      Result locked = run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderGroup.lockGroupRevision(), CypherParamBuilderGroup.matchId(groupId)));
+      if (!locked.hasNext()) {
+        return null;
+      }
+      long currentRevision = locked.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      return readVersionedGroup(run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderGroup.updateGroupById(updateFields), params)));
+    }, "updating a versioned group");
+  }
+
   boolean deleteGroupById(CedarGroupId groupId) {
     return deleteGroupById(groupId, RevisionPrecondition.any());
   }

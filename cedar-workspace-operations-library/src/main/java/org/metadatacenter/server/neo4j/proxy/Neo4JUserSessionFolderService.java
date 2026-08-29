@@ -56,6 +56,13 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public VersionedResource<FolderServerFolder> updateFolderById(CedarFolderId folderId,
+                                                                 Map<NodeProperty, String> updateFields,
+                                                                 RevisionPrecondition precondition) {
+    return proxies.folder().updateFolderById(folderId, updateFields, cu.getResourceId(), precondition);
+  }
+
+  @Override
   public FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
                                                  Map<NodeProperty, String> updateFields) {
     return proxies.artifact().updateArtifactById(artifactId, updateFields, cu.getResourceId());

@@ -74,6 +74,16 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
   }
 
   @Override
+  public VersionedResource<FolderServerGroup> updateGroupById(CedarGroupId groupId,
+                                                               Map<NodeProperty, String> updateFields,
+                                                               RevisionPrecondition precondition) {
+    if (!userCanAdministerGroup(groupId)) {
+      return null;
+    }
+    return proxies.group().updateGroupById(groupId, updateFields, cu.getResourceId(), precondition);
+  }
+
+  @Override
   public boolean deleteGroupById(CedarGroupId groupId) {
     if (!userCanAdministerGroup(groupId)) {
       return false;

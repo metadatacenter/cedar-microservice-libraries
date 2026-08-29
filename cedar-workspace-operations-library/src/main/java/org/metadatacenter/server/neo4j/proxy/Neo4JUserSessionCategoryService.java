@@ -60,6 +60,13 @@ public class Neo4JUserSessionCategoryService extends AbstractNeo4JUserSession im
   }
 
   @Override
+  public VersionedResource<FolderServerCategory> updateCategoryById(CedarCategoryId categoryId,
+                                                                     Map<NodeProperty, String> updateFields,
+                                                                     RevisionPrecondition precondition) {
+    return proxies.category().updateCategoryById(categoryId, updateFields, cu.getResourceId(), precondition);
+  }
+
+  @Override
   public boolean deleteCategoryById(CedarCategoryId categoryId) {
     return proxies.category().deleteCategoryById(categoryId);
   }

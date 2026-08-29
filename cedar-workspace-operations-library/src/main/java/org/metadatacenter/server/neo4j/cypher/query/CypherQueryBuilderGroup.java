@@ -79,7 +79,7 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
       sb.append(buildSetter("group", property));
     }
     sb.append(" SET group._cedarRevision = coalesce(group._cedarRevision, 1) + 1");
-    sb.append(" RETURN group");
+    sb.append(" RETURN group AS resource, group._cedarRevision AS revision");
     return sb.toString();
   }
 
@@ -198,7 +198,7 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
       sb.append(buildSetter("category", property));
     }
     sb.append(" SET category._cedarRevision = coalesce(category._cedarRevision, 1) + 1");
-    sb.append(" RETURN category");
+    sb.append(" RETURN category AS resource, category._cedarRevision AS revision");
     return sb.toString();
   }
 

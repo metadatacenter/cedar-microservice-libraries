@@ -31,7 +31,7 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
       sb.append(buildSetter("folder", property));
     }
     sb.append(" SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1");
-    sb.append(" RETURN folder");
+    sb.append(" RETURN folder AS resource, folder._cedarRevision AS revision");
     return sb.toString();
   }
 

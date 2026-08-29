@@ -53,6 +53,26 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     return executeWriteGetOne(q, FolderServerFolder.class);
   }
 
+  VersionedResource<FolderServerFolder> updateFolderById(CedarFolderId folderId,
+                                                          Map<NodeProperty, String> updateFields,
+                                                          CedarUserId updatedBy,
+                                                          RevisionPrecondition precondition) {
+    return executeInWriteTransaction(tx -> {
+      Result locked = run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderFolder.lockFolderRevision(), CypherParamBuilderFolder.matchId(folderId)));
+      if (!locked.hasNext()) {
+        return null;
+      }
+      long currentRevision = locked.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      CypherParameters params = CypherParamBuilderFolder.updateFolderById(folderId, updateFields, updatedBy);
+      return readVersionedFolder(run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderFolder.updateFolderById(updateFields), params)));
+    }, "updating a versioned folder");
+  }
+
   boolean deleteFolderById(CedarFolderId folderId) {
     return deleteFolderById(folderId, RevisionPrecondition.any());
   }

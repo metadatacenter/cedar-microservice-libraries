@@ -48,6 +48,10 @@ public interface FolderServiceSession {
 
   FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields);
 
+  VersionedResource<FolderServerFolder> updateFolderById(CedarFolderId folderId,
+                                                           Map<NodeProperty, String> updateFields,
+                                                           RevisionPrecondition precondition);
+
   FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType, Map<NodeProperty, String> updateFields);
 
   boolean deleteFolderById(CedarFolderId folderId);

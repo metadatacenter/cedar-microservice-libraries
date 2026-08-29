@@ -12,12 +12,16 @@ class CypherGraphResourceRevisionSemanticsTest {
 
   @Test
   void plainEditsAdvanceTheirResourceRevision() {
-    assertTrue(CypherQueryBuilderFolder.updateFolderById(Map.of(NodeProperty.NAME, "name"))
-        .contains("folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1"));
-    assertTrue(CypherQueryBuilderGroup.updateGroupById(Map.of(NodeProperty.NAME, "name"))
-        .contains("group._cedarRevision = coalesce(group._cedarRevision, 1) + 1"));
-    assertTrue(CypherQueryBuilderGroup.updateCategoryById(Map.of(NodeProperty.NAME, "name"))
-        .contains("category._cedarRevision = coalesce(category._cedarRevision, 1) + 1"));
+    String folderUpdate = CypherQueryBuilderFolder.updateFolderById(Map.of(NodeProperty.NAME, "name"));
+    String groupUpdate = CypherQueryBuilderGroup.updateGroupById(Map.of(NodeProperty.NAME, "name"));
+    String categoryUpdate = CypherQueryBuilderGroup.updateCategoryById(Map.of(NodeProperty.NAME, "name"));
+
+    assertTrue(folderUpdate.contains("folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1"));
+    assertTrue(folderUpdate.contains("RETURN folder AS resource, folder._cedarRevision AS revision"));
+    assertTrue(groupUpdate.contains("group._cedarRevision = coalesce(group._cedarRevision, 1) + 1"));
+    assertTrue(groupUpdate.contains("RETURN group AS resource, group._cedarRevision AS revision"));
+    assertTrue(categoryUpdate.contains("category._cedarRevision = coalesce(category._cedarRevision, 1) + 1"));
+    assertTrue(categoryUpdate.contains("RETURN category AS resource, category._cedarRevision AS revision"));
   }
 
   @Test

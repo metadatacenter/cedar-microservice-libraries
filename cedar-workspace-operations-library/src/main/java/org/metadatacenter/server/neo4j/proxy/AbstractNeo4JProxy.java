@@ -198,6 +198,9 @@ public abstract class AbstractNeo4JProxy {
       return session.writeTransaction(work::apply);
     } catch (ClientException ex) {
       log.error("Error while " + eventDescription, ex);
+      if (isSiblingNameConstraintViolation(ex)) {
+        throw new SiblingNameConflictException(ex);
+      }
       throw new RuntimeException("Error while " + eventDescription + ": " + ex.getMessage());
     }
   }

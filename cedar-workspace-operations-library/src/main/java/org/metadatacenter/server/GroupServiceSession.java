@@ -24,6 +24,10 @@ public interface GroupServiceSession {
 
   FolderServerGroup updateGroupById(CedarGroupId groupId, Map<NodeProperty, String> updateFields);
 
+  VersionedResource<FolderServerGroup> updateGroupById(CedarGroupId groupId,
+                                                        Map<NodeProperty, String> updateFields,
+                                                        RevisionPrecondition precondition);
+
   boolean deleteGroupById(CedarGroupId groupId);
 
   boolean deleteGroupById(CedarGroupId groupId, RevisionPrecondition precondition);

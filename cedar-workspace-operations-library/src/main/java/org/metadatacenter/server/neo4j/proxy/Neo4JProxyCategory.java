@@ -99,6 +99,26 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
     return executeWriteGetOne(q, FolderServerCategory.class);
   }
 
+  public VersionedResource<FolderServerCategory> updateCategoryById(CedarCategoryId categoryId,
+                                                                     Map<NodeProperty, String> updateFields,
+                                                                     CedarUserId updatedBy,
+                                                                     RevisionPrecondition precondition) {
+    return executeInWriteTransaction(tx -> {
+      Result locked = run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderCategory.lockCategoryRevision(), CypherParamBuilderCategory.matchId(categoryId)));
+      if (!locked.hasNext()) {
+        return null;
+      }
+      long currentRevision = locked.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      CypherParameters params = CypherParamBuilderCategory.updateCategoryById(categoryId, updateFields, updatedBy);
+      return readVersionedCategory(run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderGroup.updateCategoryById(updateFields), params)));
+    }, "updating a versioned category");
+  }
+
   public boolean deleteCategoryById(CedarCategoryId categoryId) {
     return deleteCategoryById(categoryId, RevisionPrecondition.any());
   }

@@ -27,6 +27,10 @@ public interface CategoryServiceSession {
 
   FolderServerCategory updateCategoryById(CedarCategoryId categoryId, Map<NodeProperty, String> updateFields);
 
+  VersionedResource<FolderServerCategory> updateCategoryById(CedarCategoryId categoryId,
+                                                               Map<NodeProperty, String> updateFields,
+                                                               RevisionPrecondition precondition);
+
   boolean deleteCategoryById(CedarCategoryId categoryId);
 
   boolean deleteCategoryById(CedarCategoryId categoryId, RevisionPrecondition precondition);
