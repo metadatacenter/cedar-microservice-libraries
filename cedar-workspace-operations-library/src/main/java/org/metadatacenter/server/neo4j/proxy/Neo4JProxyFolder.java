@@ -102,6 +102,33 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     return executeInReadTransaction(tx -> readVersionedFolder(run(tx, query)), "reading a versioned folder");
   }
 
+  VersionedResource<FolderServerFolder> setOpen(CedarFolderId folderId, RevisionPrecondition precondition) {
+    return setOpenState(folderId, precondition, true);
+  }
+
+  VersionedResource<FolderServerFolder> setNotOpen(CedarFolderId folderId, RevisionPrecondition precondition) {
+    return setOpenState(folderId, precondition, false);
+  }
+
+  private VersionedResource<FolderServerFolder> setOpenState(CedarFolderId folderId,
+                                                              RevisionPrecondition precondition,
+                                                              boolean open) {
+    return executeInWriteTransaction(tx -> {
+      CypherParameters params = CypherParamBuilderFolder.matchId(folderId);
+      Result locked = run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderFolder.lockFolderRevision(), params));
+      if (!locked.hasNext()) {
+        return null;
+      }
+      long currentRevision = locked.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      String cypher = open ? CypherQueryBuilderFolder.setOpen() : CypherQueryBuilderFolder.setNotOpen();
+      return readVersionedFolder(run(tx, new CypherQueryWithParameters(cypher, params)));
+    }, open ? "making a folder open" : "making a folder not open");
+  }
+
   private Result run(Transaction tx, CypherQueryWithParameters query) {
     return tx.run(query.getRunnableQuery(), query.getParameterMap());
   }

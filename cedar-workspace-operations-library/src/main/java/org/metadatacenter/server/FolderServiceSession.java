@@ -34,6 +34,8 @@ public interface FolderServiceSession {
 
   FolderServerArtifact findArtifactById(CedarArtifactId artifactId);
 
+  VersionedResource<FolderServerArtifact> findVersionedArtifactById(CedarArtifactId artifactId);
+
   FolderServerSchemaArtifact findSchemaArtifactById(CedarSchemaArtifactId artifactId);
 
   FileSystemResource findResourceById(CedarFilesystemResourceId resourceId);
@@ -138,11 +140,19 @@ public interface FolderServiceSession {
 
   boolean setOpen(CedarArtifactId id);
 
+  VersionedResource<FolderServerArtifact> setOpen(CedarArtifactId id, RevisionPrecondition precondition);
+
   boolean setOpen(CedarFolderId folderId);
+
+  VersionedResource<FolderServerFolder> setOpen(CedarFolderId folderId, RevisionPrecondition precondition);
 
   boolean setNotOpen(CedarArtifactId id);
 
+  VersionedResource<FolderServerArtifact> setNotOpen(CedarArtifactId id, RevisionPrecondition precondition);
+
   boolean setNotOpen(CedarFolderId id);
+
+  VersionedResource<FolderServerFolder> setNotOpen(CedarFolderId id, RevisionPrecondition precondition);
 
   long getNumberOfInstances(CedarTemplateId templateId);
 

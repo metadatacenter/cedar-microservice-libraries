@@ -69,6 +69,11 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public VersionedResource<FolderServerArtifact> findVersionedArtifactById(CedarArtifactId artifactId) {
+    return proxies.artifact().findVersionedArtifactById(artifactId);
+  }
+
+  @Override
   public boolean deleteFolderById(CedarFolderId folderId) {
     return proxies.folder().deleteFolderById(folderId);
   }
@@ -429,8 +434,20 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public VersionedResource<FolderServerArtifact> setOpen(CedarArtifactId artifactId,
+                                                          RevisionPrecondition precondition) {
+    return proxies.artifact().setOpen(artifactId, precondition);
+  }
+
+  @Override
   public boolean setNotOpen(CedarArtifactId artifactId) {
     return proxies.artifact().setNotOpen(artifactId);
+  }
+
+  @Override
+  public VersionedResource<FolderServerArtifact> setNotOpen(CedarArtifactId artifactId,
+                                                             RevisionPrecondition precondition) {
+    return proxies.artifact().setNotOpen(artifactId, precondition);
   }
 
   @Override
@@ -439,8 +456,20 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public VersionedResource<FolderServerFolder> setOpen(CedarFolderId folderId,
+                                                        RevisionPrecondition precondition) {
+    return proxies.folder().setOpen(folderId, precondition);
+  }
+
+  @Override
   public boolean setNotOpen(CedarFolderId folderId) {
     return proxies.artifact().setNotOpen(folderId);
+  }
+
+  @Override
+  public VersionedResource<FolderServerFolder> setNotOpen(CedarFolderId folderId,
+                                                           RevisionPrecondition precondition) {
+    return proxies.folder().setNotOpen(folderId, precondition);
   }
 
   @Override

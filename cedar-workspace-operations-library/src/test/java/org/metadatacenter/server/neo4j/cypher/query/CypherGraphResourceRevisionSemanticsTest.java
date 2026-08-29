@@ -38,6 +38,19 @@ class CypherGraphResourceRevisionSemanticsTest {
   }
 
   @Test
+  void openStateChangesAdvanceAndReturnTheResourceRevision() {
+    for (String query : new String[]{
+        CypherQueryBuilderArtifact.setOpen(), CypherQueryBuilderArtifact.setNotOpen(),
+        CypherQueryBuilderFolder.setOpen(), CypherQueryBuilderFolder.setNotOpen()}) {
+      assertTrue(query.contains("_cedarRevision = coalesce("));
+      assertTrue(query.contains("AS resource"));
+      assertTrue(query.contains("AS revision"));
+    }
+    assertTrue(CypherQueryBuilderArtifact.lockArtifactRevision().contains("SET artifact._cedarRevision"));
+    assertTrue(CypherQueryBuilderFolder.lockFolderRevision().contains("SET folder._cedarRevision"));
+  }
+
+  @Test
   void categoryDeletionChecksContentAndNeverUsesDetachDelete() {
     String blockers = CypherQueryBuilderCategory.getCategoryDeletionBlockers();
     assertTrue(blockers.contains("CONTAINSCATEGORY"));

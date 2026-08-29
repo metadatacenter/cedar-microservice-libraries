@@ -170,14 +170,27 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
         " SET artifact.<PROP.IS_OPEN> = true" +
-        " RETURN artifact";
+        " SET artifact._cedarRevision = coalesce(artifact._cedarRevision, 1) + 1" +
+        " RETURN artifact AS resource, artifact._cedarRevision AS revision";
   }
 
   public static String setNotOpen() {
     return "" +
         " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
         " REMOVE artifact.<PROP.IS_OPEN>" +
-        " RETURN artifact";
+        " SET artifact._cedarRevision = coalesce(artifact._cedarRevision, 1) + 1" +
+        " RETURN artifact AS resource, artifact._cedarRevision AS revision";
+  }
+
+  public static String getVersionedArtifactById() {
+    return " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
+        " RETURN artifact AS resource, coalesce(artifact._cedarRevision, 1) AS revision";
+  }
+
+  public static String lockArtifactRevision() {
+    return " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
+        " SET artifact._cedarRevision = coalesce(artifact._cedarRevision, 1)" +
+        " RETURN artifact._cedarRevision AS revision";
   }
 
 }

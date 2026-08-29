@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.*;
 import org.metadatacenter.model.CedarResource;
@@ -16,6 +17,14 @@ import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderArtifact;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFolder;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderResource;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
+import org.metadatacenter.server.RevisionConflictException;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedResource;
+import org.metadatacenter.util.json.JsonMapper;
+import org.neo4j.driver.Record;
+import org.neo4j.driver.Result;
+import org.neo4j.driver.Transaction;
+import org.neo4j.driver.types.Node;
 
 import java.util.List;
 import java.util.Map;
@@ -92,6 +101,13 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     return findResourceGenericById(artifactId, FolderServerArtifact.class);
   }
 
+  VersionedResource<FolderServerArtifact> findVersionedArtifactById(CedarArtifactId artifactId) {
+    CypherQueryWithParameters query = new CypherQueryWithParameters(
+        CypherQueryBuilderArtifact.getVersionedArtifactById(), CypherParamBuilderArtifact.matchId(artifactId));
+    return executeInReadTransaction(tx -> readVersionedResource(run(tx, query), FolderServerArtifact.class),
+        "reading a versioned artifact");
+  }
+
   public FolderServerSchemaArtifact findSchemaArtifactById(CedarSchemaArtifactId artifactId) {
     return findResourceGenericById(artifactId, FolderServerSchemaArtifact.class);
   }
@@ -166,11 +182,21 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     return executeWrite(q, "setting isOpen");
   }
 
+  VersionedResource<FolderServerArtifact> setOpen(CedarArtifactId artifactId,
+                                                   RevisionPrecondition precondition) {
+    return setArtifactOpenState(artifactId, precondition, true);
+  }
+
   public boolean setNotOpen(CedarArtifactId artifactId) {
     String cypher = CypherQueryBuilderArtifact.setNotOpen();
     CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeWrite(q, "setting isOpen");
+  }
+
+  VersionedResource<FolderServerArtifact> setNotOpen(CedarArtifactId artifactId,
+                                                      RevisionPrecondition precondition) {
+    return setArtifactOpenState(artifactId, precondition, false);
   }
 
   public boolean setOpen(CedarFolderId folderId) {
@@ -185,6 +211,40 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     CypherParameters params = CypherParamBuilderFolder.matchId(folderId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeWrite(q, "setting isOpen");
+  }
+
+  private VersionedResource<FolderServerArtifact> setArtifactOpenState(CedarArtifactId artifactId,
+                                                                        RevisionPrecondition precondition,
+                                                                        boolean open) {
+    return executeInWriteTransaction(tx -> {
+      CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
+      Result locked = run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderArtifact.lockArtifactRevision(), params));
+      if (!locked.hasNext()) {
+        return null;
+      }
+      long currentRevision = locked.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      String cypher = open ? CypherQueryBuilderArtifact.setOpen() : CypherQueryBuilderArtifact.setNotOpen();
+      return readVersionedResource(run(tx, new CypherQueryWithParameters(cypher, params)),
+          FolderServerArtifact.class);
+    }, open ? "making an artifact open" : "making an artifact not open");
+  }
+
+  private Result run(Transaction tx, CypherQueryWithParameters query) {
+    return tx.run(query.getRunnableQuery(), query.getParameterMap());
+  }
+
+  private <T extends CedarResource> VersionedResource<T> readVersionedResource(Result result, Class<T> type) {
+    if (!result.hasNext()) {
+      return null;
+    }
+    Record record = result.next();
+    Node node = record.get("resource").asNode();
+    JsonNode json = JsonMapper.MAPPER.valueToTree(node.asMap());
+    return new VersionedResource<>(buildClass(json, type), record.get("revision").asLong());
   }
 
 }

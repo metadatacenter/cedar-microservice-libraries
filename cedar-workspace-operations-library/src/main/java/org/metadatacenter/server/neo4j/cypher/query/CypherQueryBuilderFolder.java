@@ -198,14 +198,16 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
         " SET folder.<PROP.IS_OPEN> = true" +
-        " RETURN folder";
+        " SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1" +
+        " RETURN folder AS resource, folder._cedarRevision AS revision";
   }
 
   public static String setNotOpen() {
     return "" +
         " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
         " REMOVE folder.<PROP.IS_OPEN>" +
-        " RETURN folder";
+        " SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1" +
+        " RETURN folder AS resource, folder._cedarRevision AS revision";
   }
 
   public static String getTotalCount() {
