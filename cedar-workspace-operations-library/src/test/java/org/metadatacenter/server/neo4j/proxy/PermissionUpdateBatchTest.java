@@ -2,19 +2,14 @@ package org.metadatacenter.server.neo4j.proxy;
 
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.id.CedarCategoryId;
-import org.metadatacenter.id.CedarFolderId;
 import org.metadatacenter.server.neo4j.CypherQuery;
+import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFilesystemResourcePermission;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermission;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroup;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroupPermissionPair;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUser;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUserPermissionPair;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
-import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionGroup;
-import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionGroupPermissionPair;
-import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUser;
-import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUserPermissionPair;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
@@ -35,29 +30,13 @@ import static org.mockito.Mockito.verify;
 class PermissionUpdateBatchTest {
 
   @Test
-  void resourceOwnerAndAclChangesUseOneWriteTransaction() {
-    Neo4JProxyResourcePermission proxy = mock(Neo4JProxyResourcePermission.class, CALLS_REAL_METHODS);
-    doReturn(true).when(proxy).executeWriteBatch(anyList(), eq("updating resource permissions"));
+  void resourceAclReplacementIsOneVersionedCypherMutation() {
+    String query = CypherQueryBuilderFilesystemResourcePermission.replacePermissions();
 
-    var resourceId = CedarFolderId.build("https://repo.example/folders/f1");
-    var newOwnerId = new ResourcePermissionUser("https://repo.example/users/owner").getResourceIds();
-    var removeUser = new ResourcePermissionUserPermissionPair(
-        new ResourcePermissionUser("https://repo.example/users/remove"), FilesystemResourcePermission.READ);
-    var addUser = new ResourcePermissionUserPermissionPair(
-        new ResourcePermissionUser("https://repo.example/users/add"), FilesystemResourcePermission.WRITE);
-    var removeGroup = new ResourcePermissionGroupPermissionPair(
-        new ResourcePermissionGroup("https://repo.example/groups/remove"), FilesystemResourcePermission.READ);
-    var addGroup = new ResourcePermissionGroupPermissionPair(
-        new ResourcePermissionGroup("https://repo.example/groups/add"), FilesystemResourcePermission.WRITE);
-
-    assertTrue(proxy.updatePermissionsAtomically(resourceId, newOwnerId,
-        Set.of(removeUser), Set.of(addUser), Set.of(removeGroup), Set.of(addGroup), NodeSharePermission.READ));
-
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    ArgumentCaptor<List<CypherQuery>> batch = ArgumentCaptor.forClass((Class) List.class);
-    verify(proxy).executeWriteBatch(batch.capture(), eq("updating resource permissions"));
-    verify(proxy, never()).executeWrite(any(CypherQuery.class), anyString());
-    assertEquals(7, batch.getValue().size());
+    assertTrue(query.contains("collect(DISTINCT oldOwner) + collect(DISTINCT oldGrant)"));
+    assertTrue(query.contains("FOREACH (relation IN oldRelations | DELETE relation)"));
+    assertTrue(query.contains("resource._cedarAclRevision = {<PH.CURRENT_REVISION>} + 1"));
+    assertTrue(query.contains("resource._cedarAclRevision AS revision"));
   }
 
   @Test

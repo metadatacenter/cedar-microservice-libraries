@@ -19,6 +19,7 @@ import org.metadatacenter.server.RevisionConflictException;
 import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.VersionedGroupUsers;
+import org.metadatacenter.server.VersionedResourcePermissions;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarGroupUserRequest;
@@ -286,6 +287,37 @@ public class WorkspacePermissionIntegrationTest {
     Assertions.assertEquals(2L, after.revision());
     Assertions.assertEquals(2, after.content().getUsers().size(),
         "The stale replacement must not remove the second member");
+  }
+
+  @Test
+  public void staleResourcePermissionReplacementIsRejectedWithoutChangingTheAggregate() {
+    FolderServerFolder folder = createFolderUnderUser1Home("Versioned ACL Folder");
+    ResourcePermissionServiceSession permissions = permissionsOf(user1Context);
+
+    VersionedResourcePermissions initial = permissions.getVersionedResourcePermissions(folder.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+    Assertions.assertEquals(user1.getId(), initial.content().getOwner().getId());
+
+    ResourcePermissionsRequest shared = requestOwnedByUser1();
+    shared.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
+        new ResourcePermissionUser(user2.getId()), FilesystemResourcePermission.READ));
+    BackendCallResult<VersionedResourcePermissions> first = permissions.updateResourcePermissions(
+        folder.getResourceId(), shared, RevisionPrecondition.exact(initial.revision()));
+    Assertions.assertFalse(first.isError(), () -> first.getFirstErrorMessage());
+    Assertions.assertEquals(2L, first.getPayload().revision());
+    Assertions.assertEquals(1, first.getPayload().content().getUserPermissions().size());
+
+    ResourcePermissionsRequest staleReplacement = requestOwnedByUser1();
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> permissions.updateResourcePermissions(folder.getResourceId(), staleReplacement,
+            RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+
+    VersionedResourcePermissions after = permissions.getVersionedResourcePermissions(folder.getResourceId());
+    Assertions.assertEquals(2L, after.revision());
+    Assertions.assertEquals(1, after.content().getUserPermissions().size(),
+        "The stale replacement must not remove the direct user grant");
+    Assertions.assertEquals(user2.getId(), after.content().getUserPermissions().get(0).getUser().getId());
   }
 
 }

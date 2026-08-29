@@ -166,6 +166,38 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     return params;
   }
 
+  public static CypherParameters replacePermissions(CedarFilesystemResourceId resourceId, CedarUserId ownerId,
+                                                    List<String> userIds, List<String> readUserIds,
+                                                    List<String> writeUserIds, List<String> changeOwnerUserIds,
+                                                    List<String> changePermissionsUserIds, List<String> publishUserIds,
+                                                    List<String> createDraftUserIds, List<String> groupIds,
+                                                    List<String> readGroupIds, List<String> writeGroupIds,
+                                                    List<String> changeOwnerGroupIds,
+                                                    List<String> changePermissionsGroupIds, List<String> publishGroupIds,
+                                                    List<String> createDraftGroupIds,
+                                                    NodeSharePermission everybodyPermission,
+                                                    long currentRevision) {
+    CypherParameters params = matchFilesystemResource(resourceId);
+    params.put(ParameterPlaceholder.OWNER_ID, ownerId);
+    params.put(ParameterPlaceholder.USER_ID_LIST, userIds);
+    params.put(ParameterPlaceholder.READ_USER_ID_LIST, readUserIds);
+    params.put(ParameterPlaceholder.WRITE_USER_ID_LIST, writeUserIds);
+    params.put(ParameterPlaceholder.CHANGE_OWNER_USER_ID_LIST, changeOwnerUserIds);
+    params.put(ParameterPlaceholder.CHANGE_PERMISSIONS_USER_ID_LIST, changePermissionsUserIds);
+    params.put(ParameterPlaceholder.PUBLISH_USER_ID_LIST, publishUserIds);
+    params.put(ParameterPlaceholder.CREATE_DRAFT_USER_ID_LIST, createDraftUserIds);
+    params.put(ParameterPlaceholder.GROUP_ID_LIST, groupIds);
+    params.put(ParameterPlaceholder.READ_GROUP_ID_LIST, readGroupIds);
+    params.put(ParameterPlaceholder.WRITE_GROUP_ID_LIST, writeGroupIds);
+    params.put(ParameterPlaceholder.CHANGE_OWNER_GROUP_ID_LIST, changeOwnerGroupIds);
+    params.put(ParameterPlaceholder.CHANGE_PERMISSIONS_GROUP_ID_LIST, changePermissionsGroupIds);
+    params.put(ParameterPlaceholder.PUBLISH_GROUP_ID_LIST, publishGroupIds);
+    params.put(ParameterPlaceholder.CREATE_DRAFT_GROUP_ID_LIST, createDraftGroupIds);
+    params.put(ParameterPlaceholder.EVERYBODY_PERMISSION, everybodyPermission.getValue());
+    params.put(ParameterPlaceholder.CURRENT_REVISION, currentRevision);
+    return params;
+  }
+
   public static CypherParameters getSpecialFoldersLookupParameters(int limit, int offset, CedarUserId ownerId) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.LIMIT, limit);
