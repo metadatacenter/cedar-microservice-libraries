@@ -76,6 +76,11 @@ public class ProxyUtil {
   }
 
   public static ClassicHttpResponse proxyDelete(String url, CedarRequestContext context) throws CedarProcessingException {
+    return proxyDelete(url, context, context.getIfMatchHeader());
+  }
+
+  public static ClassicHttpResponse proxyDelete(String url, CedarRequestContext context, String ifMatch)
+      throws CedarProcessingException {
     // HttpClient 5 sets Content-Length itself from the (empty) body; adding it explicitly, as the
     // HttpClient 4 code did, makes the client reject the request with "Content-Length header
     // already present". Only the content type is set here.
@@ -84,6 +89,7 @@ public class ProxyUtil {
         .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT))
         .addHeader(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN.toString());
     copyHeaders(proxyRequest, context);
+    copyHeader(proxyRequest, HttpHeaders.IF_MATCH, ifMatch);
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {

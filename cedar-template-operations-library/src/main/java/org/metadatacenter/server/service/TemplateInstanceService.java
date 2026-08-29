@@ -28,6 +28,9 @@ public interface TemplateInstanceService<K, T> {
 
   void deleteTemplateInstance(K templateInstanceId) throws ArtifactServerResourceNotFoundException, IOException;
 
+  void deleteTemplateInstance(K templateInstanceId, long expectedRevision)
+      throws ArtifactServerResourceNotFoundException, IOException;
+
   void deleteAllTemplateInstances();
 
   long count();

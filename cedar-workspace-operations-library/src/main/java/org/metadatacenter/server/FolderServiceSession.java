@@ -26,6 +26,8 @@ public interface FolderServiceSession {
 
   FolderServerFolder findFolderById(CedarFolderId folderId);
 
+  VersionedResource<FolderServerFolder> findVersionedFolderById(CedarFolderId folderId);
+
   List<FolderServerResourceExtract> findAllNodes(int limit, int offset, List<String> sortList);
 
   long findAllNodesCount();
@@ -49,6 +51,8 @@ public interface FolderServiceSession {
   FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType, Map<NodeProperty, String> updateFields);
 
   boolean deleteFolderById(CedarFolderId folderId);
+
+  boolean deleteFolderById(CedarFolderId folderId, RevisionPrecondition precondition);
 
   boolean deleteResourceById(CedarArtifactId resourceId);
 

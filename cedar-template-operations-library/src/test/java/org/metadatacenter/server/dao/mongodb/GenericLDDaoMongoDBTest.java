@@ -6,13 +6,16 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.result.UpdateResult;
+import com.mongodb.client.result.DeleteResult;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.junit.jupiter.api.Test;
+import org.metadatacenter.server.dao.ArtifactRevisionConflictException;
 import org.metadatacenter.util.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -45,5 +48,27 @@ class GenericLDDaoMongoDBTest {
 
     assertEquals(submitted, returned);
     assertFalse(returned.has(GenericLDDaoMongoDB.INTERNAL_REVISION_FIELD));
+  }
+
+  @Test
+  void staleConditionalDeletePreservesTheNewerDocument() throws Exception {
+    MongoClient client = mock(MongoClient.class);
+    MongoDatabase database = mock(MongoDatabase.class);
+    @SuppressWarnings("unchecked")
+    MongoCollection<Document> collection = mock(MongoCollection.class);
+    @SuppressWarnings("unchecked")
+    FindIterable<Document> currentRead = mock(FindIterable.class);
+    when(client.getDatabase("test-db")).thenReturn(database);
+    when(database.getCollection("artifacts")).thenReturn(collection);
+    when(collection.deleteOne(any(Bson.class))).thenReturn(DeleteResult.acknowledged(0L));
+    when(collection.find(any(Bson.class))).thenReturn(currentRead);
+    when(currentRead.first()).thenReturn(new Document("@id", "artifact-id")
+        .append("schema:name", "newer writer")
+        .append(GenericLDDaoMongoDB.INTERNAL_REVISION_FIELD, 2L));
+
+    GenericLDDaoMongoDB dao = new GenericLDDaoMongoDB(client, "test-db", "artifacts");
+
+    assertThrows(ArtifactRevisionConflictException.class,
+        () -> dao.delete("artifact-id", 1L));
   }
 }

@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarCategoryId;
@@ -15,6 +16,14 @@ import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFilesy
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderCategory;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderGroup;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
+import org.metadatacenter.server.RevisionConflictException;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedResource;
+import org.metadatacenter.util.json.JsonMapper;
+import org.neo4j.driver.Record;
+import org.neo4j.driver.Result;
+import org.neo4j.driver.Transaction;
+import org.neo4j.driver.types.Node;
 
 import java.util.List;
 import java.util.Map;
@@ -55,6 +64,12 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
     return executeReadGetOne(q, FolderServerCategory.class);
   }
 
+  public VersionedResource<FolderServerCategory> getVersionedCategoryById(CedarCategoryId categoryId) {
+    CypherQueryWithParameters query = new CypherQueryWithParameters(
+        CypherQueryBuilderCategory.getVersionedCategoryById(), CypherParamBuilderCategory.matchId(categoryId));
+    return executeInReadTransaction(tx -> readVersionedCategory(run(tx, query)), "reading a versioned category");
+  }
+
   public FolderServerCategory getCategoryByIdentifier(String identifier) {
     String cypher = CypherQueryBuilderCategory.getCategoryByIdentifier();
     CypherParameters params = CypherParamBuilderCategory.matchIdentifier(identifier);
@@ -84,10 +99,39 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
   }
 
   public boolean deleteCategoryById(CedarCategoryId categoryId) {
-    String cypher = CypherQueryBuilderCategory.deleteCategoryById();
-    CypherParameters params = CypherParamBuilderCategory.matchId(categoryId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "deleting category");
+    return deleteCategoryById(categoryId, RevisionPrecondition.any());
+  }
+
+  public boolean deleteCategoryById(CedarCategoryId categoryId, RevisionPrecondition precondition) {
+    return executeInWriteTransaction(tx -> {
+      CypherQueryWithParameters lock = new CypherQueryWithParameters(
+          CypherQueryBuilderCategory.lockCategoryRevision(), CypherParamBuilderCategory.matchId(categoryId));
+      Result locked = run(tx, lock);
+      if (!locked.hasNext()) {
+        return false;
+      }
+      long currentRevision = locked.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      CypherQueryWithParameters delete = new CypherQueryWithParameters(
+          CypherQueryBuilderCategory.deleteCategoryById(), CypherParamBuilderCategory.matchId(categoryId));
+      return run(tx, delete).hasNext();
+    }, "deleting a versioned category");
+  }
+
+  private Result run(Transaction tx, CypherQueryWithParameters query) {
+    return tx.run(query.getRunnableQuery(), query.getParameterMap());
+  }
+
+  private VersionedResource<FolderServerCategory> readVersionedCategory(Result result) {
+    if (!result.hasNext()) {
+      return null;
+    }
+    Record record = result.next();
+    Node node = record.get("resource").asNode();
+    JsonNode json = JsonMapper.MAPPER.valueToTree(node.asMap());
+    return new VersionedResource<>(buildClass(json, FolderServerCategory.class), record.get("revision").asLong());
   }
 
   public FolderServerUser getCategoryOwner(CedarCategoryId categoryId) {

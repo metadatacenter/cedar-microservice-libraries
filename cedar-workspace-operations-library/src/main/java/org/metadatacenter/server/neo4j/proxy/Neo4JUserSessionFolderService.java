@@ -12,6 +12,8 @@ import org.metadatacenter.model.folderserver.extract.FolderServerFolderExtract;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.model.request.NodeListRequest;
 import org.metadatacenter.server.FolderServiceSession;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.neo4j.AbstractNeo4JUserSession;
 import org.metadatacenter.server.neo4j.Neo4jConfig;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
@@ -62,6 +64,11 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   @Override
   public boolean deleteFolderById(CedarFolderId folderId) {
     return proxies.folder().deleteFolderById(folderId);
+  }
+
+  @Override
+  public boolean deleteFolderById(CedarFolderId folderId, RevisionPrecondition precondition) {
+    return proxies.folder().deleteFolderById(folderId, precondition);
   }
 
   @Override
@@ -196,6 +203,11 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   @Override
   public FolderServerFolder findFolderById(CedarFolderId folderId) {
     return proxies.folder().findFolderById(folderId);
+  }
+
+  @Override
+  public VersionedResource<FolderServerFolder> findVersionedFolderById(CedarFolderId folderId) {
+    return proxies.folder().findVersionedFolderById(folderId);
   }
 
   @Override

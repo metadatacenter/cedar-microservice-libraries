@@ -207,13 +207,33 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     if ((id == null) || (id.length() == 0)) {
       throw new IllegalArgumentException();
     }
+    DeleteResult deleteResult = entityCollection.deleteOne(eq("@id", id));
+    if (deleteResult.getDeletedCount() == 0) {
+      throw new ArtifactServerResourceNotFoundException();
+    }
+  }
+
+  /**
+   * Deletes exactly the revision the caller observed. The identifier and revision are matched by one
+   * Mongo operation, so an edit committed after the caller's GET cannot be removed by a stale DELETE.
+   */
+  @Override
+  public void delete(String id, long expectedRevision)
+      throws ArtifactServerResourceNotFoundException, IOException {
+    if ((id == null) || id.isEmpty()) {
+      throw new IllegalArgumentException();
+    }
+    Bson revisionFilter = expectedRevision == 0L
+        ? com.mongodb.client.model.Filters.exists(INTERNAL_REVISION_FIELD, false)
+        : eq(INTERNAL_REVISION_FIELD, expectedRevision);
+    DeleteResult deleteResult = entityCollection.deleteOne(and(eq("@id", id), revisionFilter));
+    if (deleteResult.getDeletedCount() == 1) {
+      return;
+    }
     if (!exists(id)) {
       throw new ArtifactServerResourceNotFoundException();
     }
-    DeleteResult deleteResult = entityCollection.deleteOne(eq("@id", id));
-    if (deleteResult.getDeletedCount() != 1) {
-      throw new IllegalStateException("Delete did not remove exactly one document for @id=" + id);
-    }
+    throw new ArtifactRevisionConflictException(id, expectedRevision);
   }
 
   /**

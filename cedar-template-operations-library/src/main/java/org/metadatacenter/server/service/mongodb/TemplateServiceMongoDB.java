@@ -68,6 +68,12 @@ public class TemplateServiceMongoDB extends GenericTemplateServiceMongoDB<String
   }
 
   @Override
+  public void deleteTemplate(String templateId, long expectedRevision)
+      throws ArtifactServerResourceNotFoundException, IOException {
+    templateDao.delete(templateId, expectedRevision);
+  }
+
+  @Override
   public boolean existsTemplate(String templateId) throws IOException {
     return templateDao.exists(templateId);
   }

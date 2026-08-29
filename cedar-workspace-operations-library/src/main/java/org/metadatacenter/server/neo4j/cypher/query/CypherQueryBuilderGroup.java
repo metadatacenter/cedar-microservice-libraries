@@ -23,7 +23,8 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
     sb.append(buildCreateAssignment(NodeProperty.LAST_UPDATED_ON_TS)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.SPECIAL_GROUP)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.RESOURCE_TYPE)).append(",");
-    sb.append("_cedarMembershipRevision:1");
+    sb.append("_cedarMembershipRevision:1,");
+    sb.append("_cedarRevision:1");
     sb.append("})");
 
     sb.append(" RETURN group");
@@ -46,7 +47,8 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
     sb.append(buildCreateAssignment(NodeProperty.LAST_UPDATED_ON_TS)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.SPECIAL_GROUP)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.RESOURCE_TYPE)).append(",");
-    sb.append("_cedarMembershipRevision:1");
+    sb.append("_cedarMembershipRevision:1,");
+    sb.append("_cedarRevision:1");
     sb.append("})");
 
     sb.append(" WITH group");
@@ -76,6 +78,7 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
     for (NodeProperty property : updateFields.keySet()) {
       sb.append(buildSetter("group", property));
     }
+    sb.append(" SET group._cedarRevision = coalesce(group._cedarRevision, 1) + 1");
     sb.append(" RETURN group");
     return sb.toString();
   }
@@ -83,7 +86,19 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
   public static String deleteGroupById() {
     return "" +
         " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})" +
-        " DETACH DELETE group";
+        " DETACH DELETE group" +
+        " RETURN true AS deleted";
+  }
+
+  public static String getVersionedGroupById() {
+    return " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})"
+        + " RETURN group AS resource, coalesce(group._cedarRevision, 1) AS revision";
+  }
+
+  public static String lockGroupRevision() {
+    return " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})"
+        + " SET group._cedarRevision = coalesce(group._cedarRevision, 1)"
+        + " RETURN group._cedarRevision AS revision";
   }
 
   public static String getGroupUsersWithRelation(RelationLabel relationLabel) {
@@ -182,6 +197,7 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
     for (NodeProperty property : updateFields.keySet()) {
       sb.append(buildSetter("category", property));
     }
+    sb.append(" SET category._cedarRevision = coalesce(category._cedarRevision, 1) + 1");
     sb.append(" RETURN category");
     return sb.toString();
   }

@@ -11,6 +11,7 @@ import org.metadatacenter.server.neo4j.*;
 import org.metadatacenter.server.RevisionConflictException;
 import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.VersionedGroupUsers;
+import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.cypher.parameter.AbstractCypherParamBuilder;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderGroup;
@@ -57,6 +58,12 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
     return executeReadGetOne(q, FolderServerGroup.class);
   }
 
+  VersionedResource<FolderServerGroup> findVersionedGroupById(CedarGroupId groupId) {
+    CypherQueryWithParameters query = new CypherQueryWithParameters(
+        CypherQueryBuilderGroup.getVersionedGroupById(), CypherParamBuilderGroup.matchId(groupId));
+    return executeInReadTransaction(tx -> readVersionedGroup(run(tx, query)), "reading a versioned group");
+  }
+
   FolderServerGroup findGroupByName(String groupName) {
     String cypher = CypherQueryBuilderGroup.getGroupByName();
     CypherParameters params = CypherParamBuilderGroup.getGroupByName(groupName);
@@ -73,10 +80,25 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
   }
 
   boolean deleteGroupById(CedarGroupId groupId) {
-    String cypher = CypherQueryBuilderGroup.deleteGroupById();
-    CypherParameters params = CypherParamBuilderGroup.matchId(groupId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "deleting group");
+    return deleteGroupById(groupId, RevisionPrecondition.any());
+  }
+
+  boolean deleteGroupById(CedarGroupId groupId, RevisionPrecondition precondition) {
+    return executeInWriteTransaction(tx -> {
+      CypherQueryWithParameters lock = new CypherQueryWithParameters(
+          CypherQueryBuilderGroup.lockGroupRevision(), CypherParamBuilderGroup.matchId(groupId));
+      Result locked = run(tx, lock);
+      if (!locked.hasNext()) {
+        return false;
+      }
+      long currentRevision = locked.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      CypherQueryWithParameters delete = new CypherQueryWithParameters(
+          CypherQueryBuilderGroup.deleteGroupById(), CypherParamBuilderGroup.matchId(groupId));
+      return run(tx, delete).hasNext();
+    }, "deleting a versioned group");
   }
 
   List<FolderServerUser> findGroupMembers(CedarGroupId groupURL) {
@@ -142,6 +164,16 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
 
   private Result run(Transaction tx, CypherQueryWithParameters query) {
     return tx.run(query.getRunnableQuery(), query.getParameterMap());
+  }
+
+  private VersionedResource<FolderServerGroup> readVersionedGroup(Result result) {
+    if (!result.hasNext()) {
+      return null;
+    }
+    Record record = result.next();
+    Node node = record.get("resource").asNode();
+    JsonNode json = JsonMapper.MAPPER.valueToTree(node.asMap());
+    return new VersionedResource<>(buildClass(json, FolderServerGroup.class), record.get("revision").asLong());
   }
 
   private VersionedGroupUsers readVersionedGroupUsers(Result result) {

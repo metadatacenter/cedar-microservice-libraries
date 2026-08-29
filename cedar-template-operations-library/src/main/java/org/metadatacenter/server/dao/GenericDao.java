@@ -27,6 +27,8 @@ public interface GenericDao<K, T> {
 
   void delete(K id) throws ArtifactServerResourceNotFoundException, IOException;
 
+  void delete(K id, long expectedRevision) throws ArtifactServerResourceNotFoundException, IOException;
+
   boolean exists(K id) throws IOException;
 
   void deleteAll();

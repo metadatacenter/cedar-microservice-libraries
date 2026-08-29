@@ -17,6 +17,8 @@ public interface CategoryServiceSession {
 
   FolderServerCategory getCategoryById(CedarCategoryId categoryId);
 
+  VersionedResource<FolderServerCategory> getVersionedCategoryById(CedarCategoryId categoryId);
+
   FolderServerCategory getCategoryByParentAndName(CedarCategoryId parentId, String name);
 
   List<FolderServerCategory> getAllCategories(int limit, int offset);
@@ -26,6 +28,8 @@ public interface CategoryServiceSession {
   FolderServerCategory updateCategoryById(CedarCategoryId categoryId, Map<NodeProperty, String> updateFields);
 
   boolean deleteCategoryById(CedarCategoryId categoryId);
+
+  boolean deleteCategoryById(CedarCategoryId categoryId, RevisionPrecondition precondition);
 
   FolderServerCategory getRootCategory();
 

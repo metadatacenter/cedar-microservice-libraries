@@ -20,6 +20,7 @@ import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.VersionedGroupUsers;
 import org.metadatacenter.server.VersionedResourcePermissions;
+import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarGroupUserRequest;
@@ -251,6 +252,41 @@ public class WorkspacePermissionIntegrationTest {
     Assertions.assertNotNull(user1Folders.findFilesystemResourceByParentFolderIdAndName(
             parent.getResourceId(), child.getName()),
         "The refused deletion must preserve the parent-child relationship");
+  }
+
+  @Test
+  public void staleFolderDeletePreservesANewerRename() {
+    FolderServiceSession folders = foldersOf(user1Context);
+    FolderServerFolder folder = createFolderUnderUser1Home("Versioned Delete Folder");
+    VersionedResource<FolderServerFolder> initial = folders.findVersionedFolderById(folder.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+
+    Map<NodeProperty, String> update = new HashMap<>();
+    update.put(NodeProperty.NAME, "Versioned Delete Folder Renamed");
+    update.put(NodeProperty.NAME_LOWER, "versioned delete folder renamed");
+    folders.updateFolderById(folder.getResourceId(), update);
+
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> folders.deleteFolderById(folder.getResourceId(), RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+    Assertions.assertEquals("Versioned Delete Folder Renamed",
+        folders.findFolderById(folder.getResourceId()).getName());
+    Assertions.assertTrue(folders.deleteFolderById(folder.getResourceId(), RevisionPrecondition.any()));
+  }
+
+  @Test
+  public void staleGroupDeletePreservesANewerEdit() {
+    GroupServiceSession groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
+    FolderServerGroup group = groups.createGroup("versioned-delete-group", "before edit");
+    VersionedResource<FolderServerGroup> initial = groups.findVersionedGroupById(group.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+
+    groups.updateGroupById(group.getResourceId(), Map.of(NodeProperty.DESCRIPTION, "after edit"));
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> groups.deleteGroupById(group.getResourceId(), RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+    Assertions.assertEquals("after edit", groups.findGroupById(group.getResourceId()).getDescription());
+    Assertions.assertTrue(groups.deleteGroupById(group.getResourceId(), RevisionPrecondition.any()));
   }
 
   @Test

@@ -28,6 +28,7 @@ import org.metadatacenter.server.GroupServiceSession;
 import org.metadatacenter.server.RevisionConflictException;
 import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.VersionedCategoryPermissions;
+import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermission;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroup;
@@ -139,6 +140,23 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
     FolderServerArtifact created = foldersOf(user1Context).createResourceAsChildOfId(template, user1HomeId);
     Assertions.assertNotNull(created, "The template '" + template.getName() + "' should be created");
     return created;
+  }
+
+  @Test
+  public void staleCategoryDeletePreservesANewerEdit() {
+    CategoryServiceSession categories = categoriesOf(user1Context);
+    FolderServerCategory category = createCategoryAsUser1(rootCategoryId, "Versioned Delete Category");
+    VersionedResource<FolderServerCategory> initial = categories.getVersionedCategoryById(category.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+
+    categories.updateCategoryById(category.getResourceId(),
+        Map.of(org.metadatacenter.server.neo4j.cypher.NodeProperty.DESCRIPTION, "newer description"));
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> categories.deleteCategoryById(category.getResourceId(), RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+    Assertions.assertEquals("newer description",
+        categories.getCategoryById(category.getResourceId()).getDescription());
+    Assertions.assertTrue(categories.deleteCategoryById(category.getResourceId(), RevisionPrecondition.any()));
   }
 
   @Test

@@ -33,7 +33,8 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
     sb.append(buildCreateAssignment(NodeProperty.LAST_UPDATED_BY)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.OWNED_BY)).append(",");
     //
-    sb.append(buildCreateAssignment(NodeProperty.PARENT_CATEGORY_ID));
+    sb.append(buildCreateAssignment(NodeProperty.PARENT_CATEGORY_ID)).append(",");
+    sb.append("_cedarRevision:1");
     sb.append("})");
 
     if (parentCategoryId != null) {
@@ -56,6 +57,17 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
         " RETURN category";
+  }
+
+  public static String getVersionedCategoryById() {
+    return " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})"
+        + " RETURN category AS resource, coalesce(category._cedarRevision, 1) AS revision";
+  }
+
+  public static String lockCategoryRevision() {
+    return " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})"
+        + " SET category._cedarRevision = coalesce(category._cedarRevision, 1)"
+        + " RETURN category._cedarRevision AS revision";
   }
 
   public static String getCategoryByIdentifier() {
@@ -88,7 +100,8 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
   public static String deleteCategoryById() {
     return "" +
         " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
-        " DETACH DELETE category";
+        " DETACH DELETE category" +
+        " RETURN true AS deleted";
   }
 
   public static String getCategoryOwner() {

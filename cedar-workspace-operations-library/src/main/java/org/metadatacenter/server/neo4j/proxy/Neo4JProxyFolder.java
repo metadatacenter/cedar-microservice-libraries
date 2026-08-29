@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarFolderId;
@@ -15,6 +16,14 @@ import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFolder
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderUser;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFolder;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
+import org.metadatacenter.server.RevisionConflictException;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedResource;
+import org.metadatacenter.util.json.JsonMapper;
+import org.neo4j.driver.Record;
+import org.neo4j.driver.Result;
+import org.neo4j.driver.Transaction;
+import org.neo4j.driver.types.Node;
 
 import java.util.List;
 import java.util.Map;
@@ -45,10 +54,46 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
   }
 
   boolean deleteFolderById(CedarFolderId folderId) {
-    String cypher = CypherQueryBuilderFolder.deleteEmptyFolderById();
-    CypherParameters params = CypherParamBuilderFolder.matchId(folderId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWriteGetOne(q, FolderServerFolder.class) != null;
+    return deleteFolderById(folderId, RevisionPrecondition.any());
+  }
+
+  boolean deleteFolderById(CedarFolderId folderId, RevisionPrecondition precondition) {
+    return executeInWriteTransaction(tx -> {
+      CypherQueryWithParameters lock = new CypherQueryWithParameters(
+          CypherQueryBuilderFolder.lockFolderRevision(), CypherParamBuilderFolder.matchId(folderId));
+      Result locked = run(tx, lock);
+      if (!locked.hasNext()) {
+        return false;
+      }
+      long currentRevision = locked.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+
+      CypherQueryWithParameters delete = new CypherQueryWithParameters(
+          CypherQueryBuilderFolder.deleteEmptyFolderById(), CypherParamBuilderFolder.matchId(folderId));
+      return run(tx, delete).hasNext();
+    }, "deleting a versioned empty folder");
+  }
+
+  VersionedResource<FolderServerFolder> findVersionedFolderById(CedarFolderId folderId) {
+    CypherQueryWithParameters query = new CypherQueryWithParameters(
+        CypherQueryBuilderFolder.getVersionedFolderById(), CypherParamBuilderFolder.matchId(folderId));
+    return executeInReadTransaction(tx -> readVersionedFolder(run(tx, query)), "reading a versioned folder");
+  }
+
+  private Result run(Transaction tx, CypherQueryWithParameters query) {
+    return tx.run(query.getRunnableQuery(), query.getParameterMap());
+  }
+
+  private VersionedResource<FolderServerFolder> readVersionedFolder(Result result) {
+    if (!result.hasNext()) {
+      return null;
+    }
+    Record record = result.next();
+    Node node = record.get("resource").asNode();
+    JsonNode json = JsonMapper.MAPPER.valueToTree(node.asMap());
+    return new VersionedResource<>(buildClass(json, FolderServerFolder.class), record.get("revision").asLong());
   }
 
   List<FolderServerFolder> findFolderPathByPath(String path) {

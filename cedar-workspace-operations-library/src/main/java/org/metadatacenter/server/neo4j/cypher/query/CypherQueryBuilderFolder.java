@@ -30,6 +30,7 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
     for (NodeProperty property : updateFields.keySet()) {
       sb.append(buildSetter("folder", property));
     }
+    sb.append(" SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1");
     sb.append(" RETURN folder");
     return sb.toString();
   }
@@ -65,6 +66,17 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         DETACH DELETE folder
         RETURN parent
         """;
+  }
+
+  public static String getVersionedFolderById() {
+    return " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})"
+        + " RETURN folder AS resource, coalesce(folder._cedarRevision, 1) AS revision";
+  }
+
+  public static String lockFolderRevision() {
+    return " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})"
+        + " SET folder._cedarRevision = coalesce(folder._cedarRevision, 1)"
+        + " RETURN folder._cedarRevision AS revision";
   }
 
   public static String getFolderLookupQueryById() {
@@ -109,6 +121,7 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         }
         DELETE oldRelation
         MERGE (newParent)-[:<REL.CONTAINS>]->(folder)
+        SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1
         RETURN folder
         """;
   }
@@ -119,6 +132,7 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.FOLDER_ID>}})" +
         " MERGE (user)-[:<REL.OWNS>]->(folder)" +
         " SET folder.<PROP.OWNED_BY> = {<PH.USER_ID>}" +
+        " SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1" +
         " RETURN folder";
   }
 
@@ -129,6 +143,7 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " MATCH (user)-[relation:<REL.OWNS>]->(folder)" +
         " DELETE (relation)" +
         " SET folder.<PROP.OWNED_BY> = null" +
+        " SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1" +
         " RETURN folder";
   }
 

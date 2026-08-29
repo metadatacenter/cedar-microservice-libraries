@@ -16,6 +16,8 @@ public interface GroupServiceSession {
 
   FolderServerGroup findGroupById(CedarGroupId groupId);
 
+  VersionedResource<FolderServerGroup> findVersionedGroupById(CedarGroupId groupId);
+
   FolderServerGroup findGroupByName(String groupName);
 
   FolderServerGroup createGroup(String groupName, String groupDescription);
@@ -23,6 +25,8 @@ public interface GroupServiceSession {
   FolderServerGroup updateGroupById(CedarGroupId groupId, Map<NodeProperty, String> updateFields);
 
   boolean deleteGroupById(CedarGroupId groupId);
+
+  boolean deleteGroupById(CedarGroupId groupId, RevisionPrecondition precondition);
 
   CedarGroupUsers findGroupUsers(CedarGroupId groupId);
 

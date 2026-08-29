@@ -10,6 +10,7 @@ import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.server.GroupServiceSession;
 import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.VersionedGroupUsers;
+import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.neo4j.AbstractNeo4JUserSession;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.result.BackendCallResult;
@@ -50,6 +51,11 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
   }
 
   @Override
+  public VersionedResource<FolderServerGroup> findVersionedGroupById(CedarGroupId groupId) {
+    return proxies.group().findVersionedGroupById(groupId);
+  }
+
+  @Override
   public FolderServerGroup createGroup(String groupName, String groupDescription) {
     String gid = linkedDataUtil.buildNewLinkedDataId(CedarResourceType.GROUP);
     CedarGroupId groupId = null;
@@ -73,6 +79,14 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
       return false;
     }
     return proxies.group().deleteGroupById(groupId);
+  }
+
+  @Override
+  public boolean deleteGroupById(CedarGroupId groupId, RevisionPrecondition precondition) {
+    if (!userCanAdministerGroup(groupId)) {
+      return false;
+    }
+    return proxies.group().deleteGroupById(groupId, precondition);
   }
 
   @Override
