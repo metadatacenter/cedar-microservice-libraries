@@ -27,6 +27,7 @@ import org.neo4j.driver.types.Node;
 
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 
 public class Neo4JProxyFolder extends AbstractNeo4JProxy {
 
@@ -76,10 +77,11 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     return executeInWriteTransaction(tx -> {
       Result locked = run(tx, new CypherQueryWithParameters(
           CypherQueryBuilderFolder.lockFolderRevision(), CypherParamBuilderFolder.matchId(folderId)));
-      if (!locked.hasNext()) {
+      OptionalLong lockedRevision = readLockedRevision(locked);
+      if (lockedRevision.isEmpty()) {
         return null;
       }
-      long currentRevision = locked.next().get("revision").asLong();
+      long currentRevision = lockedRevision.getAsLong();
       if (!precondition.matches(currentRevision)) {
         throw new RevisionConflictException(currentRevision);
       }
@@ -98,10 +100,11 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
       CypherQueryWithParameters lock = new CypherQueryWithParameters(
           CypherQueryBuilderFolder.lockFolderRevision(), CypherParamBuilderFolder.matchId(folderId));
       Result locked = run(tx, lock);
-      if (!locked.hasNext()) {
+      OptionalLong lockedRevision = readLockedRevision(locked);
+      if (lockedRevision.isEmpty()) {
         return false;
       }
-      long currentRevision = locked.next().get("revision").asLong();
+      long currentRevision = lockedRevision.getAsLong();
       if (!precondition.matches(currentRevision)) {
         throw new RevisionConflictException(currentRevision);
       }

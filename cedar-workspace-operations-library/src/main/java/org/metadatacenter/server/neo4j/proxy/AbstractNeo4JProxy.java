@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -74,6 +75,22 @@ public abstract class AbstractNeo4JProxy {
 
   static long testConnectionTimeoutMillis(long dependencyTimeoutMillis) {
     return Math.max(dependencyTimeoutMillis, MIN_TEST_CONNECTION_TIMEOUT_MILLIS);
+  }
+
+  /**
+   * Reads the revision yielded by a write-lock query.
+   * <p>
+   * A writer can match a node and then wait for its lock while another transaction deletes that
+   * node. Neo4j may complete the waiting query with a row whose revision value is {@code NULL}, not
+   * with an empty result. Treat both forms as a missing aggregate; coercing the null value with
+   * {@code asLong()} turns an ordinary update-versus-delete race into a server error.
+   */
+  protected static OptionalLong readLockedRevision(Result result) {
+    if (!result.hasNext()) {
+      return OptionalLong.empty();
+    }
+    Value revision = result.next().get("revision");
+    return revision.isNull() ? OptionalLong.empty() : OptionalLong.of(revision.asLong());
   }
 
   /**
