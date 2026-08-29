@@ -2,7 +2,9 @@ package org.metadatacenter.util.http;
 
 import org.metadatacenter.server.RevisionPrecondition;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -11,7 +13,7 @@ import java.util.regex.Pattern;
 public final class RevisionPreconditionParser {
 
   private static final Pattern REVISION_STRONG_ETAG =
-      Pattern.compile("\\\"([0-9]+)(?:-([A-Za-z0-9][A-Za-z0-9._-]*))?\\\"");
+      Pattern.compile("\\\"([0-9]+)(?:-([\\x21\\x23-\\x7E\\x80-\\xFF]+))?\\\"");
   private static final Pattern REPRESENTATION = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]*");
 
   private RevisionPreconditionParser() {
@@ -22,7 +24,7 @@ public final class RevisionPreconditionParser {
       return RevisionPrecondition.any();
     }
     Set<Long> revisions = new HashSet<>();
-    for (String candidate : ifMatch.split(",")) {
+    for (String candidate : entityTags(ifMatch)) {
       Matcher matcher = REVISION_STRONG_ETAG.matcher(candidate.trim());
       if (matcher.matches()) {
         try {
@@ -34,6 +36,24 @@ public final class RevisionPreconditionParser {
     }
     return revisions.isEmpty() ? RevisionPrecondition.none()
         : new RevisionPrecondition(false, revisions);
+  }
+
+  /** Split an If-Match list without treating a legal comma inside an opaque tag as a separator. */
+  private static List<String> entityTags(String fieldValue) {
+    List<String> candidates = new ArrayList<>();
+    boolean quoted = false;
+    int start = 0;
+    for (int i = 0; i < fieldValue.length(); i++) {
+      char current = fieldValue.charAt(i);
+      if (current == '\"') {
+        quoted = !quoted;
+      } else if (current == ',' && !quoted) {
+        candidates.add(fieldValue.substring(start, i));
+        start = i + 1;
+      }
+    }
+    candidates.add(fieldValue.substring(start));
+    return candidates;
   }
 
   public static String format(long revision) {

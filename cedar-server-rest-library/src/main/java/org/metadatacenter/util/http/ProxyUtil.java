@@ -44,6 +44,7 @@ public class ProxyUtil {
         .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
         .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT));
     copyHeaders(proxyRequest, context);
+    requestIdentityEncoding(proxyRequest);
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
@@ -57,6 +58,7 @@ public class ProxyUtil {
         .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT));
     copyHeaders(proxyRequest, context);
     copyHeaders(proxyRequest, additionalHeaders);
+    requestIdentityEncoding(proxyRequest);
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
@@ -69,6 +71,7 @@ public class ProxyUtil {
         .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
         .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT));
     copyHeaders(proxyRequest, additionalHeaders);
+    requestIdentityEncoding(proxyRequest);
     try {
       return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
     } catch (IOException e) {
@@ -186,6 +189,13 @@ public class ProxyUtil {
     if (value != null) {
       proxyRequest.setHeader(headerKey, value);
     }
+  }
+
+  private static void requestIdentityEncoding(Request proxyRequest) {
+    // These calls are application-to-application proxies. Let the public response layer choose its
+    // own content coding once; otherwise an upstream gzip variant's ETag is forwarded and Jetty
+    // appends a second -gzip marker when it compresses the public response.
+    proxyRequest.setHeader(HttpHeaders.ACCEPT_ENCODING, "identity");
   }
 
   public static JsonNode proxyGetBodyAsJsonNode(String url, CedarRequestContext context) throws CedarProcessingException {
