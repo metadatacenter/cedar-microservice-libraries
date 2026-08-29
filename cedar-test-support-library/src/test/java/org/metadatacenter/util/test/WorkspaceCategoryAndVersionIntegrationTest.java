@@ -14,6 +14,7 @@ import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerCategory;
+import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.model.folderserver.basic.FolderServerSchemaArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
 import org.metadatacenter.model.folderserver.extract.FolderServerArtifactExtract;
@@ -23,8 +24,14 @@ import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.CategoryPermissionServiceSession;
 import org.metadatacenter.server.CategoryServiceSession;
 import org.metadatacenter.server.FolderServiceSession;
+import org.metadatacenter.server.GroupServiceSession;
+import org.metadatacenter.server.RevisionConflictException;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedCategoryPermissions;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermission;
+import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroup;
+import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroupPermissionPair;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionRequest;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUser;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUserPermissionPair;
@@ -200,6 +207,47 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
         "The ATTACH grant should give user2 attach access");
     Assertions.assertFalse(user2CategoryPermissions.userHasWriteAccessToCategory(category.getResourceId()),
         "An ATTACH grant should not confer write access");
+  }
+
+  @Test
+  public void staleCategoryPermissionReplacementIsRejectedWithoutChangingTheAcl() {
+    FolderServerCategory category = createCategoryAsUser1(rootCategoryId, "Versioned Category ACL");
+    GroupServiceSession groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
+    FolderServerGroup group = groups.createGroup("versioned-category-acl-group",
+        "Group for the category ACL revision test");
+    Assertions.assertNotNull(group);
+
+    CategoryPermissionServiceSession permissions = categoryPermissionsOf(user1Context);
+    VersionedCategoryPermissions initial = permissions.getVersionedCategoryPermissions(category.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+
+    CategoryPermissionRequest firstReplacement = new CategoryPermissionRequest();
+    firstReplacement.setOwner(new CategoryPermissionUser(user1.getId()));
+    firstReplacement.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
+        new CategoryPermissionUser(user2.getId()), CategoryPermission.WRITE));
+    firstReplacement.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
+        new CategoryPermissionGroup(group.getId()), CategoryPermission.WRITE));
+    BackendCallResult<VersionedCategoryPermissions> first = permissions.updateCategoryPermissions(
+        category.getResourceId(), firstReplacement, RevisionPrecondition.exact(initial.revision()));
+    Assertions.assertFalse(first.isError(), () -> first.getFirstErrorMessage());
+    Assertions.assertEquals(2L, first.getPayload().revision());
+    Assertions.assertEquals(CategoryPermission.WRITE,
+        first.getPayload().content().getGroupPermissions().get(0).getPermission(),
+        "A group WRITE grant should round-trip as the category WRITE relation");
+
+    CategoryPermissionRequest staleReplacement = new CategoryPermissionRequest();
+    staleReplacement.setOwner(new CategoryPermissionUser(user1.getId()));
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> permissions.updateCategoryPermissions(category.getResourceId(), staleReplacement,
+            RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+
+    VersionedCategoryPermissions fresh = permissions.getVersionedCategoryPermissions(category.getResourceId());
+    Assertions.assertEquals(2L, fresh.revision());
+    Assertions.assertEquals(1, fresh.content().getUserPermissions().size());
+    Assertions.assertEquals(user2.getId(), fresh.content().getUserPermissions().get(0).getUser().getId());
+    Assertions.assertEquals(1, fresh.content().getGroupPermissions().size());
+    Assertions.assertEquals(group.getId(), fresh.content().getGroupPermissions().get(0).getGroup().getId());
   }
 
   @Test

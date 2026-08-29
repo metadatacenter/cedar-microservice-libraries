@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarCategoryId;
 import org.metadatacenter.id.CedarGroupId;
@@ -8,21 +9,29 @@ import org.metadatacenter.model.RelationLabel;
 import org.metadatacenter.model.folderserver.basic.FolderServerCategory;
 import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.model.folderserver.basic.FolderServerUser;
+import org.metadatacenter.model.CedarResource;
+import org.metadatacenter.server.RevisionConflictException;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedCategoryPermissions;
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.cypher.parameter.AbstractCypherParamBuilder;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderCategory;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFilesystemResource;
-import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderCategory;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderCategoryPermission;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermission;
-import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroupPermissionPair;
-import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUserPermissionPair;
+import org.metadatacenter.server.security.model.permission.category.CategoryGroupPermission;
+import org.metadatacenter.server.security.model.permission.category.CategoryPermissions;
+import org.metadatacenter.server.security.model.permission.category.CategoryUserPermission;
+import org.metadatacenter.util.json.JsonMapper;
+import org.neo4j.driver.Record;
+import org.neo4j.driver.Result;
+import org.neo4j.driver.Transaction;
+import org.neo4j.driver.types.Node;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 public class Neo4JProxyCategoryPermission extends AbstractNeo4JProxy {
 
@@ -30,31 +39,99 @@ public class Neo4JProxyCategoryPermission extends AbstractNeo4JProxy {
     super(proxies, cedarConfig);
   }
 
-  boolean updatePermissionsAtomically(CedarCategoryId categoryId, CedarUserId newOwnerId,
-                                      Set<CategoryPermissionUserPermissionPair> removeUserPermissions,
-                                      Set<CategoryPermissionUserPermissionPair> addUserPermissions,
-                                      Set<CategoryPermissionGroupPermissionPair> removeGroupPermissions,
-                                      Set<CategoryPermissionGroupPermissionPair> addGroupPermissions) {
-    List<CypherQuery> changes = new ArrayList<>();
+  VersionedCategoryPermissions getVersionedPermissions(CedarCategoryId categoryId) {
+    CypherQueryWithParameters query = new CypherQueryWithParameters(
+        CypherQueryBuilderCategoryPermission.getVersionedPermissions(),
+        CypherParamBuilderCategory.matchCategory(categoryId));
+    return executeInReadTransaction(tx -> readVersionedPermissions(run(tx, query)),
+        "reading versioned category permissions");
+  }
 
-    if (newOwnerId != null) {
-      changes.add(removeOwnerQuery(categoryId));
-      changes.add(setOwnerQuery(categoryId, newOwnerId));
-    }
-    for (CategoryPermissionUserPermissionPair pair : removeUserPermissions) {
-      changes.add(removePermissionQuery(categoryId, pair.getUser().getResourceId(), pair.getPermission()));
-    }
-    for (CategoryPermissionUserPermissionPair pair : addUserPermissions) {
-      changes.add(addPermissionQuery(categoryId, pair.getUser().getResourceId(), pair.getPermission()));
-    }
-    for (CategoryPermissionGroupPermissionPair pair : removeGroupPermissions) {
-      changes.add(removePermissionQuery(categoryId, pair.getGroup().getResourceId(), pair.getPermission()));
-    }
-    for (CategoryPermissionGroupPermissionPair pair : addGroupPermissions) {
-      changes.add(addPermissionQuery(categoryId, pair.getGroup().getResourceId(), pair.getPermission()));
+  VersionedCategoryPermissions replacePermissions(CedarCategoryId categoryId, CategoryPermissions requested,
+                                                   RevisionPrecondition precondition) {
+    CedarUserId ownerId = requested.getOwner().getResourceId();
+    List<String> userIds = new ArrayList<>();
+    List<String> attachUserIds = new ArrayList<>();
+    List<String> writeUserIds = new ArrayList<>();
+    for (CategoryUserPermission permission : requested.getUserPermissions()) {
+      String id = permission.getUser().getId();
+      userIds.add(id);
+      if (permission.getPermission() == CategoryPermission.ATTACH) {
+        attachUserIds.add(id);
+      } else {
+        writeUserIds.add(id);
+      }
     }
 
-    return executeWriteBatch(changes, "updating category permissions");
+    List<String> groupIds = new ArrayList<>();
+    List<String> attachGroupIds = new ArrayList<>();
+    List<String> writeGroupIds = new ArrayList<>();
+    for (CategoryGroupPermission permission : requested.getGroupPermissions()) {
+      String id = permission.getGroup().getId();
+      groupIds.add(id);
+      if (permission.getPermission() == CategoryPermission.ATTACH) {
+        attachGroupIds.add(id);
+      } else {
+        writeGroupIds.add(id);
+      }
+    }
+
+    return executeInWriteTransaction(tx -> {
+      CypherQueryWithParameters lock = new CypherQueryWithParameters(
+          CypherQueryBuilderCategoryPermission.lockPermissions(),
+          CypherParamBuilderCategory.matchCategory(categoryId));
+      Result lockResult = run(tx, lock);
+      if (!lockResult.hasNext()) {
+        return null;
+      }
+      long currentRevision = lockResult.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+
+      CypherQueryWithParameters replace = new CypherQueryWithParameters(
+          CypherQueryBuilderCategoryPermission.replacePermissions(),
+          CypherParamBuilderCategory.replacePermissions(categoryId, ownerId, userIds, attachUserIds,
+              writeUserIds, groupIds, attachGroupIds, writeGroupIds, currentRevision));
+      return readVersionedPermissions(run(tx, replace));
+    }, "replacing versioned category permissions");
+  }
+
+  private Result run(Transaction tx, CypherQueryWithParameters query) {
+    return tx.run(query.getRunnableQuery(), query.getParameterMap());
+  }
+
+  private VersionedCategoryPermissions readVersionedPermissions(Result result) {
+    CategoryPermissions permissions = new CategoryPermissions();
+    long revision = -1;
+    while (result.hasNext()) {
+      Record record = result.next();
+      revision = record.get("revision").asLong();
+      if (permissions.getOwner() == null && !record.get("owner").isNull()) {
+        FolderServerUser owner = buildNode(record.get("owner").asNode(), FolderServerUser.class);
+        permissions.setOwner(owner.buildExtract());
+      }
+      if (!record.get("principal").isNull()) {
+        CategoryPermission permission = switch (record.get("permission").asString()) {
+          case "CANATTACHCATEGORY" -> CategoryPermission.ATTACH;
+          case "CANWRITECATEGORY" -> CategoryPermission.WRITE;
+          default -> throw new IllegalStateException("Unexpected category permission relation");
+        };
+        if ("user".equals(record.get("principalType").asString())) {
+          FolderServerUser user = buildNode(record.get("principal").asNode(), FolderServerUser.class);
+          permissions.addUserPermissions(new CategoryUserPermission(user.buildExtract(), permission));
+        } else {
+          FolderServerGroup group = buildNode(record.get("principal").asNode(), FolderServerGroup.class);
+          permissions.addGroupPermissions(new CategoryGroupPermission(group.buildExtract(), permission));
+        }
+      }
+    }
+    return revision < 0 ? null : new VersionedCategoryPermissions(permissions, revision);
+  }
+
+  private <T extends CedarResource> T buildNode(Node node, Class<T> clazz) {
+    JsonNode json = JsonMapper.MAPPER.valueToTree(node.asMap());
+    return buildClass(json, clazz);
   }
 
   void addCategoryPermissionToUser(CedarCategoryId categoryId, CedarUserId userId, CategoryPermission permission) {
@@ -113,16 +190,6 @@ public class Neo4JProxyCategoryPermission extends AbstractNeo4JProxy {
     return executeWrite(removePermissionQuery(categoryId, groupId, permission), "removing permission");
   }
 
-  private CypherQuery removeOwnerQuery(CedarCategoryId categoryId) {
-    return new CypherQueryWithParameters(CypherQueryBuilderCategory.removeCategoryOwner(),
-        CypherParamBuilderCategory.matchId(categoryId));
-  }
-
-  private CypherQuery setOwnerQuery(CedarCategoryId categoryId, CedarUserId userId) {
-    return new CypherQueryWithParameters(CypherQueryBuilderCategory.setCategoryOwner(),
-        CypherParamBuilderCategory.matchCategoryAndUser(categoryId, userId));
-  }
-
   private CypherQuery addPermissionQuery(CedarCategoryId categoryId, CedarUserId userId,
                                          CategoryPermission permission) {
     return new CypherQueryWithParameters(CypherQueryBuilderCategoryPermission.addPermissionToCategoryForUser(permission),
@@ -177,7 +244,7 @@ public class Neo4JProxyCategoryPermission extends AbstractNeo4JProxy {
   public List<FolderServerGroup> getGroupsWithDirectPermissionOnCategory(CedarCategoryId categoryId, CategoryPermission permission) {
     RelationLabel relationLabel = switch (permission) {
       case ATTACH -> RelationLabel.CANATTACHCATEGORY;
-      case WRITE -> RelationLabel.CANWRITE;
+      case WRITE -> RelationLabel.CANWRITECATEGORY;
     };
     String cypher = CypherQueryBuilderCategoryPermission.getGroupsWithDirectPermissionOnCategory(relationLabel);
     CypherParameters params = CypherParamBuilderFilesystemResource.matchId(categoryId);
