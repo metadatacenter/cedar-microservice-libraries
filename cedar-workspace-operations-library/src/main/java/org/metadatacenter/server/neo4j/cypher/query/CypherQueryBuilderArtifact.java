@@ -51,13 +51,15 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
   public static String moveArtifact() {
     return """
         MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ARTIFACT_ID>}})
-        SET artifact.<PROP.ID> = artifact.<PROP.ID>
-        WITH artifact
         MATCH (oldParent:<LABEL.FOLDER>)-[oldRelation:<REL.CONTAINS>]->(artifact)
         MATCH (newParent:<LABEL.FOLDER> {<PROP.ID>:{<PH.PARENT_FOLDER_ID>}})
         DELETE oldRelation
         MERGE (newParent)-[:<REL.CONTAINS>]->(artifact)
-        RETURN artifact
+        SET artifact._cedarRevision = coalesce(artifact._cedarRevision, 1) + 1
+        SET oldParent._cedarRevision = coalesce(oldParent._cedarRevision, 1) + 1
+        FOREACH (_ IN CASE WHEN oldParent = newParent THEN [] ELSE [1] END |
+          SET newParent._cedarRevision = coalesce(newParent._cedarRevision, 1) + 1)
+        RETURN artifact AS resource, artifact._cedarRevision AS revision
         """;
   }
 

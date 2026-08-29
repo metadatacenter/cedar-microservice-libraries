@@ -57,11 +57,28 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
   }
 
   boolean moveArtifact(CedarArtifactId sourceArtifactId, CedarFolderId targetFolderId) {
-    String cypher = CypherQueryBuilderArtifact.moveArtifact();
-    CypherParameters params = CypherParamBuilderArtifact.matchArtifactIdAndParentFolderId(
-        sourceArtifactId, targetFolderId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWriteGetOne(q, FolderServerArtifact.class) != null;
+    return moveArtifact(sourceArtifactId, targetFolderId, RevisionPrecondition.any()) != null;
+  }
+
+  VersionedResource<FolderServerArtifact> moveArtifact(CedarArtifactId sourceArtifactId,
+                                                        CedarFolderId targetFolderId,
+                                                        RevisionPrecondition precondition) {
+    return executeInWriteTransaction(tx -> {
+      Result locked = run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderArtifact.lockArtifactRevision(),
+          CypherParamBuilderArtifact.matchId(sourceArtifactId)));
+      if (!locked.hasNext()) {
+        return null;
+      }
+      long currentRevision = locked.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      CypherParameters params = CypherParamBuilderArtifact.matchArtifactIdAndParentFolderId(
+          sourceArtifactId, targetFolderId);
+      return readVersionedResource(run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderArtifact.moveArtifact(), params)), FolderServerArtifact.class);
+    }, "moving a versioned artifact");
   }
 
   private boolean setOwner(CedarArtifactId artifactId, CedarUserId newOwnerId) {

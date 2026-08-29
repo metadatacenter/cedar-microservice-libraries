@@ -250,8 +250,22 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public VersionedResource<FolderServerArtifact> moveResource(CedarArtifactId sourceArtifactId,
+                                                               CedarFolderId targetFolderId,
+                                                               RevisionPrecondition precondition) {
+    return proxies.artifact().moveArtifact(sourceArtifactId, targetFolderId, precondition);
+  }
+
+  @Override
   public boolean moveFolder(CedarFolderId sourceFolderId, CedarFolderId targetFolderId) {
     return proxies.folder().moveFolder(sourceFolderId, targetFolderId);
+  }
+
+  @Override
+  public VersionedResource<FolderServerFolder> moveFolder(CedarFolderId sourceFolderId,
+                                                           CedarFolderId targetFolderId,
+                                                           RevisionPrecondition precondition) {
+    return proxies.folder().moveFolder(sourceFolderId, targetFolderId, precondition);
   }
 
   @Override

@@ -35,14 +35,30 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
   }
 
   boolean moveFolder(CedarFolderId sourceFolderId, CedarFolderId targetFolderId) {
+    return moveFolder(sourceFolderId, targetFolderId, RevisionPrecondition.any()) != null;
+  }
+
+  VersionedResource<FolderServerFolder> moveFolder(CedarFolderId sourceFolderId,
+                                                    CedarFolderId targetFolderId,
+                                                    RevisionPrecondition precondition) {
     if (sourceFolderId.getId().equals(targetFolderId.getId())) {
-      return false;
+      return null;
     }
-    String cypher = CypherQueryBuilderFolder.moveFolder();
-    CypherParameters params = CypherParamBuilderFolder.matchFolderIdAndParentFolderId(
-        sourceFolderId, targetFolderId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWriteGetOne(q, FolderServerFolder.class) != null;
+    return executeInWriteTransaction(tx -> {
+      Result locked = run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderFolder.lockFolderRevision(), CypherParamBuilderFolder.matchId(sourceFolderId)));
+      if (!locked.hasNext()) {
+        return null;
+      }
+      long currentRevision = locked.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      CypherParameters params = CypherParamBuilderFolder.matchFolderIdAndParentFolderId(
+          sourceFolderId, targetFolderId);
+      return readVersionedFolder(run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderFolder.moveFolder(), params)));
+    }, "moving a versioned folder");
   }
 
   FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields,

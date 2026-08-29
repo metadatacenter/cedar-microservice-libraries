@@ -33,8 +33,11 @@ class CypherGraphResourceRevisionSemanticsTest {
 
   @Test
   void movingAFolderChangesItsRepresentationRevision() {
-    assertTrue(CypherQueryBuilderFolder.moveFolder()
-        .contains("folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1"));
+    String query = CypherQueryBuilderFolder.moveFolder();
+    assertTrue(query.contains("folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1"));
+    assertTrue(query.contains("oldParent._cedarRevision = coalesce(oldParent._cedarRevision, 1) + 1"));
+    assertTrue(query.contains("newParent._cedarRevision = coalesce(newParent._cedarRevision, 1) + 1"));
+    assertTrue(query.contains("RETURN folder AS resource, folder._cedarRevision AS revision"));
   }
 
   @Test

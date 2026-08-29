@@ -88,7 +88,15 @@ public interface FolderServiceSession {
 
   boolean moveResource(CedarArtifactId sourceArtifactId, CedarFolderId targetFolderId);
 
+  VersionedResource<FolderServerArtifact> moveResource(CedarArtifactId sourceArtifactId,
+                                                        CedarFolderId targetFolderId,
+                                                        RevisionPrecondition precondition);
+
   boolean moveFolder(CedarFolderId sourceFolderId, CedarFolderId targetFolderId);
+
+  VersionedResource<FolderServerFolder> moveFolder(CedarFolderId sourceFolderId,
+                                                    CedarFolderId targetFolderId,
+                                                    RevisionPrecondition precondition);
 
   FolderServerFolder ensureUserHomeExists();
 

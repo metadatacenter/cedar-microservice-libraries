@@ -124,7 +124,10 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         MERGE (newParent)-[:<REL.CONTAINS>]->(folder)
         SET folder.<PROP.PARENT_FOLDER_ID> = {<PH.PARENT_FOLDER_ID>}
         SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1
-        RETURN folder
+        SET oldParent._cedarRevision = coalesce(oldParent._cedarRevision, 1) + 1
+        FOREACH (_ IN CASE WHEN oldParent = newParent THEN [] ELSE [1] END |
+          SET newParent._cedarRevision = coalesce(newParent._cedarRevision, 1) + 1)
+        RETURN folder AS resource, folder._cedarRevision AS revision
         """;
   }
 

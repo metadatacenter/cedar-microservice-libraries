@@ -18,6 +18,9 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
+import org.metadatacenter.server.RevisionConflictException;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUser;
@@ -200,6 +203,32 @@ public class WorkspaceFolderMoveIntegrationTest {
         newParent.getResourceId(), artifact.getName());
     Assertions.assertNotNull(moved);
     Assertions.assertEquals(artifact.getId(), moved.getId());
+  }
+
+  @Test
+  public void conditionalArtifactMoveChecksAndAdvancesAllAffectedRevisions() {
+    FolderServiceSession folders = foldersOf(user1Context);
+    FolderServerFolder oldParent = createFolderUnder(user1HomeId, "Conditional Artifact Old Parent");
+    FolderServerFolder newParent = createFolderUnder(user1HomeId, "Conditional Artifact New Parent");
+    FolderServerArtifact artifact = createTemplateUnder(oldParent.getResourceId(), "Conditional Artifact");
+    CedarArtifactId artifactId = CedarArtifactId.build(artifact.getId(), artifact.getType());
+
+    VersionedResource<FolderServerArtifact> before = folders.findVersionedArtifactById(artifactId);
+    long oldParentBefore = folders.findVersionedFolderById(oldParent.getResourceId()).revision();
+    long newParentBefore = folders.findVersionedFolderById(newParent.getResourceId()).revision();
+    Assertions.assertThrows(RevisionConflictException.class, () -> folders.moveResource(
+        artifactId, newParent.getResourceId(), RevisionPrecondition.exact(before.revision() + 1)));
+
+    VersionedResource<FolderServerArtifact> moved = folders.moveResource(
+        artifactId, newParent.getResourceId(), RevisionPrecondition.exact(before.revision()));
+    Assertions.assertNotNull(moved);
+    Assertions.assertEquals(before.revision() + 1, moved.revision());
+    Assertions.assertEquals(oldParentBefore + 1,
+        folders.findVersionedFolderById(oldParent.getResourceId()).revision());
+    Assertions.assertEquals(newParentBefore + 1,
+        folders.findVersionedFolderById(newParent.getResourceId()).revision());
+    Assertions.assertThrows(RevisionConflictException.class, () -> folders.moveResource(
+        artifactId, oldParent.getResourceId(), RevisionPrecondition.exact(before.revision())));
   }
 
   @Test

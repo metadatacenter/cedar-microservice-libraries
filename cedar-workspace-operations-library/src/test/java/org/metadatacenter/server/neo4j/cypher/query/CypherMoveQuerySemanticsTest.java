@@ -23,10 +23,13 @@ class CypherMoveQuerySemanticsTest {
   void artifactMoveLocksTheArtifactAndChangesBothEdgesInOneStatement() {
     String query = CypherQueryBuilderArtifact.moveArtifact();
 
-    assertTrue(query.contains("SET artifact.<PROP.ID> = artifact.<PROP.ID>"), query);
     assertTrue(query.contains("MATCH (newParent:<LABEL.FOLDER>"), query);
     assertTrue(query.contains("DELETE oldRelation"), query);
     assertTrue(query.contains("MERGE (newParent)-[:<REL.CONTAINS>]->(artifact)"), query);
+    assertTrue(query.contains("artifact._cedarRevision = coalesce(artifact._cedarRevision, 1) + 1"), query);
+    assertTrue(query.contains("oldParent._cedarRevision = coalesce(oldParent._cedarRevision, 1) + 1"), query);
+    assertTrue(query.contains("newParent._cedarRevision = coalesce(newParent._cedarRevision, 1) + 1"), query);
+    assertTrue(query.contains("RETURN artifact AS resource, artifact._cedarRevision AS revision"), query);
   }
 
   @Test
