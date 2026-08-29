@@ -316,6 +316,29 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
   }
 
   @Test
+  public void batchCategoryAttachmentAttachesAllAndIsAtomicWhenOneCategoryDoesNotExist() {
+    FolderServerCategory first = createCategoryAsUser1(rootCategoryId, "Atomic Batch Category One");
+    FolderServerCategory second = createCategoryAsUser1(rootCategoryId, "Atomic Batch Category Two");
+    FolderServerArtifact successfulTemplate = createTemplateUnderUser1Home(
+        newTemplate("Successful Atomic Batch Template", "0.0.1"));
+    CedarTemplateId successfulTemplateId = CedarTemplateId.build(successfulTemplate.getId());
+    CedarCategoryId missing = CedarCategoryId.build("https://repo.example/categories/missing-atomic-batch-category");
+
+    CategoryServiceSession categories = categoriesOf(user1Context);
+    Assertions.assertTrue(categories.attachCategoriesToArtifact(
+        List.of(first.getResourceId(), second.getResourceId()), successfulTemplateId));
+    Assertions.assertEquals(2, categories.getAttachedCategoryIds(successfulTemplateId).size());
+
+    FolderServerArtifact failedTemplate = createTemplateUnderUser1Home(
+        newTemplate("Failed Atomic Batch Template", "0.0.1"));
+    CedarTemplateId failedTemplateId = CedarTemplateId.build(failedTemplate.getId());
+    Assertions.assertFalse(categories.attachCategoriesToArtifact(
+        List.of(first.getResourceId(), missing), failedTemplateId));
+    Assertions.assertTrue(categories.getAttachedCategoryIds(failedTemplateId).isEmpty(),
+        "a missing category must roll back the entire attachment batch");
+  }
+
+  @Test
   public void templateVersionChainIsNavigable() {
     FolderServiceSession user1Folders = foldersOf(user1Context);
 

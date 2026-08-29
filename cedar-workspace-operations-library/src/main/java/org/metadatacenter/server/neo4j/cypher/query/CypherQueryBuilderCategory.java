@@ -130,6 +130,18 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
         " RETURN category";
   }
 
+  public static String attachCategoriesToArtifact() {
+    return " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ARTIFACT_ID>}})"
+        + " WITH artifact, {<PH.CATEGORY_ID_LIST>} AS requestedCategoryIds"
+        + " MATCH (category:<LABEL.CATEGORY>)"
+        + " WHERE category.<PROP.ID> IN requestedCategoryIds"
+        + " WITH artifact, requestedCategoryIds, collect(category) AS categories"
+        + " WHERE size(categories) = size(requestedCategoryIds)"
+        + " UNWIND categories AS category"
+        + " MERGE (category)-[:<REL.CONTAINSARTIFACT>]->(artifact)"
+        + " RETURN count(category) AS attachedCount";
+  }
+
   public static String detachCategoryFromArtifact() {
     return "" +
         " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ARTIFACT_ID>} })" +

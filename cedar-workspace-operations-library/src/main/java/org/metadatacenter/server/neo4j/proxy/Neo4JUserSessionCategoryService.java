@@ -163,6 +163,11 @@ public class Neo4JUserSessionCategoryService extends AbstractNeo4JUserSession im
   }
 
   @Override
+  public boolean attachCategoriesToArtifact(List<CedarCategoryId> categoryIds, CedarArtifactId artifactId) {
+    return proxies.category().attachCategoriesToArtifact(categoryIds, artifactId);
+  }
+
+  @Override
   public boolean detachCategoryFromArtifact(CedarCategoryId categoryId, CedarArtifactId artifactId) {
     return proxies.category().detachCategoryFromArtifact(categoryId, artifactId);
   }

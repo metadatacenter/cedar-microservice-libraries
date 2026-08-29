@@ -105,6 +105,13 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
     return params;
   }
 
+  public static CypherParameters categoryIdsAndArtifactId(List<String> categoryIds, CedarArtifactId artifactId) {
+    CypherParameters params = new CypherParameters();
+    params.put(ParameterPlaceholder.CATEGORY_ID_LIST, categoryIds);
+    params.put(ParameterPlaceholder.ARTIFACT_ID, artifactId);
+    return params;
+  }
+
   public static CypherParameters updateCategoryById(CedarCategoryId categoryId, Map<NodeProperty, String> updateFields, CedarUserId updatedBy) {
     return updateResourceById(categoryId, updateFields, updatedBy);
   }

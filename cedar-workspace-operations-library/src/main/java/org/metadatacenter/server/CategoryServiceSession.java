@@ -49,6 +49,8 @@ public interface CategoryServiceSession {
 
   boolean attachCategoryToArtifact(CedarCategoryId categoryId, CedarArtifactId artifactId);
 
+  boolean attachCategoriesToArtifact(List<CedarCategoryId> categoryIds, CedarArtifactId artifactId);
+
   boolean detachCategoryFromArtifact(CedarCategoryId categoryId, CedarArtifactId artifactId);
 
   CedarNodeMaterializedCategories getArtifactMaterializedCategories(CedarArtifactId artifactId);

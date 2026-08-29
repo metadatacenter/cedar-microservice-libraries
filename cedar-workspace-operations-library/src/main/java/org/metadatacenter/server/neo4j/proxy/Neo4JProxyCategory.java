@@ -178,6 +178,26 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
     return category != null;
   }
 
+  public boolean attachCategoriesToArtifact(List<CedarCategoryId> categoryIds, CedarArtifactId artifactId) {
+    List<String> distinctCategoryIds = categoryIds.stream()
+        .map(CedarCategoryId::getId)
+        .distinct()
+        .toList();
+    if (distinctCategoryIds.isEmpty()) {
+      return false;
+    }
+    String cypher = CypherQueryBuilderCategory.attachCategoriesToArtifact();
+    CypherParameters params = CypherParamBuilderCategory.categoryIdsAndArtifactId(distinctCategoryIds, artifactId);
+    CypherQueryWithParameters query = new CypherQueryWithParameters(cypher, params);
+    return executeInWriteTransaction(tx -> {
+      Result result = run(tx, query);
+      if (!result.hasNext()) {
+        return false;
+      }
+      return result.next().get("attachedCount").asLong() == distinctCategoryIds.size();
+    }, "attaching categories to artifact");
+  }
+
   public boolean detachCategoryFromArtifact(CedarCategoryId categoryId, CedarArtifactId artifactId) {
     String cypher = CypherQueryBuilderCategory.detachCategoryFromArtifact();
     CypherParameters params = CypherParamBuilderCategory.categoryIdAndArtifactId(categoryId, artifactId);

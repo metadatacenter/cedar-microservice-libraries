@@ -45,6 +45,7 @@ public enum ParameterPlaceholder implements CypherQueryParameter {
   IS_BASED_ON("isBasedOn"),
   EVERYBODY_PERMISSION("everybodyPermission"),
   CATEGORY_ID("categoryId"),
+  CATEGORY_ID_LIST("categoryIdList"),
   SPECIAL_GROUP("specialGroup"),
   NAME("name"),
   PREVIOUS_VERSION("previousVersion"),
