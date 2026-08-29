@@ -16,6 +16,7 @@ class CypherMoveQuerySemanticsTest {
     assertTrue(query.contains("MATCH (folder)-[:<REL.CONTAINS>*0..]->(newParent)"), query);
     assertTrue(query.contains("DELETE oldRelation"), query);
     assertTrue(query.contains("MERGE (newParent)-[:<REL.CONTAINS>]->(folder)"), query);
+    assertTrue(query.contains("SET folder.<PROP.PARENT_FOLDER_ID> = {<PH.PARENT_FOLDER_ID>}"), query);
   }
 
   @Test

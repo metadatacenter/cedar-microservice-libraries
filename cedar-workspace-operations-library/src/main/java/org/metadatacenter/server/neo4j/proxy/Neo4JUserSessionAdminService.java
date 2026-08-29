@@ -21,6 +21,8 @@ import org.metadatacenter.server.security.model.user.CedarUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+
 public class Neo4JUserSessionAdminService extends AbstractNeo4JUserSession implements AdminServiceSession {
 
   protected static final Logger log = LoggerFactory.getLogger(Neo4JUserSessionAdminService.class);
@@ -194,6 +196,16 @@ public class Neo4JUserSessionAdminService extends AbstractNeo4JUserSession imple
   @Override
   public boolean createUniqueConstraint(NodeLabel nodeLabel, NodeProperty property) {
     return proxies.admin().createUniqueConstraint(nodeLabel, property);
+  }
+
+  @Override
+  public boolean createUniqueConstraint(NodeLabel nodeLabel, List<NodeProperty> properties) {
+    return proxies.admin().createUniqueConstraint(nodeLabel, properties);
+  }
+
+  @Override
+  public boolean backfillFolderParentIds() {
+    return proxies.admin().backfillFolderParentIds();
   }
 
   @Override

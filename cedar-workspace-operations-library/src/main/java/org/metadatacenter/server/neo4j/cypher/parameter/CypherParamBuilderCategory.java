@@ -46,7 +46,7 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
 
   public static CypherParameters getCategoryByParentAndName(CedarCategoryId parentId, String name) {
     CypherParameters params = new CypherParameters();
-    params.put(ParameterPlaceholder.NAME, name);
+    params.put(ParameterPlaceholder.NAME, name == null ? null : name.toLowerCase());
     params.put(ParameterPlaceholder.PARENT_CATEGORY_ID, parentId);
     return params;
   }

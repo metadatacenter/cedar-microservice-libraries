@@ -32,7 +32,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
   public static CypherParameters getResourceByParentIdAndName(CedarFolderId parentId, String name) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.ID, parentId);
-    params.put(ParameterPlaceholder.NAME, name);
+    params.put(ParameterPlaceholder.NAME, name == null ? null : name.toLowerCase());
     return params;
   }
 

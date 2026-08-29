@@ -87,6 +87,7 @@ public abstract class AbstractCypherQueryBuilder {
     sb.append(buildCreateAssignment(NodeProperty.IS_OPEN)).append(",");
 
     if (newNode instanceof FolderServerFolder newFolder) {
+      sb.append(buildCreateAssignment(NodeProperty.PARENT_FOLDER_ID)).append(",");
       if (newFolder.isRoot()) {
         sb.append(buildCreateAssignment(NodeProperty.IS_ROOT)).append(",");
       }

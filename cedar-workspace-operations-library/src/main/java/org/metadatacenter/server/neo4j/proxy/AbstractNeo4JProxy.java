@@ -15,6 +15,7 @@ import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.model.folderserver.result.ResultTuple;
 import org.metadatacenter.server.logging.AppLogger;
+import org.metadatacenter.server.SiblingNameConflictException;
 import org.metadatacenter.server.logging.filter.LoggingContext;
 import org.metadatacenter.server.logging.filter.ThreadLocalRequestIdHolder;
 import org.metadatacenter.server.logging.model.AppLogMessage;
@@ -24,6 +25,7 @@ import org.metadatacenter.server.logging.model.AppLogType;
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryLiteral;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
+import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.log.CypherQueryLog;
 import org.metadatacenter.server.neo4j.util.Neo4JUtil;
 import org.metadatacenter.util.json.JsonMapper;
@@ -98,7 +100,21 @@ public abstract class AbstractNeo4JProxy {
       log.error(((CypherQueryWithParameters) q).getParameterMap().toString());
     }
     log.error(q.getRunnableQuery());
+    if (isSiblingNameConstraintViolation(ex)) {
+      throw new SiblingNameConflictException(ex);
+    }
     throw new RuntimeException("Error executing Cypher query:" + ex.getMessage());
+  }
+
+  private boolean isSiblingNameConstraintViolation(ClientException ex) {
+    String code = ex.code();
+    String message = ex.getMessage();
+    boolean constraintViolation = code != null && (code.endsWith("ConstraintValidationFailed")
+        || code.endsWith("ConstraintViolation"));
+    return constraintViolation && message != null
+        && message.contains(Neo4JUtil.escapePropertyName(NodeProperty.NAME_LOWER.getValue()))
+        && (message.contains(Neo4JUtil.escapePropertyName(NodeProperty.PARENT_FOLDER_ID.getValue()))
+            || message.contains(Neo4JUtil.escapePropertyName(NodeProperty.PARENT_CATEGORY_ID.getValue())));
   }
 
   protected boolean executeWrite(CypherQuery q, String eventDescription) {

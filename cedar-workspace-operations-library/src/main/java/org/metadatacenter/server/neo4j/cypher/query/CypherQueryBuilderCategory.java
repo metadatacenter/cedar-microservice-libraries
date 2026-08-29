@@ -78,7 +78,7 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
 
   public static String getCategoryByParentAndName() {
     return "" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.NAME>:{<PH.NAME>}, <PROP.PARENT_CATEGORY_ID>:{<PH.PARENT_CATEGORY_ID>}})" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.NAME_LOWER>:{<PH.NAME>}, <PROP.PARENT_CATEGORY_ID>:{<PH.PARENT_CATEGORY_ID>}})" +
         " RETURN category";
   }
 

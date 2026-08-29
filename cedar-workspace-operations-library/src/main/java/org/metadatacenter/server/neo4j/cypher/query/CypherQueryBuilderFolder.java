@@ -100,6 +100,7 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PH.PARENT_FOLDER_ID>}})" +
         " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.FOLDER_ID>}})" +
         " MERGE (parent)-[:<REL.CONTAINS>]->(folder)" +
+        " SET folder.<PROP.PARENT_FOLDER_ID> = {<PH.PARENT_FOLDER_ID>}" +
         " RETURN folder";
   }
 
@@ -121,6 +122,7 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         }
         DELETE oldRelation
         MERGE (newParent)-[:<REL.CONTAINS>]->(folder)
+        SET folder.<PROP.PARENT_FOLDER_ID> = {<PH.PARENT_FOLDER_ID>}
         SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1
         RETURN folder
         """;
