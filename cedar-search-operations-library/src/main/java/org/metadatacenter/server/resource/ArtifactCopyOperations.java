@@ -106,6 +106,15 @@ public final class ArtifactCopyOperations {
     }
   }
 
+  /** Returns false only when an applicable event could not be persisted to the Redis queue. */
+  public static boolean enqueueValuerecommenderUpdateWithResult(
+      ValuerecommenderReindexQueueService queueService,
+      FolderServerArtifact artifact,
+      ValuerecommenderReindexMessageActionType actionType) {
+    ValuerecommenderReindexMessage event = buildValuerecommenderEvent(artifact, actionType);
+    return event == null || queueService.enqueueEventWithResult(event);
+  }
+
   private static ValuerecommenderReindexMessage buildValuerecommenderEvent(
       FolderServerArtifact artifact, ValuerecommenderReindexMessageActionType actionType) {
     if (artifact.getType() == CedarResourceType.TEMPLATE) {

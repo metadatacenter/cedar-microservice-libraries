@@ -20,17 +20,27 @@ public class ValuerecommenderReindexQueueService extends QueueServiceWithNonBloc
   public void enqueueEvent(ValuerecommenderReindexMessage message) {
     // Enqueueing is best-effort: a failure is logged and the event dropped, so an
     // unreachable queue (Redis) can not fail the request that produced the event
+    enqueueEventWithResult(message);
+  }
+
+  /**
+   * Enqueues an event and reports whether Redis accepted it. Durable callers retain their own work
+   * item when this returns false; ordinary write paths can continue to use the best-effort wrapper.
+   */
+  public boolean enqueueEventWithResult(ValuerecommenderReindexMessage message) {
     String json;
     try {
       json = JsonMapper.MAPPER.writeValueAsString(message);
     } catch (JsonProcessingException e) {
       log.error("The valuerecommender message could not be serialized. Dropping it.", e);
-      return;
+      return false;
     }
     try (Jedis jedis = pool.getResource()) {
       jedis.rpush(queueName, json);
+      return true;
     } catch (Exception e) {
       reportDroppedEvent(log, "valuerecommender message", e);
+      return false;
     }
   }
 
