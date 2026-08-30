@@ -120,7 +120,7 @@ public abstract class AbstractNeo4JProxy {
     if (isSiblingNameConstraintViolation(ex)) {
       throw new SiblingNameConflictException(ex);
     }
-    throw new RuntimeException("Error executing Cypher query:" + ex.getMessage());
+    throw new RuntimeException("Error executing Cypher query:" + ex.getMessage(), ex);
   }
 
   private boolean isSiblingNameConstraintViolation(ClientException ex) {
