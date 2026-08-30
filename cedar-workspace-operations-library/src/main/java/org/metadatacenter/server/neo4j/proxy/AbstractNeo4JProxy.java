@@ -40,6 +40,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
@@ -111,12 +112,11 @@ public abstract class AbstractNeo4JProxy {
   }
 
   private void reportQueryError(ClientException ex, CypherQuery q) {
-    log.error("Error executing Cypher query:", ex);
-    log.error(q.getOriginalQuery());
+    List<String> parameterNames = List.of();
     if (q instanceof CypherQueryWithParameters) {
-      log.error(((CypherQueryWithParameters) q).getParameterMap().toString());
+      parameterNames = ((CypherQueryWithParameters) q).getParameterMap().keySet().stream().sorted().toList();
     }
-    log.error(q.getRunnableQuery());
+    log.error("Error executing Cypher query; parameter names={}", parameterNames, ex);
     if (isSiblingNameConstraintViolation(ex)) {
       throw new SiblingNameConflictException(ex);
     }
@@ -306,8 +306,8 @@ public abstract class AbstractNeo4JProxy {
         AppLogger.message(AppLogType.CYPHER_QUERY, AppLogSubType.FULL, globalRequestId, localRequestId)
             .param(AppLogParam.ORIGINAL_QUERY, log.getOriginalQuery())
             .param(AppLogParam.RUNNABLE_QUERY, log.getRunnableQuery())
-            .param(AppLogParam.INTERPOLATED_QUERY, log.getInterpolatedParamsQuery())
-            .param(AppLogParam.QUERY_PARAMETERS, log.getParameterMap())
+            .param(AppLogParam.INTERPOLATED_QUERY, log.getRunnableQuery())
+            .param(AppLogParam.QUERY_PARAMETERS, redactedParameterMap(log.getParameterMap()))
             .param(AppLogParam.RUNNABLE_QUERY_HASH, DigestUtils.md5Hex(log.getRunnableQuery()))
             .param(AppLogParam.QUERY_PARAMETERS_HASH, DigestUtils.md5Hex(paramMapString))
             .param(AppLogParam.OPERATION, log.getOperation());
@@ -327,6 +327,15 @@ public abstract class AbstractNeo4JProxy {
       }
     }
     appLog.enqueue();
+  }
+
+  static Map<String, Object> redactedParameterMap(Map<String, Object> parameterMap) {
+    if (parameterMap == null) {
+      return null;
+    }
+    Map<String, Object> redacted = new LinkedHashMap<>();
+    parameterMap.keySet().stream().sorted().forEach(name -> redacted.put(name, "<redacted>"));
+    return redacted;
   }
 
   protected <T extends CedarResource> T executeWriteGetOne(CypherQuery q, Class<T> type) {

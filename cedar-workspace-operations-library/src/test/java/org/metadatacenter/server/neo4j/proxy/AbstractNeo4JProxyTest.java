@@ -5,6 +5,8 @@ import org.neo4j.driver.Record;
 import org.neo4j.driver.Result;
 import org.neo4j.driver.Value;
 
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -59,5 +61,14 @@ class AbstractNeo4JProxyTest {
     when(revision.asLong()).thenReturn(7L);
 
     assertEquals(7L, AbstractNeo4JProxy.readLockedRevision(result).orElseThrow());
+  }
+
+  @Test
+  void queryLogParametersRetainNamesButNotValues() {
+    Map<String, Object> redacted = AbstractNeo4JProxy.redactedParameterMap(Map.of(
+        "email", "person@example.org",
+        "title", "Sensitive study title"));
+
+    assertEquals(Map.of("email", "<redacted>", "title", "<redacted>"), redacted);
   }
 }
