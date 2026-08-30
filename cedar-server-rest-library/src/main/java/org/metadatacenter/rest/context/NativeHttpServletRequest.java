@@ -9,6 +9,7 @@ import org.metadatacenter.util.json.JsonMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.InputStreamReader;
 import java.io.PushbackInputStream;
+import java.nio.charset.StandardCharsets;
 
 import static org.metadatacenter.constant.HttpConstants.HTTP_HEADER_CONTENT_TYPE;
 
@@ -35,7 +36,8 @@ public class NativeHttpServletRequest extends CedarRequestNoun {
           return new HttpRequestEmptyBody();
         }
         pushbackInputStream.unread(b);
-        jsonBodyNode = JsonMapper.MAPPER.readTree(new InputStreamReader(pushbackInputStream));
+        jsonBodyNode = JsonMapper.MAPPER.readTree(
+            new InputStreamReader(pushbackInputStream, StandardCharsets.UTF_8));
       } catch (Exception e) {
         throw new CedarBadRequestException("There was an error deserializing the request body", e);
       }
