@@ -58,6 +58,14 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   private static final List<String> HTTP_METHODS;
   static final List<String> HTTP_EXPOSED_HEADERS;
 
+  /**
+   * The generated OpenAPI document on the classpath, where a service ships one, and the path it is
+   * served at. Four of the services build a spec into their jar; the rest have none, and for them
+   * there is nothing to serve and nothing to advertise.
+   */
+  static final String API_SPEC_ASSET = "/assets/swagger-api/swagger.json";
+  static final String API_SPEC_PATH = "/swagger-api/swagger.json";
+
   protected static CedarConfig cedarConfig;
   protected static UserService userService;
   protected static AppLoggerQueueService appLoggerQueueService;
@@ -97,7 +105,11 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
         new SubstitutingSourceProvider(bootstrap.getConfigurationSourceProvider(), new EnvironmentVariableSubstitutor())
     );
 
-    bootstrap.addBundle(new AssetsBundle("/assets/swagger-api/swagger.json", "/swagger-api/swagger.json"));
+    // Only where there is a spec to serve. Registered unconditionally, the bundle answered 404 on
+    // the ten services that ship no document, while the index resource advertised the link anyway.
+    if (shipsApiSpec()) {
+      bootstrap.addBundle(new AssetsBundle(API_SPEC_ASSET, API_SPEC_PATH));
+    }
 
     log.info("********** Initializing CEDAR Config for " + getName());
     // Initialize map with environment vars that this server expects
@@ -107,6 +119,22 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     cedarConfig = CedarConfig.getInstance(environmentSandbox);
 
     initializeWithBootstrap(bootstrap, cedarConfig);
+  }
+
+  /**
+   * Whether this service ships an API spec.
+   *
+   * <p>Read from the classpath rather than from configuration: the document is built into the jar,
+   * so its presence is the fact, and a flag beside it could only ever disagree with it. An earlier
+   * {@code apiDoc} setting did exactly that — it was set on three services, missed a fourth that had
+   * a spec, and was read by nothing.
+   */
+  static boolean shipsApiSpec() {
+    return shipsApiSpec(API_SPEC_ASSET);
+  }
+
+  static boolean shipsApiSpec(String classpathLocation) {
+    return CedarMicroserviceApplication.class.getResource(classpathLocation) != null;
   }
 
   @Override

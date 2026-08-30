@@ -1,0 +1,6 @@
+{
+  "_comment": "A stand-in for a service's generated OpenAPI document, at the classpath location the asset bundle and the index resource both gate on. Test scope only: the library itself ships no spec, so without this the presence branch could not be exercised against the real constant.",
+  "openapi": "3.0.1",
+  "info": {"title": "Fixture", "version": "0"},
+  "paths": {}
+}
