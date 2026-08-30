@@ -49,14 +49,15 @@ import java.util.function.Function;
 
 public abstract class AbstractNeo4JProxy {
 
-  // The shared outage override deliberately makes pool acquisition and retries fail quickly. A
-  // healthy embedded Bolt server can still need more than one second for its first handshake on a
-  // constrained CI runner, so connection establishment needs independent headroom.
-  static final long MIN_TEST_CONNECTION_TIMEOUT_MILLIS = 5_000;
-
   protected final Neo4JProxies proxies;
   protected final CedarConfig cedarConfig;
 
+  /**
+   * The driver the proxy set owns, shared by every proxy in it. A Neo4j driver is a connection pool
+   * and its Netty event loops, and is designed to be held once per database and used from every
+   * thread; one per proxy meant twelve pools per service, each warming its own connections while
+   * none benefited from another's.
+   */
   protected final Driver driver;
 
   protected static final Logger log = LoggerFactory.getLogger(AbstractNeo4JProxy.class);
@@ -64,18 +65,7 @@ public abstract class AbstractNeo4JProxy {
   protected AbstractNeo4JProxy(Neo4JProxies proxies, CedarConfig cedarConfig) {
     this.proxies = proxies;
     this.cedarConfig = cedarConfig;
-    Config.ConfigBuilder driverConfig = Config.builder();
-    CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> driverConfig
-        .withConnectionTimeout(testConnectionTimeoutMillis(timeout), TimeUnit.MILLISECONDS)
-        .withConnectionAcquisitionTimeout(timeout, TimeUnit.MILLISECONDS)
-        .withMaxTransactionRetryTime(timeout, TimeUnit.MILLISECONDS));
-    driver = GraphDatabase.driver(proxies.config.getUri(),
-        AuthTokens.basic(proxies.config.getUserName(), proxies.config.getUserPassword()),
-        driverConfig.build());
-  }
-
-  static long testConnectionTimeoutMillis(long dependencyTimeoutMillis) {
-    return Math.max(dependencyTimeoutMillis, MIN_TEST_CONNECTION_TIMEOUT_MILLIS);
+    this.driver = proxies.driver;
   }
 
   /**
@@ -92,23 +82,6 @@ public abstract class AbstractNeo4JProxy {
     }
     Value revision = result.next().get("revision");
     return revision.isNull() ? OptionalLong.empty() : OptionalLong.of(revision.asLong());
-  }
-
-  /**
-   * Closes this proxy's Neo4j driver, releasing its connection pool and Netty event-loop threads.
-   * Each proxy opens its own driver, so a discarded proxy set holds a dozen of these; see
-   * {@link Neo4JProxies#close()} for why they must be reclaimed rather than left to garbage collection.
-   */
-  public void close() {
-    try {
-      driver.close();
-    } catch (RuntimeException e) {
-      log.warn("Error closing the Neo4j driver", e);
-    }
-  }
-
-  public void verifyConnectivity() {
-    driver.verifyConnectivity();
   }
 
   private void reportQueryError(ClientException ex, CypherQuery q) {

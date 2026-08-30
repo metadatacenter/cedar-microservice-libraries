@@ -1,16 +1,39 @@
 package org.metadatacenter.server.neo4j.proxy;
 
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.config.CedarTestRuntime;
 import org.metadatacenter.server.jsonld.LinkedDataUtil;
 import org.metadatacenter.server.neo4j.Neo4jConfig;
 import org.metadatacenter.server.neo4j.PathUtil;
+import org.neo4j.driver.AuthTokens;
+import org.neo4j.driver.Config;
+import org.neo4j.driver.Driver;
+import org.neo4j.driver.GraphDatabase;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.TimeUnit;
 
 public class Neo4JProxies {
+
+  private static final Logger log = LoggerFactory.getLogger(Neo4JProxies.class);
+
+  // The shared outage override deliberately makes pool acquisition and retries fail quickly. A
+  // healthy embedded Bolt server can still need more than one second for its first handshake on a
+  // constrained CI runner, so connection establishment needs independent headroom.
+  static final long MIN_TEST_CONNECTION_TIMEOUT_MILLIS = 5_000;
 
   protected final CedarConfig cedarConfig;
   protected final Neo4jConfig config;
   protected final PathUtil pathUtil;
   protected final LinkedDataUtil linkedDataUtil;
+
+  /**
+   * The one driver every proxy in this set uses. The Neo4j driver is thread-safe and holds the
+   * connection pool, so a set needs exactly one; a service that built twelve spread its load across
+   * twelve pools that could not share a warm connection between them.
+   */
+  final Driver driver;
 
   private final Neo4JProxyAdmin adminProxy;
   private final Neo4JProxyFolder folderProxy;
@@ -28,6 +51,7 @@ public class Neo4JProxies {
   public Neo4JProxies(CedarConfig cedarConfig) {
     this.cedarConfig = cedarConfig;
     this.config = Neo4jConfig.fromCedarConfig(cedarConfig);
+    this.driver = buildDriver(this.config);
     this.linkedDataUtil = cedarConfig.getLinkedDataUtil();
     this.pathUtil = new Neo4JPathUtil(cedarConfig);
 
@@ -45,26 +69,38 @@ public class Neo4JProxies {
     this.categoryPermissionProxy = new Neo4JProxyCategoryPermission(this, cedarConfig);
   }
 
+  private static Driver buildDriver(Neo4jConfig config) {
+    Config.ConfigBuilder driverConfig = Config.builder();
+    CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> driverConfig
+        .withConnectionTimeout(testConnectionTimeoutMillis(timeout), TimeUnit.MILLISECONDS)
+        .withConnectionAcquisitionTimeout(timeout, TimeUnit.MILLISECONDS)
+        .withMaxTransactionRetryTime(timeout, TimeUnit.MILLISECONDS));
+    return GraphDatabase.driver(config.getUri(),
+        AuthTokens.basic(config.getUserName(), config.getUserPassword()),
+        driverConfig.build());
+  }
+
+  static long testConnectionTimeoutMillis(long dependencyTimeoutMillis) {
+    return Math.max(dependencyTimeoutMillis, MIN_TEST_CONNECTION_TIMEOUT_MILLIS);
+  }
+
+  public void verifyConnectivity() {
+    driver.verifyConnectivity();
+  }
+
   /**
-   * Closes every proxy's Neo4j driver. Each proxy opens its own driver, so a discarded proxy set holds
-   * a dozen connection pools and their Netty event-loop threads, and nothing reclaims them on garbage
-   * collection. In production this never runs — the application boots once — but a shared test JVM
-   * re-boots the application per class, and without closing the previous set the drivers pile up until
-   * the process cannot create another event loop and a later test class fails to start.
+   * Closes the set's Neo4j driver, releasing its connection pool and Netty event-loop threads.
+   * Nothing reclaims them on garbage collection. In production this never runs — the application
+   * boots once — but a shared test JVM re-boots the application per class, and without closing the
+   * previous set the drivers pile up until the process cannot create another event loop and a later
+   * test class fails to start.
    */
   public void close() {
-    adminProxy.close();
-    folderProxy.close();
-    groupProxy.close();
-    userProxy.close();
-    permissionProxy.close();
-    artifactProxy.close();
-    resourceProxy.close();
-    filesystemResourceProxy.close();
-    graphProxy.close();
-    versionProxy.close();
-    categoryProxy.close();
-    categoryPermissionProxy.close();
+    try {
+      driver.close();
+    } catch (RuntimeException e) {
+      log.warn("Error closing the Neo4j driver", e);
+    }
   }
 
   public Neo4JProxyAdmin admin() {

@@ -18,12 +18,12 @@ class AbstractNeo4JProxyTest {
 
   @Test
   void healthyConnectionEstablishmentHasHeadroomBeyondTheFastOutageTimeout() {
-    assertEquals(5_000, AbstractNeo4JProxy.testConnectionTimeoutMillis(1_000));
+    assertEquals(5_000, Neo4JProxies.testConnectionTimeoutMillis(1_000));
   }
 
   @Test
   void aLargerConfiguredTimeoutIsPreserved() {
-    assertEquals(10_000, AbstractNeo4JProxy.testConnectionTimeoutMillis(10_000));
+    assertEquals(10_000, Neo4JProxies.testConnectionTimeoutMillis(10_000));
   }
 
   @Test
