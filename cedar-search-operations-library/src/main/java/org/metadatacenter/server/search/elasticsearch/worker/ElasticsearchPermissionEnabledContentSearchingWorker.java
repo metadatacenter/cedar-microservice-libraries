@@ -17,6 +17,7 @@ import org.metadatacenter.server.security.model.permission.resource.FilesystemRe
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
+import org.opensearch.action.search.ClearScrollRequest;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchScrollRequest;
@@ -91,6 +92,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
                                          ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                          int offset) throws CedarProcessingException {
+    String scrollId = null;
     try {
       SearchRequest searchRequest = getSearchRequestBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
 
@@ -102,30 +104,42 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
       // Execute request
       SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT);
+      scrollId = response.getScrollId();
 
       SearchResponseResult result = new SearchResponseResult();
       result.setTotalCount(response.getHits().getTotalHits().value);
 
+      long endExclusive = (long) offset + limit;
       int counter = 0;
       while (response.getHits().getHits().length != 0) {
         for (SearchHit hit : response.getHits().getHits()) {
-          if (counter >= offset && counter < offset + limit) {
+          if (counter >= offset && counter < endExclusive) {
             result.add(hit);
           }
           counter++;
         }
-        //next scroll
-        if (response.getHits().getHits().length > 0) {
-          SearchScrollRequest scrollRequest = new SearchScrollRequest(response.getScrollId());
-          scrollRequest.scroll(timeout);
-          response = client.scroll(scrollRequest, RequestOptions.DEFAULT);
-        } else {
+        if (counter >= endExclusive) {
           break;
         }
+        // Next scroll batch
+        SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId);
+        scrollRequest.scroll(timeout);
+        response = client.scroll(scrollRequest, RequestOptions.DEFAULT);
+        scrollId = response.getScrollId();
       }
       return result;
     } catch (IOException e) {
       throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
+    } finally {
+      if (scrollId != null) {
+        ClearScrollRequest clearScrollRequest = new ClearScrollRequest();
+        clearScrollRequest.addScrollId(scrollId);
+        try {
+          client.clearScroll(clearScrollRequest, RequestOptions.DEFAULT);
+        } catch (IOException e) {
+          log.warn("Unable to clear OpenSearch scroll context {}", scrollId, e);
+        }
+      }
     }
   }
 

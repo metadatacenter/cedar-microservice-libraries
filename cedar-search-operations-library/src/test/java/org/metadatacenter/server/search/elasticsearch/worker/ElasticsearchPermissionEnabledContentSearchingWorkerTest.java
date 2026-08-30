@@ -15,8 +15,10 @@ import org.metadatacenter.server.security.model.permission.resource.FilesystemRe
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
+import org.opensearch.action.search.ClearScrollRequest;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
+import org.opensearch.action.search.SearchScrollRequest;
 import org.opensearch.action.search.SearchResponse.Clusters;
 import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.action.search.ShardSearchFailure;
@@ -30,6 +32,8 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
+import org.mockito.ArgumentCaptor;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -38,6 +42,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
@@ -236,6 +242,37 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
             List.of("template"), FilesystemResourcePermission.READ, user));
   }
 
+  @Test
+  void deepSearchStopsAfterTheRequestedPageAndClearsItsScroll() throws Exception {
+    when(client.search(any(SearchRequest.class), any(RequestOptions.class)))
+        .thenReturn(response(7, "scroll-1", hit(0), hit(1), hit(2), hit(3), hit(4)));
+
+    SearchResponseResult result = worker.searchDeep(requestContext, "kidney", null,
+        ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, null, null, 2, 2);
+
+    assertEquals(List.of(2, 3), result.getHits().stream().map(SearchHit::docId).toList());
+    verify(client, never()).scroll(any(SearchScrollRequest.class), any(RequestOptions.class));
+    ArgumentCaptor<ClearScrollRequest> clearRequest = ArgumentCaptor.forClass(ClearScrollRequest.class);
+    verify(client).clearScroll(clearRequest.capture(), any(RequestOptions.class));
+    assertEquals(List.of("scroll-1"), clearRequest.getValue().getScrollIds());
+  }
+
+  @Test
+  void deepSearchClearsItsScrollWhenFetchingTheNextBatchFails() throws Exception {
+    when(client.search(any(SearchRequest.class), any(RequestOptions.class)))
+        .thenReturn(response(7, "scroll-1", hit(0), hit(1)));
+    when(client.scroll(any(SearchScrollRequest.class), any(RequestOptions.class)))
+        .thenThrow(new IOException("connection refused"));
+
+    assertThrows(CedarDependencyUnavailableException.class,
+        () -> worker.searchDeep(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+            ResourcePublicationStatusFilter.ALL, null, null, 2, 3));
+
+    ArgumentCaptor<ClearScrollRequest> clearRequest = ArgumentCaptor.forClass(ClearScrollRequest.class);
+    verify(client).clearScroll(clearRequest.capture(), any(RequestOptions.class));
+    assertEquals(List.of("scroll-1"), clearRequest.getValue().getScrollIds());
+  }
+
   private SearchResponseResult executeSearch(String query, List<String> resourceTypes, ResourceVersionFilter version,
                                              ResourcePublicationStatusFilter publicationStatus, String categoryId,
                                              List<String> sort, int limit, int offset) throws Exception {
@@ -247,9 +284,17 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
   }
 
   private static SearchResponse emptyResponse(long total) {
-    SearchHits hits = new SearchHits(SearchHits.EMPTY,
+    return response(total, null);
+  }
+
+  private static SearchHit hit(int docId) {
+    return new SearchHit(docId);
+  }
+
+  private static SearchResponse response(long total, String scrollId, SearchHit... searchHits) {
+    SearchHits hits = new SearchHits(searchHits,
         new TotalHits(total, TotalHits.Relation.EQUAL_TO), Float.NaN);
     SearchResponseSections sections = new SearchResponseSections(hits, null, null, false, null, null, 1);
-    return new SearchResponse(sections, null, 1, 1, 0, 1L, ShardSearchFailure.EMPTY_ARRAY, Clusters.EMPTY);
+    return new SearchResponse(sections, scrollId, 1, 1, 0, 1L, ShardSearchFailure.EMPTY_ARRAY, Clusters.EMPTY);
   }
 }
