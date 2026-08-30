@@ -92,4 +92,33 @@
 
   </dependencies>
 
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>keep-test-auth-out-of-production-classes</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireFilesDontExist>
+                  <files>
+                    <file>${project.build.outputDirectory}/org/metadatacenter/util/test/TestAuthUtil.class</file>
+                    <file>${project.build.outputDirectory}/org/metadatacenter/util/test/InMemoryUserService.class</file>
+                    <file>${project.build.outputDirectory}/org/metadatacenter/util/test/TestUserUtil.class</file>
+                  </files>
+                </requireFilesDontExist>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
 </project>

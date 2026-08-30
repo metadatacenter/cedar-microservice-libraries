@@ -20,7 +20,7 @@ import java.util.UUID;
  * test users are built in memory with the roles the artifact-handling endpoints require,
  * registered with the Authorization holder through InMemoryUserService, and their API keys are
  * used in the Authorization header of test requests. TestUserUtil offers the same headers backed
- * by live Neo4j; this class is the backend-free replacement.
+ * by a seeded graph; this class is the backend-free replacement.
  *
  * Call installInMemoryUserService once per test class, after the DropwizardAppRule has started:
  * the application's own startup wires the Neo4j-backed user service, and this call replaces it
