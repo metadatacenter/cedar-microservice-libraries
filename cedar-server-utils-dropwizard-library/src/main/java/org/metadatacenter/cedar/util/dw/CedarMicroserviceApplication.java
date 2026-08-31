@@ -81,10 +81,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     HTTP_HEADERS.add("Authorization");
     HTTP_HEADERS.add(HttpHeaders.IF_MATCH);
 
-    HTTP_EXPOSED_HEADERS = List.of(
-        HttpHeaders.ETAG,
-        CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS,
-        HttpHeaders.CONTENT_DISPOSITION);
+    HTTP_EXPOSED_HEADERS = CustomHttpConstants.EXPOSED_HEADERS;
     HTTP_HEADERS.add(CedarHeaderParameters.DEBUG);
     HTTP_HEADERS.add(CedarHeaderParameters.CLIENT_SESSION_ID);
 

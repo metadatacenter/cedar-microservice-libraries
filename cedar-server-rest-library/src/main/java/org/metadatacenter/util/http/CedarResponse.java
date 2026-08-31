@@ -97,8 +97,7 @@ public abstract class CedarResponse {
         responseBuilder.header(HttpHeaders.WWW_AUTHENTICATE, HttpConstants.HTTP_AUTH_CHALLENGE);
       }
       responseBuilder.header(HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS,
-          CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS + "," + HttpConstants.HTTP_HEADER_CONTENT_DISPOSITION
-              + "," + HttpHeaders.ETAG);
+          CustomHttpConstants.EXPOSED_HEADERS_VALUE);
       if (createdResourceUri != null) {
         responseBuilder.status(CedarResponseStatus.CREATED.getStatusCode()).location(createdResourceUri);
       }
