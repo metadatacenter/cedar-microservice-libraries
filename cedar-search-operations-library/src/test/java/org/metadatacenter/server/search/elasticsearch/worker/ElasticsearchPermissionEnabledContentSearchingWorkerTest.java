@@ -62,7 +62,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
   @BeforeEach
   void setUp() throws Exception {
     OpensearchConfig config = new ObjectMapper().readValue(
-        "{\"indexes\":{\"searchIndex\":{\"name\":\"cedar-search\"}},\"maxResultWindow\":3,\"scrollKeepAlive\":60000}",
+        "{\"indexes\":{\"searchIndex\":{\"name\":\"cedar-search\"}},\"maxResultWindow\":3,\"searchContextKeepAlive\":60000}",
         OpensearchConfig.class);
     client = mock(RestHighLevelClient.class);
     when(client.createPit(any(CreatePitRequest.class), any(RequestOptions.class)))

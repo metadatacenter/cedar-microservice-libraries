@@ -7,6 +7,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
+import org.mockito.ArgumentCaptor;
+import org.opensearch.action.search.ClearScrollRequest;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchScrollRequest;
@@ -27,6 +29,8 @@ import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ElasticsearchSearchingWorkerTest {
@@ -38,7 +42,7 @@ class ElasticsearchSearchingWorkerTest {
   void setUp() {
     OpensearchConfig config = mock(OpensearchConfig.class, RETURNS_DEEP_STUBS);
     when(config.getIndexes().getSearchIndex().getName()).thenReturn("cedar-search");
-    when(config.getScrollKeepAlive()).thenReturn(60_000);
+    when(config.getSearchContextKeepAlive()).thenReturn(60_000);
     when(config.getSize()).thenReturn(100);
     client = mock(RestHighLevelClient.class);
     worker = new ElasticsearchSearchingWorker(config, client);
@@ -105,6 +109,69 @@ class ElasticsearchSearchingWorkerTest {
     CedarDependencyUnavailableException error = assertThrows(CedarDependencyUnavailableException.class,
         () -> worker.findAllValuesForField("info.id"));
     assertEquals("OpenSearch is unavailable", error.getMessage());
+  }
+
+  @Test
+  void clearsTheScrollContextWhenThePagesRunOut() throws Exception {
+    doReturn(response("scroll-1", Map.of("info", Map.of("id", "one")))).when(client)
+        .search(any(SearchRequest.class), any(RequestOptions.class));
+    doReturn(response("scroll-2", Map.of("info", Map.of("id", "two"))), emptyResponse()).when(client)
+        .scroll(any(SearchScrollRequest.class), any(RequestOptions.class));
+
+    assertEquals(List.of("one", "two"), worker.findAllValuesForField("info.id"));
+
+    // The last page answers with the id the context is held under by then, which is the one to release.
+    verifyScrollCleared("scroll-end");
+  }
+
+  @Test
+  void clearsTheScrollContextWhenAPageFails() throws Exception {
+    doReturn(response("scroll-1", Map.of("info", Map.of("id", "one")))).when(client)
+        .search(any(SearchRequest.class), any(RequestOptions.class));
+    doThrow(new IOException("offline")).when(client).scroll(any(SearchScrollRequest.class), any(RequestOptions.class));
+
+    assertThrows(CedarDependencyUnavailableException.class, () -> worker.findAllValuesForField("info.id"));
+
+    verifyScrollCleared("scroll-1");
+  }
+
+  @Test
+  void opensNoScrollToClearWhenTheFirstRequestFails() throws Exception {
+    doThrow(new IOException("offline")).when(client).search(any(SearchRequest.class), any(RequestOptions.class));
+
+    assertThrows(CedarDependencyUnavailableException.class, () -> worker.findAllValuesForField("info.id"));
+
+    verify(client, never()).clearScroll(any(ClearScrollRequest.class), any(RequestOptions.class));
+  }
+
+  @Test
+  void aFailedClearIsLoggedRatherThanReplacingTheValuesItWasReleasing() throws Exception {
+    doReturn(response("scroll-1", Map.of("info", Map.of("id", "one")))).when(client)
+        .search(any(SearchRequest.class), any(RequestOptions.class));
+    doReturn(emptyResponse()).when(client).scroll(any(SearchScrollRequest.class), any(RequestOptions.class));
+    doThrow(new IOException("offline")).when(client)
+        .clearScroll(any(ClearScrollRequest.class), any(RequestOptions.class));
+
+    assertEquals(List.of("one"), worker.findAllValuesForField("info.id"));
+  }
+
+  @Test
+  void aFailedClearIsLoggedRatherThanReplacingTheFailureItWasReleasing() throws Exception {
+    doThrow(new IOException("offline")).when(client)
+        .clearScroll(any(ClearScrollRequest.class), any(RequestOptions.class));
+    doReturn(response("scroll-1", Map.of("info", Map.of("id", "one")))).when(client)
+        .search(any(SearchRequest.class), any(RequestOptions.class));
+    doThrow(new IOException("offline")).when(client).scroll(any(SearchScrollRequest.class), any(RequestOptions.class));
+
+    CedarDependencyUnavailableException error = assertThrows(CedarDependencyUnavailableException.class,
+        () -> worker.findAllValuesForField("info.id"));
+    assertEquals("OpenSearch is unavailable", error.getMessage());
+  }
+
+  private void verifyScrollCleared(String expectedScrollId) throws Exception {
+    ArgumentCaptor<ClearScrollRequest> clearRequest = ArgumentCaptor.forClass(ClearScrollRequest.class);
+    verify(client).clearScroll(clearRequest.capture(), any(RequestOptions.class));
+    assertEquals(List.of(expectedScrollId), clearRequest.getValue().getScrollIds());
   }
 
   @SafeVarargs

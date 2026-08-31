@@ -64,7 +64,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     // over the entire result set and carries no documents back, so the widest page the index will
     // serve is also the cheapest way to cross a large offset.
     this.deepPageSize = Math.max(1, config.getMaxResultWindow());
-    this.pointInTimeKeepAlive = TimeValue.timeValueMillis(config.getScrollKeepAlive());
+    this.pointInTimeKeepAlive = TimeValue.timeValueMillis(config.getSearchContextKeepAlive());
   }
 
   public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
