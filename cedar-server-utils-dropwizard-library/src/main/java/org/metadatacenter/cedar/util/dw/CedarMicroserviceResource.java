@@ -17,6 +17,12 @@ import org.metadatacenter.util.provenance.ProvenanceUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.ws.rs.Produces;
@@ -105,10 +111,19 @@ public abstract class CedarMicroserviceResource {
     return sc;
   }
 
+  /**
+   * Builds a request context for a caller holding no credential.
+   *
+   * <p>Serves only methods annotated {@link AnonymousAccess}, so a method reaches this path because someone
+   * declared that it should rather than because someone typed this helper instead of
+   * {@link #buildRequestContext()}. A method that calls this without the annotation is a wiring error, and
+   * fails here rather than answering an unauthenticated caller.
+   */
   protected CedarRequestContext buildAnonymousRequestContext() {
     HttpServletRequestContext sc = new HttpServletRequestContext(linkedDataUtil, request, httpHeaders);
     StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
     StackTraceElement caller = stackTrace[2];
+    requireDeclaredAnonymous(caller);
 
     AppLogger.message(AppLogType.REQUEST_HANDLER, AppLogSubType.START, sc.getGlobalRequestIdHeader(),
         sc.getLocalRequestIdHeader())
@@ -122,5 +137,36 @@ public abstract class CedarMicroserviceResource {
     return sc;
   }
 
+  private static final Map<String, Boolean> ANONYMOUS_DECLARATIONS = new ConcurrentHashMap<>();
 
+  /**
+   * Fails unless the method that asked for an anonymous context is annotated {@link AnonymousAccess}.
+   *
+   * <p>Every method declared under the caller's name must carry the annotation, so an overload cannot inherit
+   * the exemption from a sibling. The answer is cached: the classes and their annotations do not change while
+   * the server runs.
+   */
+  private static void requireDeclaredAnonymous(StackTraceElement caller) {
+    String key = caller.getClassName() + "#" + caller.getMethodName();
+    boolean declared = ANONYMOUS_DECLARATIONS.computeIfAbsent(key, k -> isDeclaredAnonymous(caller));
+    if (!declared) {
+      throw new IllegalStateException(
+          "An anonymous request context was requested by " + key + ", which is not annotated @AnonymousAccess. "
+              + "Annotate the resource method if it is meant to serve a caller holding no credential, or call "
+              + "buildRequestContext() instead.");
+    }
+  }
+
+  private static boolean isDeclaredAnonymous(StackTraceElement caller) {
+    try {
+      Class<?> callerClass = Class.forName(caller.getClassName());
+      List<Method> named = Arrays.stream(callerClass.getDeclaredMethods())
+          .filter(m -> m.getName().equals(caller.getMethodName()))
+          .toList();
+      return !named.isEmpty() && named.stream().allMatch(m -> m.isAnnotationPresent(AnonymousAccess.class));
+    } catch (ClassNotFoundException e) {
+      log.error("Could not resolve {} while checking for @AnonymousAccess", caller.getClassName(), e);
+      return false;
+    }
+  }
 }
