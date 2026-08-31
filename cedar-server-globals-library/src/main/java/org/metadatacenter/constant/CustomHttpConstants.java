@@ -27,6 +27,10 @@ public final class CustomHttpConstants {
       HEADER_CEDAR_VALIDATION_STATUS,
       "Content-Disposition",
       "Link",
+      // A queued job is reported as 202 and a Location naming where to poll it, and the same header
+      // carries the running job on the 409 that refuses a second one. Both are useless to a browser
+      // client that cannot read the header.
+      "Location",
       HEADER_TOTAL_COUNT);
 
   /** {@link #EXPOSED_HEADERS} as the comma-separated value the header itself takes. */
