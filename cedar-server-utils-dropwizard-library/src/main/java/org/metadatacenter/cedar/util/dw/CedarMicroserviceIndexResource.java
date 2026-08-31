@@ -2,6 +2,7 @@ package org.metadatacenter.cedar.util.dw;
 
 import com.codahale.metrics.annotation.Timed;
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.model.ServerName;
 
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -22,10 +23,17 @@ public class CedarMicroserviceIndexResource extends CedarMicroserviceResource {
     info = new LinkedHashMap<>();
   }
 
-  public CedarMicroserviceIndexResource(CedarConfig cedarConfig, String serverName) {
+  /**
+   * The index page for one service, named by the server it belongs to.
+   *
+   * <p>Fifteen services each carried an IndexResource subclass whose whole body was this
+   * constructor call with a different string. The string belongs to the server, so it lives on
+   * {@link ServerName} and the subclasses do not.
+   */
+  public CedarMicroserviceIndexResource(CedarConfig cedarConfig, ServerName server) {
     super(cedarConfig);
-    CedarMicroserviceIndexResource.serverName = serverName;
-    info.put("name", serverName);
+    CedarMicroserviceIndexResource.serverName = server.getDisplayName();
+    info.put("name", server.getDisplayName());
   }
 
   @GET
