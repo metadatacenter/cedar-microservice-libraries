@@ -15,6 +15,10 @@ import org.metadatacenter.server.security.model.permission.resource.FilesystemRe
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
+import org.metadatacenter.error.CedarErrorReasonKey;
+import org.metadatacenter.exception.CedarException;
+import org.metadatacenter.http.CedarResponseStatus;
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.search.CreatePitRequest;
 import org.opensearch.action.search.CreatePitResponse;
 import org.opensearch.action.search.DeletePitRequest;
@@ -25,6 +29,7 @@ import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.RestHighLevelClient;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -48,6 +53,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -333,6 +339,77 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
             ResourcePublicationStatusFilter.ALL, null, null, 2, 5));
 
     verifyPointInTimeDeleted();
+  }
+
+  @Test
+  void aStartedWalkOpensAPointInTimeCountsTheResultSetAndHandsBackWhereToResume() throws Exception {
+    List<Page> pages = deepPages(response(40, hit(0), hit(1)));
+
+    DeepSearchPage page = worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, null, 2, null, null);
+
+    assertEquals(40, page.result().getTotalCount());
+    assertEquals(List.of(0, 1), page.result().getHits().stream().map(SearchHit::docId).toList());
+    assertEquals("pit-1", page.pointInTimeId());
+    assertEquals("cid-1", page.nextSearchAfter()[1]);
+    assertEquals(1, pages.size());
+    assertEquals(2, pages.get(0).size());
+    assertTrue(pages.get(0).fetchesDocuments());
+    assertEquals(null, pages.get(0).searchAfter());
+    verify(client).createPit(any(CreatePitRequest.class), any(RequestOptions.class));
+    verifyPointInTimeKept();
+  }
+
+  @Test
+  void aContinuedWalkResumesInTheSamePointInTimeWithoutOpeningOrCountingAgain() throws Exception {
+    List<Page> pages = deepPages(response(0, hit(2), hit(3)));
+    Object[] resumeAt = {1.0f, "cid-1"};
+
+    DeepSearchPage page = worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-carried", resumeAt);
+
+    assertEquals(List.of(2, 3), page.result().getHits().stream().map(SearchHit::docId).toList());
+    assertEquals("pit-carried", page.pointInTimeId());
+    assertEquals("cid-1", pages.get(0).searchAfter()[1]);
+    assertTrue(pages.get(0).source().contains("pit-carried"), pages.get(0).source());
+    // The walk counted its result set on the first page; every page after it is handed that total.
+    assertEquals(0, page.result().getTotalCount());
+    verify(client, never()).createPit(any(CreatePitRequest.class), any(RequestOptions.class));
+    verifyPointInTimeKept();
+  }
+
+  @Test
+  void aShortPageEndsTheWalkAndReleasesTheSnapshot() throws Exception {
+    deepPages(response(0, hit(9)));
+
+    DeepSearchPage page = worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-carried", new Object[]{1.0f, "cid-8"});
+
+    assertEquals(List.of(9), page.result().getHits().stream().map(SearchHit::docId).toList());
+    assertEquals(null, page.pointInTimeId());
+    assertEquals(null, page.nextSearchAfter());
+    ArgumentCaptor<DeletePitRequest> deleteRequest = ArgumentCaptor.forClass(DeletePitRequest.class);
+    verify(client).deletePit(deleteRequest.capture(), any(RequestOptions.class));
+    assertEquals(List.of("pit-carried"), deleteRequest.getValue().getPitIds());
+  }
+
+  @Test
+  void aSnapshotThatIsGoneIsAnExpiredContinuationRatherThanAServerFault() throws Exception {
+    // OpenSearch answers 404 search_context_missing once a point in time has been released.
+    when(client.search(any(SearchRequest.class), any(RequestOptions.class)))
+        .thenThrow(new OpenSearchStatusException("No search context found for id [42]", RestStatus.NOT_FOUND));
+
+    CedarException error = assertThrows(CedarException.class,
+        () -> worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+            ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-gone", new Object[]{1.0f, "cid-1"}));
+
+    assertEquals(CedarResponseStatus.BAD_REQUEST, error.getErrorPack().getStatus());
+    assertEquals(CedarErrorReasonKey.CONTINUATION_EXPIRED, error.getErrorPack().getErrorReasonKey());
+    assertTrue(error.getMessage().contains("expired"), error.getMessage());
+  }
+
+  private void verifyPointInTimeKept() throws Exception {
+    verify(client, never()).deletePit(any(DeletePitRequest.class), any(RequestOptions.class));
   }
 
   private void verifyPointInTimeDeleted() throws Exception {

@@ -7,7 +7,9 @@ import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.join.ScoreMode;
 import org.metadatacenter.config.OpensearchConfig;
+import org.metadatacenter.error.CedarErrorReasonKey;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
+import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
@@ -18,6 +20,7 @@ import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 import org.opensearch.OpenSearchException;
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.search.CreatePitRequest;
 import org.opensearch.action.search.DeletePitRequest;
 import org.opensearch.action.search.SearchRequest;
@@ -35,6 +38,7 @@ import org.opensearch.search.builder.PointInTimeBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.sort.SortOrder;
+import org.opensearch.core.rest.RestStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -109,16 +113,8 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     try {
       pointInTimeId = openPointInTime();
 
-      SearchSourceBuilder searchSourceBuilder =
-          getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
-      // search_after resumes at a sort position, so the sort must order the hits totally. The caller's
-      // sort fields do not: cid does, and appending it leaves the requested ordering intact. With no
-      // caller sort the ordering is relevance, which has to be named explicitly to be sorted on.
-      if (searchSourceBuilder.sorts() == null || searchSourceBuilder.sorts().isEmpty()) {
-        searchSourceBuilder.sort(SortBuilders.scoreSort());
-      }
-      searchSourceBuilder.sort(SortBuilders.fieldSort(DOCUMENT_CEDAR_ID).order(SortOrder.ASC));
-      searchSourceBuilder.pointInTimeBuilder(new PointInTimeBuilder(pointInTimeId).setKeepAlive(pointInTimeKeepAlive));
+      SearchSourceBuilder searchSourceBuilder = getDeepSearchSourceBuilder(rctx, query, resourceTypes, version,
+          publicationStatus, categoryId, sortList, pointInTimeId);
       searchSourceBuilder.trackTotalHits(true);
 
       // A point in time carries the indices it was opened on, and OpenSearch rejects a request naming both.
@@ -162,6 +158,84 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     } finally {
       closePointInTime(pointInTimeId);
     }
+  }
+
+  /**
+   * One page of a walk the caller is driving. The point in time is opened here when the walk starts,
+   * carried by the caller from page to page, and released as soon as a page comes back short, because
+   * a short page is the last one. Nothing is skipped: the page resumes where the previous one stopped,
+   * so a page costs the same wherever in the result set it falls.
+   */
+  public DeepSearchPage searchDeepPage(CedarRequestContext rctx, String query, List<String> resourceTypes,
+                                       ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                       String categoryId, List<String> sortList, int limit, String pointInTimeId,
+                                       Object[] searchAfter) throws CedarException {
+    boolean walkStarts = pointInTimeId == null;
+    String walkPointInTimeId;
+    try {
+      walkPointInTimeId = walkStarts ? openPointInTime() : pointInTimeId;
+    } catch (IOException e) {
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
+    }
+    try {
+      SearchSourceBuilder searchSourceBuilder = getDeepSearchSourceBuilder(rctx, query, resourceTypes, version,
+          publicationStatus, categoryId, sortList, walkPointInTimeId);
+      // Only the first page counts the result set. Every page after it is handed the total the walk
+      // began with, which is also what makes the pages agree with each other.
+      searchSourceBuilder.trackTotalHits(walkStarts);
+      SearchRequest searchRequest = new SearchRequest().source(searchSourceBuilder);
+
+      SearchHits hits = executePage(searchRequest, searchSourceBuilder, limit, true, searchAfter);
+      SearchResponseResult result = new SearchResponseResult();
+      if (walkStarts) {
+        result.setTotalCount(hits.getTotalHits().value);
+      }
+      SearchHit[] page = hits.getHits();
+      for (SearchHit hit : page) {
+        result.add(hit);
+      }
+
+      boolean lastPage = page.length < limit;
+      if (lastPage) {
+        closePointInTime(walkPointInTimeId);
+        return new DeepSearchPage(result, null, null);
+      }
+      return new DeepSearchPage(result, walkPointInTimeId, page[page.length - 1].getSortValues());
+    } catch (IOException e) {
+      closePointInTime(walkPointInTimeId);
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
+    } catch (OpenSearchStatusException e) {
+      if (e.status() == RestStatus.NOT_FOUND) {
+        // The snapshot the walk was reading has been released, by its keep alive or by a restart.
+        // There is nothing to resume: the caller has to start the walk again.
+        throw new CedarProcessingException("The continuation has expired. Start the walk again!")
+            .errorReasonKey(CedarErrorReasonKey.CONTINUATION_EXPIRED)
+            .badRequest();
+      }
+      closePointInTime(walkPointInTimeId);
+      throw e;
+    }
+  }
+
+  /**
+   * The search both deep calls run: the caller's query, ordered totally, inside a point in time.
+   */
+  private SearchSourceBuilder getDeepSearchSourceBuilder(CedarRequestContext rctx, String query,
+                                                         List<String> resourceTypes, ResourceVersionFilter version,
+                                                         ResourcePublicationStatusFilter publicationStatus,
+                                                         String categoryId, List<String> sortList,
+                                                         String pointInTimeId) throws CedarProcessingException {
+    SearchSourceBuilder searchSourceBuilder =
+        getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
+    // search_after resumes at a sort position, so the sort must order the hits totally. The caller's
+    // sort fields do not: cid does, and appending it leaves the requested ordering intact. With no
+    // caller sort the ordering is relevance, which has to be named explicitly to be sorted on.
+    if (searchSourceBuilder.sorts() == null || searchSourceBuilder.sorts().isEmpty()) {
+      searchSourceBuilder.sort(SortBuilders.scoreSort());
+    }
+    searchSourceBuilder.sort(SortBuilders.fieldSort(DOCUMENT_CEDAR_ID).order(SortOrder.ASC));
+    searchSourceBuilder.pointInTimeBuilder(new PointInTimeBuilder(pointInTimeId).setKeepAlive(pointInTimeKeepAlive));
+    return searchSourceBuilder;
   }
 
   private String openPointInTime() throws IOException {

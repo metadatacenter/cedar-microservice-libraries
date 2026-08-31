@@ -1,6 +1,7 @@
 package org.metadatacenter.model.response;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.metadatacenter.model.folderserver.extract.FolderServerCategoryExtract;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
@@ -18,6 +19,7 @@ public class FolderServerNodeListResponse extends AbstractNodeListResponse {
   private NodeListQueryType nodeListQueryType;
   private String categoryName;
   private List<FolderServerCategoryExtract> categoryPath;
+  private String continuation;
 
   public List<? extends FolderServerResourceExtract> getResources() {
     return resources;
@@ -57,6 +59,19 @@ public class FolderServerNodeListResponse extends AbstractNodeListResponse {
 
   public List<FolderServerCategoryExtract> getCategoryPath() {
     return categoryPath;
+  }
+
+  /**
+   * Where the next page of this search starts, for a caller paging with a continuation rather than an
+   * offset. Absent on the last page, and absent from every offset-paged answer.
+   */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  public String getContinuation() {
+    return continuation;
+  }
+
+  public void setContinuation(String continuation) {
+    this.continuation = continuation;
   }
 
   @JsonProperty("@context")

@@ -17,6 +17,8 @@ public final class LinkHeaderUtil {
 
   public static final String PARAM_OFFSET = "offset";
   public static final String PARAM_LIMIT = "limit";
+  public static final String PARAM_CONTINUATION = "continuation";
+  public static final String CONTINUATION_START = "start";
 
   private LinkHeaderUtil() {
   }
@@ -61,6 +63,34 @@ public final class LinkHeaderUtil {
     }
 
     return ret;
+  }
+
+  /**
+   * The links of a walk driven by a continuation. There is no last or previous page to name: a
+   * continuation says where to carry on from, and only forwards. First is the walk begun again.
+   */
+  public static Map<String, String> getContinuationLinkHeaders(String baseUrl, Integer limit, String continuation) {
+    Map<String, String> ret = new HashMap<>();
+    ret.put(HttpConstants.HEADER_LINK_TYPE_FIRST, createOneContinuationLink(baseUrl, limit, CONTINUATION_START));
+    if (continuation != null) {
+      ret.put(HttpConstants.HEADER_LINK_TYPE_NEXT, createOneContinuationLink(baseUrl, limit, continuation));
+    }
+    return ret;
+  }
+
+  private static String createOneContinuationLink(String baseUrl, Integer limit, String continuation) {
+    try {
+      URIBuilder ub = new URIBuilder(baseUrl);
+      ub.setParameter(PARAM_CONTINUATION, continuation);
+      if (limit != null) {
+        ub.setParameter(PARAM_LIMIT, String.valueOf(limit));
+      }
+      ub.setCharset(StandardCharsets.UTF_8);
+      return ub.build().toString();
+    } catch (URISyntaxException e) {
+      log.error("There was an error while creating a continuation link", e);
+      return null;
+    }
   }
 
   private static void appendPagingLinkHeader(StringBuilder sb, String linkType, String uri) {
