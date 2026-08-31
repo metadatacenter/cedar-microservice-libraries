@@ -73,6 +73,17 @@ public abstract class CedarResponse {
       operation = errorPack.getOperation();
     }
 
+    /**
+     * Whether the status this response carries may not have a body.
+     *
+     * <p>RFC 9110 forbids one on 204 and 304, and on every 1xx. A body sent with those is at best
+     * ignored and at worst confuses an intermediary about where the next message starts.
+     */
+    private boolean statusForbidsABody() {
+      int code = status.getStatusCode();
+      return code == CedarResponseStatus.NO_CONTENT.getStatusCode() || code == 304 || (code >= 100 && code < 200);
+    }
+
     public Response build() {
       Response.ResponseBuilder responseBuilder = Response.noContent();
       responseBuilder.status(status.getStatusCode());
@@ -113,7 +124,11 @@ public abstract class CedarResponse {
           r.put("errorId", errorId);
         }
 
-        if (!r.isEmpty()) {
+        // The map above always has entries, so the guard this replaces could not be false and every
+        // entity-less response carried a body — including the two 204s, which RFC 9110 forbids from
+        // having one. A status that cannot carry a body gets none; every other entity-less response
+        // still gets the diagnostic map, which is what an error body is made of.
+        if (!statusForbidsABody()) {
           responseBuilder.entity(r);
         }
       }
