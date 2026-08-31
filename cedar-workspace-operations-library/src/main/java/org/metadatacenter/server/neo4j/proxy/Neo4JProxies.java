@@ -71,6 +71,12 @@ public class Neo4JProxies {
 
   private static Driver buildDriver(Neo4jConfig config) {
     Config.ConfigBuilder driverConfig = Config.builder();
+    // Absent leaves the driver on its own ceiling, which is what every deployment ran on before the
+    // setting existed. Present lets an installation running many services against one database hold
+    // the total down, which nothing could do while the size was the driver's to choose.
+    if (config.getMaxConnectionPoolSize() != null) {
+      driverConfig.withMaxConnectionPoolSize(config.getMaxConnectionPoolSize());
+    }
     CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> driverConfig
         .withConnectionTimeout(testConnectionTimeoutMillis(timeout), TimeUnit.MILLISECONDS)
         .withConnectionAcquisitionTimeout(timeout, TimeUnit.MILLISECONDS)
