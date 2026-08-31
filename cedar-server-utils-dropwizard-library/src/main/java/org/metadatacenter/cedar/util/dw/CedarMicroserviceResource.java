@@ -1,6 +1,7 @@
 package org.metadatacenter.cedar.util.dw;
 
 import org.apache.commons.codec.digest.DigestUtils;
+import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.exception.security.CedarAccessException;
 import org.metadatacenter.rest.context.CedarRequestContext;
@@ -52,8 +53,24 @@ public abstract class CedarMicroserviceResource {
   protected final MicroserviceUrlUtil microserviceUrlUtil;
   protected final ProvenanceUtil provenanceUtil;
 
+  /**
+   * The workspace and graph services, received as a field rather than reached as a global from each
+   * method.
+   *
+   * <p>Five servers declared this seam for themselves, each with the same field and the same pair of
+   * constructors. It belongs to every resource that reaches the graph, so it is here: the
+   * one-argument constructor supplies the single managed instance from the sanctioned
+   * composition-root accessor, and the two-argument one lets a test inject a specific one.
+   */
+  protected final CedarDataServices dataServices;
+
   protected CedarMicroserviceResource(CedarConfig cedarConfig) {
+    this(cedarConfig, CedarDataServices.getInstance());
+  }
+
+  protected CedarMicroserviceResource(CedarConfig cedarConfig, CedarDataServices dataServices) {
     this.cedarConfig = cedarConfig;
+    this.dataServices = dataServices;
     linkedDataUtil = cedarConfig.getLinkedDataUtil();
     microserviceUrlUtil = cedarConfig.getMicroserviceUrlUtil();
     provenanceUtil = new ProvenanceUtil();
