@@ -97,10 +97,18 @@ class HttpTimeoutsTest {
    * Takes the pool's single connection with a request the silent server never answers, and returns
    * only once the server has accepted it, so the next caller is certainly queueing for the lease
    * rather than racing the first request's connect.
+   *
+   * <p>This wait is a precondition, not a measurement. What the tests assert about timing is
+   * {@link #assertWaitedNoLongerThanTheLease}, which runs after it; all this one has to do is not
+   * expire while the accept loop waits for a thread. It was five seconds, which a loopback accept
+   * clears in milliseconds on an idle machine and missed on a busy one, turning CPU starvation
+   * during a full reactor build into a reported product failure. The ceiling is generous for that
+   * reason: overshooting it costs nothing when the accept happens, and nothing about the contract
+   * under test depends on the number.
    */
   private void occupyTheOnlyConnection() throws InterruptedException {
     threads.submit(() -> timeouts.execute(Request.get(url)));
-    assertTrue(connected.await(5, TimeUnit.SECONDS), "the silent server never accepted a connection");
+    assertTrue(connected.await(60, TimeUnit.SECONDS), "the silent server never accepted a connection");
   }
 
   private void assertWaitedNoLongerThanTheLease(long startNanos) {
