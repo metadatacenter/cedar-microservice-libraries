@@ -5,9 +5,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.config.ServerConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentSource;
 import org.metadatacenter.config.environment.CedarEnvironmentVariable;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
+import org.metadatacenter.model.ServerName;
 import org.metadatacenter.model.SystemComponent;
 
 import java.util.HashMap;
@@ -175,7 +177,39 @@ public abstract class AbstractCedarConfigTest {
     Map<String, String> environment = CedarEnvironmentVariableProvider.getFor(getSystemComponent());
     CedarConfig instance = CedarConfig.getInstance(environment);
     Assertions.assertNotNull(instance);
+    assertOwnServerCoordinates(instance);
     assertServerSpecificConfig(instance);
+  }
+
+  /**
+   * Asserts that the server under test loaded its own ports.
+   *
+   * <p>Substitution runs in relaxed mode and leaves a literal {@code ${...}} in place on a miss, while
+   * the variable provider withholds any variable the component does not declare and defaults numerics
+   * to {@code "0"}. A service can therefore load a configuration full of unresolved coordinates and
+   * still start, which the descriptor records having happened once already.
+   *
+   * <p>What a server can be held to is narrow. Asserting that nothing anywhere is unsubstituted fails
+   * every server, because withholding a peer's coordinates is the design rather than drift. Its own
+   * base URL is no better: a server has no reason to address itself, so terminology carries a literal
+   * {@code ${CEDAR_TERMINOLOGY_SERVER_HOST}} in its own entry and bridge, monitor and worker carry no
+   * base at all. The ports are the exception. A server binds them, so it must resolve them, and a zero
+   * there is the value a withheld or unparsed variable produces.
+   */
+  private void assertOwnServerCoordinates(CedarConfig config) {
+    ServerName serverName = getSystemComponent().getServerName();
+    Assertions.assertNotNull(serverName,
+        "Component " + getSystemComponent() + " names no server, so this test cannot locate its coordinates");
+
+    ServerConfig own = config.getServers().get(serverName);
+    Assertions.assertNotNull(own, serverName + " loaded no configuration for itself");
+
+    Assertions.assertTrue(own.getHttpPort() > 0,
+        serverName + " loaded httpPort " + own.getHttpPort()
+            + ", which is the value a withheld or unparsed variable produces");
+    Assertions.assertTrue(own.getAdminPort() > 0,
+        serverName + " loaded adminPort " + own.getAdminPort()
+            + ", which is the value a withheld or unparsed variable produces");
   }
 
 }
