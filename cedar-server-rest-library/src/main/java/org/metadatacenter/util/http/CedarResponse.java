@@ -110,6 +110,10 @@ public abstract class CedarResponse {
         r.put("errorKey", errorKey);
         r.put("errorReasonKey", errorReasonKey);
         r.put("errorMessage", errorMessage);
+        // The exception mapper's CedarErrorPack names the same thing `message`. Both keys are present
+        // in both shapes now, so a client reading either gets the message from either half of the
+        // system rather than null from whichever one it happened to reach.
+        r.put("message", errorMessage);
         r.put("status", status);
         r.put("statusCode", status.getStatusCode());
         r.put("operation", operation == null ? null : operation.asJson());
