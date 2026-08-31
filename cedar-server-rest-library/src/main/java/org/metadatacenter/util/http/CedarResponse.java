@@ -82,6 +82,9 @@ public abstract class CedarResponse {
           responseBuilder.header(property, headers.get(property));
         }
       }
+      if (status == CedarResponseStatus.UNAUTHORIZED) {
+        responseBuilder.header(HttpHeaders.WWW_AUTHENTICATE, HttpConstants.HTTP_AUTH_CHALLENGE);
+      }
       responseBuilder.header(HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS,
           CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS + "," + HttpConstants.HTTP_HEADER_CONTENT_DISPOSITION
               + "," + HttpHeaders.ETAG);
