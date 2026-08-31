@@ -120,6 +120,10 @@ public abstract class AbstractCedarConfigTest {
     env.put(CedarEnvironmentVariable.CEDAR_SCHEMA_ADMIN_PORT.getName(), "9103");
     env.put(CedarEnvironmentVariable.CEDAR_SCHEMA_STOP_PORT.getName(), "9203");
 
+    env.put(CedarEnvironmentVariable.CEDAR_TERMINOLOGY_HTTP_PORT.getName(), "9004");
+    env.put(CedarEnvironmentVariable.CEDAR_TERMINOLOGY_ADMIN_PORT.getName(), "9104");
+    env.put(CedarEnvironmentVariable.CEDAR_TERMINOLOGY_STOP_PORT.getName(), "9204");
+
     env.put(CedarEnvironmentVariable.CEDAR_USER_HTTP_PORT.getName(), "9005");
     env.put(CedarEnvironmentVariable.CEDAR_USER_ADMIN_PORT.getName(), "9105");
     env.put(CedarEnvironmentVariable.CEDAR_USER_STOP_PORT.getName(), "9205");
@@ -159,6 +163,10 @@ public abstract class AbstractCedarConfigTest {
     env.put(CedarEnvironmentVariable.CEDAR_MONITOR_HTTP_PORT.getName(), "9014");
     env.put(CedarEnvironmentVariable.CEDAR_MONITOR_ADMIN_PORT.getName(), "9114");
     env.put(CedarEnvironmentVariable.CEDAR_MONITOR_STOP_PORT.getName(), "9214");
+
+    env.put(CedarEnvironmentVariable.CEDAR_BRIDGE_HTTP_PORT.getName(), "9015");
+    env.put(CedarEnvironmentVariable.CEDAR_BRIDGE_ADMIN_PORT.getName(), "9115");
+    env.put(CedarEnvironmentVariable.CEDAR_BRIDGE_STOP_PORT.getName(), "9215");
 
     customizeEnvironment(env);
 
