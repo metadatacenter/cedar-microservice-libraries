@@ -10,10 +10,8 @@ import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.ParseException;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.hc.core5.util.Timeout;
 import org.metadatacenter.constant.CedarHeaderParameters;
 import org.metadatacenter.constant.CustomHttpConstants;
-import org.metadatacenter.constant.HttpConnectionConstants;
 import org.metadatacenter.constant.HttpConstants;
 import org.metadatacenter.exception.CedarBadRequestException;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
@@ -40,40 +38,39 @@ public class ProxyUtil {
       HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS);
 
   public static ClassicHttpResponse proxyGet(String url, CedarRequestContext context) throws CedarProcessingException {
-    Request proxyRequest = Request.get(url)
-        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
-        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT));
+    return proxyGet(url, context, HttpTimeouts.INTERACTIVE);
+  }
+
+  public static ClassicHttpResponse proxyGet(String url, CedarRequestContext context, HttpTimeouts timeouts)
+      throws CedarProcessingException {
+    Request proxyRequest = Request.get(url);
     copyHeaders(proxyRequest, context);
     requestIdentityEncoding(proxyRequest);
     try {
-      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
+      return timeouts.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
   }
 
   public static ClassicHttpResponse proxyGet(String url, CedarRequestContext context, Map<String, String> additionalHeaders) throws CedarProcessingException {
-    Request proxyRequest = Request.get(url)
-        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
-        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT));
+    Request proxyRequest = Request.get(url);
     copyHeaders(proxyRequest, context);
     copyHeaders(proxyRequest, additionalHeaders);
     requestIdentityEncoding(proxyRequest);
     try {
-      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
+      return HttpTimeouts.INTERACTIVE.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
   }
 
   public static ClassicHttpResponse proxyGet(String url, Map<String, String> additionalHeaders) throws CedarProcessingException {
-    Request proxyRequest = Request.get(url)
-        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
-        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT));
+    Request proxyRequest = Request.get(url);
     copyHeaders(proxyRequest, additionalHeaders);
     requestIdentityEncoding(proxyRequest);
     try {
-      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
+      return HttpTimeouts.INTERACTIVE.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
@@ -89,13 +86,11 @@ public class ProxyUtil {
     // HttpClient 4 code did, makes the client reject the request with "Content-Length header
     // already present". Only the content type is set here.
     Request proxyRequest = Request.delete(url)
-        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
-        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT))
         .addHeader(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN.toString());
     copyHeaders(proxyRequest, context);
     copyHeader(proxyRequest, HttpHeaders.IF_MATCH, ifMatch);
     try {
-      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
+      return HttpTimeouts.INTERACTIVE.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
@@ -107,13 +102,16 @@ public class ProxyUtil {
   }
 
   public static ClassicHttpResponse proxyPost(String url, CedarRequestContext context, String content) throws CedarProcessingException {
+    return proxyPost(url, context, content, HttpTimeouts.INTERACTIVE);
+  }
+
+  public static ClassicHttpResponse proxyPost(String url, CedarRequestContext context, String content,
+                                              HttpTimeouts timeouts) throws CedarProcessingException {
     Request proxyRequest = Request.post(url)
-        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
-        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT))
         .bodyString(content, ContentType.APPLICATION_JSON);
     copyHeaders(proxyRequest, context);
     try {
-      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
+      return timeouts.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
@@ -121,12 +119,10 @@ public class ProxyUtil {
 
   public static ClassicHttpResponse proxyPost(String url, Map<String, String> additionalHeaders, String content) throws CedarProcessingException {
     Request proxyRequest = Request.post(url)
-        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
-        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT))
         .bodyString(content, ContentType.APPLICATION_FORM_URLENCODED);
     copyHeaders(proxyRequest, additionalHeaders);
     try {
-      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
+      return HttpTimeouts.INTERACTIVE.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
@@ -144,13 +140,11 @@ public class ProxyUtil {
   public static ClassicHttpResponse proxyPut(String url, CedarRequestContext context, String content, String ifMatch)
       throws CedarProcessingException {
     Request proxyRequest = Request.put(url)
-        .connectTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.CONNECTION_TIMEOUT))
-        .responseTimeout(Timeout.ofMilliseconds(HttpConnectionConstants.SOCKET_TIMEOUT))
         .bodyString(content, ContentType.APPLICATION_JSON);
     copyHeaders(proxyRequest, context);
     copyHeader(proxyRequest, HttpHeaders.IF_MATCH, ifMatch);
     try {
-      return (ClassicHttpResponse) proxyRequest.execute().returnResponse();
+      return HttpTimeouts.INTERACTIVE.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }

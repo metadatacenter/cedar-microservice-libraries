@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.hc.client5.http.fluent.Request;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.HttpStatus;
-import org.apache.hc.core5.util.Timeout;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.WorkerValuerecommenderConfig;
 import org.metadatacenter.id.CedarTemplateId;
@@ -13,14 +12,13 @@ import org.metadatacenter.server.service.UserService;
 import org.metadatacenter.server.url.MicroserviceUrlUtil;
 import org.metadatacenter.server.valuerecommender.model.RulesGenerationStatus;
 import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexMessage;
+import org.metadatacenter.util.http.HttpTimeouts;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
-import static org.metadatacenter.constant.HttpConnectionConstants.CONNECTION_TIMEOUT;
-import static org.metadatacenter.constant.HttpConnectionConstants.SOCKET_TIMEOUT;
 import static org.metadatacenter.constant.HttpConstants.HTTP_HEADER_AUTHORIZATION;
 
 public class ValuerecommenderReindexExecutorService {
@@ -103,10 +101,8 @@ public class ValuerecommenderReindexExecutorService {
     Set<String> idSet = new HashSet<>();
     try {
       Request request = Request.get(url)
-          .connectTimeout(Timeout.ofMilliseconds(CONNECTION_TIMEOUT))
-          .responseTimeout(Timeout.ofMilliseconds(SOCKET_TIMEOUT))
           .addHeader(HTTP_HEADER_AUTHORIZATION, authString);
-      ClassicHttpResponse response = (ClassicHttpResponse) request.execute().returnResponse();
+      ClassicHttpResponse response = HttpTimeouts.BATCH.execute(request);
       int statusCode = response.getCode();
       if (statusCode == HttpStatus.SC_OK) {
         List<RulesGenerationStatus> list = JsonMapper.MAPPER
@@ -141,10 +137,8 @@ public class ValuerecommenderReindexExecutorService {
     log.debug(url);
     try {
       Request request = Request.post(url)
-          .connectTimeout(Timeout.ofMilliseconds(CONNECTION_TIMEOUT))
-          .responseTimeout(Timeout.ofMilliseconds(SOCKET_TIMEOUT))
           .addHeader(HTTP_HEADER_AUTHORIZATION, authString);
-      ClassicHttpResponse response = (ClassicHttpResponse) request.execute().returnResponse();
+      ClassicHttpResponse response = HttpTimeouts.BATCH.execute(request);
       int statusCode = response.getCode();
       if (statusCode == HttpStatus.SC_OK) {
         log.info("The rule regeneration was successfully requested.");
