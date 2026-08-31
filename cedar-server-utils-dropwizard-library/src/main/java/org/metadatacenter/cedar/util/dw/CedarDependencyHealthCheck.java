@@ -50,11 +50,28 @@ public class CedarDependencyHealthCheck extends HealthCheck {
     void verify() throws Exception;
   }
 
+  /**
+   * The threads every probe in this JVM runs on.
+   *
+   * <p>Shared rather than one pool per check, because nothing shuts a health check down. Dropwizard
+   * does not manage their lifecycle, so a pool owned by a check outlives the application that
+   * registered it, and a shared test JVM that re-boots the application per test class would
+   * accumulate one pool per boot until it ran out of threads — the failure {@code CedarDataServices}
+   * documents for Neo4j connection pools. One static pool is reused across every boot instead.
+   *
+   * <p>Cached rather than fixed: threads are reused between polls and idle ones are reaped, so a
+   * probe that hangs holds one thread without stopping any other check from running.
+   */
+  private static final ExecutorService PROBERS = Executors.newCachedThreadPool(runnable -> {
+    Thread thread = new Thread(runnable, "cedar-health-probe");
+    thread.setDaemon(true);
+    return thread;
+  });
+
   private final String dependencyName;
   private final Probe probe;
   private final boolean gating;
   private final long timeoutMillis;
-  private final ExecutorService prober;
 
   private Future<?> inFlight;
 
@@ -63,11 +80,6 @@ public class CedarDependencyHealthCheck extends HealthCheck {
     this.probe = probe;
     this.gating = gating;
     this.timeoutMillis = timeoutMillis;
-    this.prober = Executors.newSingleThreadExecutor(runnable -> {
-      Thread thread = new Thread(runnable, "health-probe-" + dependencyName);
-      thread.setDaemon(true);
-      return thread;
-    });
   }
 
   /** A dependency this server cannot serve requests without. Its failure makes the server unhealthy. */
@@ -103,7 +115,7 @@ public class CedarDependencyHealthCheck extends HealthCheck {
    */
   private synchronized void awaitProbe() throws Exception {
     if (inFlight == null || inFlight.isDone()) {
-      inFlight = prober.submit(() -> {
+      inFlight = PROBERS.submit(() -> {
         probe.verify();
         return null;
       });
