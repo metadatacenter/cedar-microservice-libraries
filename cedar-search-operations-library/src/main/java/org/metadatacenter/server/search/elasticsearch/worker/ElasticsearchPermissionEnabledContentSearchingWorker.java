@@ -60,8 +60,10 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   public ElasticsearchPermissionEnabledContentSearchingWorker(OpensearchConfig config, RestHighLevelClient client) {
     this.client = client;
     this.indexName = config.getIndexes().getSearchIndex().getName();
-    // A non-positive page size would leave the deep walk below advancing by nothing.
-    this.deepPageSize = Math.max(1, config.getSize());
+    // The deep walk skips a whole result window per round trip. Each skipped page re-runs the query
+    // over the entire result set and carries no documents back, so the widest page the index will
+    // serve is also the cheapest way to cross a large offset.
+    this.deepPageSize = Math.max(1, config.getMaxResultWindow());
     this.pointInTimeKeepAlive = TimeValue.timeValueMillis(config.getScrollKeepAlive());
   }
 

@@ -107,9 +107,9 @@ public class PagedSortedTypedSearchQuery extends PagedSortedTypedQuery {
    * The shallow search asks OpenSearch for the whole window in one request, and OpenSearch refuses a
    * window wider than index.max_result_window. Without this the refusal arrives as a 500 for what is a
    * client mistake, so it is caught here and the caller is pointed at the endpoint that can serve it.
+   * The window belongs to the index rather than to the paging policy, so it is passed in.
    */
-  public void validateShallowWindow() throws CedarException {
-    int maxResultWindow = getPaginationConfig().getMaxResultWindow();
+  public void validateShallowWindow(int maxResultWindow) throws CedarException {
     if ((long) getOffset() + getLimit() > maxResultWindow) {
       throw new CedarAssertionException("You should request no more than " + maxResultWindow
           + " rows in total, counting the offset. Use /search-deep to page beyond that!")

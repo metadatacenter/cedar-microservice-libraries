@@ -27,6 +27,8 @@ import static org.mockito.Mockito.when;
 
 class PagedQueryValidationTest {
 
+  private static final int RESULT_WINDOW = 1000;
+
   private PaginationConfig config;
 
   @BeforeEach
@@ -34,7 +36,6 @@ class PagedQueryValidationTest {
     config = mock(PaginationConfig.class);
     when(config.getDefaultPageSize()).thenReturn(25);
     when(config.getMaxPageSize()).thenReturn(100);
-    when(config.getMaxResultWindow()).thenReturn(1000);
     when(config.getMaxOffset()).thenReturn(5000);
   }
 
@@ -320,7 +321,7 @@ class PagedQueryValidationTest {
   void shallowSearchAcceptsAWindowTheIndexCanServe(int offset, int limit) throws Exception {
     PagedSortedTypedSearchQuery query = searchQuery().limit(Optional.of(limit)).offset(Optional.of(offset));
     query.validate();
-    query.validateShallowWindow();
+    query.validateShallowWindow(RESULT_WINDOW);
     assertEquals(offset, query.getOffset());
   }
 
@@ -336,7 +337,7 @@ class PagedQueryValidationTest {
     PagedSortedTypedSearchQuery query = searchQuery().limit(Optional.of(limit)).offset(Optional.of(offset));
     query.validate();
 
-    CedarAssertionException error = assertThrows(CedarAssertionException.class, query::validateShallowWindow);
+    CedarAssertionException error = assertThrows(CedarAssertionException.class, () -> query.validateShallowWindow(RESULT_WINDOW));
 
     assertBadRequest(error);
     assertEquals(offset, error.getErrorPack().getParameters().get("offset"));
@@ -372,7 +373,7 @@ class PagedQueryValidationTest {
     query.validate();
 
     query.validateDeepOffset();
-    assertThrows(CedarAssertionException.class, query::validateShallowWindow);
+    assertThrows(CedarAssertionException.class, () -> query.validateShallowWindow(RESULT_WINDOW));
   }
 
   private PagedSortedTypedQuery typedQuery() {

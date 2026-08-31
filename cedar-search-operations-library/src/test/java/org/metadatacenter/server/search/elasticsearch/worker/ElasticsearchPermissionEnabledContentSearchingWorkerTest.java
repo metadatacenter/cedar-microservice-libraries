@@ -62,7 +62,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
   @BeforeEach
   void setUp() throws Exception {
     OpensearchConfig config = new ObjectMapper().readValue(
-        "{\"indexes\":{\"searchIndex\":{\"name\":\"cedar-search\"}},\"size\":3,\"scrollKeepAlive\":60000}",
+        "{\"indexes\":{\"searchIndex\":{\"name\":\"cedar-search\"}},\"maxResultWindow\":3,\"scrollKeepAlive\":60000}",
         OpensearchConfig.class);
     client = mock(RestHighLevelClient.class);
     when(client.createPit(any(CreatePitRequest.class), any(RequestOptions.class)))
@@ -252,7 +252,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
 
   @Test
   void deepSearchWalksTheOffsetWithSearchAfterAndFetchesOnlyTheRequestedPage() throws Exception {
-    // Config page size is 3, so an offset of 5 is skipped as 3 rows then 2, before the page of 2 asked for.
+    // The configured window is 3, so an offset of 5 is skipped as 3 rows then 2, before the page of 2 asked for.
     List<Page> pages = deepPages(response(7, hit(0), hit(1), hit(2)), response(7, hit(3), hit(4)),
         response(7, hit(5), hit(6)));
 
