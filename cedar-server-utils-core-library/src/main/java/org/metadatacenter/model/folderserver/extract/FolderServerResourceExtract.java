@@ -203,4 +203,22 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
     return anon;
   }
 
+  /**
+   * The resource reduced to the fact that it exists: its identifier, its type, and the flag reporting
+   * that the active user cannot read it. Nothing else survives - no name, no description, no
+   * provenance identifiers and no timestamps.
+   *
+   * <p>Answers null for a resource type this hierarchy does not model, so a caller that cannot redact
+   * a resource can drop it rather than serve it whole.
+   */
+  public static FolderServerResourceExtract anonymous(FolderServerResourceExtract resource) {
+    FolderServerResourceExtract anon = FolderServerResourceExtract.forType(resource.getType());
+    if (anon == null) {
+      return null;
+    }
+    anon.setId(resource.getId());
+    anon.setActiveUserCanRead(false);
+    return anon;
+  }
+
 }
