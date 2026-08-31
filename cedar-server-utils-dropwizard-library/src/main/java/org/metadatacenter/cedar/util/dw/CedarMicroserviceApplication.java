@@ -204,6 +204,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     runApp(configuration, environment);
 
     environment.jersey().register(new CedarServerInsightReportResource(cedarConfig));
+    environment.jersey().register(new CedarHealthCheckResource(cedarConfig, environment.healthChecks()));
     environment.jersey().register(RequestIdGeneratorFilter.class);
     environment.jersey().register(ResponseLoggerFilter.class);
     environment.jersey().register(new InstanceContextInjectionFeature(environment.jersey().getResourceConfig()));
@@ -256,6 +257,8 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     environment.jersey().register(new CedarCedarExceptionMapper());
     environment.jersey().register(new CedarExceptionMapper());
 
+    registerSharedHealthChecks(environment);
+
     // Enable CORS headers
     final FilterRegistration.Dynamic cors = environment.servlets().addFilter("CORS", CrossOriginFilter.class);
 
@@ -267,6 +270,29 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     });
     // Add URL mapping
     cors.addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), true, "/*");
+  }
+
+  /**
+   * The two dependencies every CEDAR microservice opens, probed here so that no server can publish
+   * a health endpoint that stays green while they are gone.
+   *
+   * <p>They are gated differently because they fail differently. Neo4j resolves the caller of every
+   * authenticated request through {@link Authorization}, so a server that cannot reach it can serve
+   * nothing and is unhealthy. Redis carries the application log queue, whose enqueue is best-effort
+   * by design and drops events rather than failing the request that produced them, so its loss is
+   * reported and the server stays healthy. A service for which Redis carries something it cannot
+   * drop registers its own gating check on that queue.
+   *
+   * <p>Both handles already exist at this point: {@code run} initializes the Neo4j services and the
+   * logger queue before calling this. A subclass that overrides {@code setupEnvironment} must call
+   * {@code super}, as {@link CedarMicroserviceApplicationWithMongo} does when it adds the document
+   * store.
+   */
+  private void registerSharedHealthChecks(Environment environment) {
+    environment.healthChecks().register("neo4j", CedarDependencyHealthCheck.gating(
+        "Neo4j", CedarDataServices.getInstance().getProxies()::verifyConnectivity));
+    environment.healthChecks().register("app-log-queue", CedarDependencyHealthCheck.reporting(
+        "The Redis application log queue", appLoggerQueueService::verifyConnectivity));
   }
 
   static String resolveCorsAllowedOrigins(Map<String, String> environment) {
