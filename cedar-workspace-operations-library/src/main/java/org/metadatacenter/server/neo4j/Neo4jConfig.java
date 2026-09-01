@@ -16,6 +16,7 @@ public class Neo4jConfig {
   private final String uri;
   private final String userName;
   private final String userPassword;
+  private final Integer maxConnectionPoolSize;
 
 
   private Neo4jConfig(CedarConfig cedarConfig) {
@@ -31,6 +32,7 @@ public class Neo4jConfig {
     this.uri = cedarConfig.getNeo4jConfig().getBolt().getUri();
     this.userName = cedarConfig.getNeo4jConfig().getBolt().getUserName();
     this.userPassword = cedarConfig.getNeo4jConfig().getBolt().getUserPassword();
+    this.maxConnectionPoolSize = cedarConfig.getNeo4jConfig().getBolt().getMaxConnectionPoolSize();
   }
 
   public String getRootFolderPath() {
@@ -83,5 +85,10 @@ public class Neo4jConfig {
 
   public String getUserPassword() {
     return userPassword;
+  }
+
+  /** The configured Bolt pool ceiling, or null to leave the driver on its own default. */
+  public Integer getMaxConnectionPoolSize() {
+    return maxConnectionPoolSize;
   }
 }

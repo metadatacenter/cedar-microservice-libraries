@@ -7,6 +7,8 @@ import org.metadatacenter.server.neo4j.proxy.Neo4JProxyUser;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.CedarUserApiKey;
+import org.metadatacenter.server.security.model.user.CedarUserRole;
+import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
 import org.metadatacenter.server.service.UserService;
 
 import java.time.LocalDateTime;
@@ -40,8 +42,20 @@ public class UserServiceNeo4j implements UserService {
   }
 
   @Override
-  public BackendCallResult<CedarUser> updateUser(CedarUser user) {
-    return userProxy.updateUser(user);
+  public BackendCallResult<CedarUser> setHomeFolderId(CedarUserId userId, String homeFolderId) {
+    return userProxy.setHomeFolderId(userId, homeFolderId);
+  }
+
+  @Override
+  public BackendCallResult<CedarUser> replaceRolesAndPermissions(CedarUserId userId, List<CedarUserRole> roles,
+                                                                 List<String> permissions) {
+    return userProxy.replaceRolesAndPermissions(userId, roles, permissions);
+  }
+
+  @Override
+  public BackendCallResult<CedarUser> replaceUiPreferences(CedarUserId userId,
+                                                            CedarUserUIPreferences uiPreferences) {
+    return userProxy.replaceUiPreferences(userId, uiPreferences);
   }
 
   @Override

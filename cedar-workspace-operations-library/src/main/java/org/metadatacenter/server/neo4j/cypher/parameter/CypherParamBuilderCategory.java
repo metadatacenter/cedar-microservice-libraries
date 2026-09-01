@@ -11,6 +11,7 @@ import org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.List;
 
 public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
 
@@ -45,7 +46,7 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
 
   public static CypherParameters getCategoryByParentAndName(CedarCategoryId parentId, String name) {
     CypherParameters params = new CypherParameters();
-    params.put(ParameterPlaceholder.NAME, name);
+    params.put(ParameterPlaceholder.NAME, name == null ? null : name.toLowerCase());
     params.put(ParameterPlaceholder.PARENT_CATEGORY_ID, parentId);
     return params;
   }
@@ -74,9 +75,39 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
     return params;
   }
 
+  public static CypherParameters matchCategory(CedarCategoryId categoryId) {
+    CypherParameters params = new CypherParameters();
+    params.put(ParameterPlaceholder.CATEGORY_ID, categoryId);
+    return params;
+  }
+
+  public static CypherParameters replacePermissions(CedarCategoryId categoryId, CedarUserId ownerId,
+                                                    List<String> userIds, List<String> attachUserIds,
+                                                    List<String> writeUserIds, List<String> groupIds,
+                                                    List<String> attachGroupIds, List<String> writeGroupIds,
+                                                    long currentRevision) {
+    CypherParameters params = matchCategory(categoryId);
+    params.put(ParameterPlaceholder.OWNER_ID, ownerId);
+    params.put(ParameterPlaceholder.USER_ID_LIST, userIds);
+    params.put(ParameterPlaceholder.ATTACH_USER_ID_LIST, attachUserIds);
+    params.put(ParameterPlaceholder.WRITE_USER_ID_LIST, writeUserIds);
+    params.put(ParameterPlaceholder.GROUP_ID_LIST, groupIds);
+    params.put(ParameterPlaceholder.ATTACH_GROUP_ID_LIST, attachGroupIds);
+    params.put(ParameterPlaceholder.WRITE_GROUP_ID_LIST, writeGroupIds);
+    params.put(ParameterPlaceholder.CURRENT_REVISION, currentRevision);
+    return params;
+  }
+
   public static CypherParameters categoryIdAndArtifactId(CedarCategoryId categoryId, CedarArtifactId artifactId) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.CATEGORY_ID, categoryId);
+    params.put(ParameterPlaceholder.ARTIFACT_ID, artifactId);
+    return params;
+  }
+
+  public static CypherParameters categoryIdsAndArtifactId(List<String> categoryIds, CedarArtifactId artifactId) {
+    CypherParameters params = new CypherParameters();
+    params.put(ParameterPlaceholder.CATEGORY_ID_LIST, categoryIds);
     params.put(ParameterPlaceholder.ARTIFACT_ID, artifactId);
     return params;
   }

@@ -57,6 +57,12 @@ public class TemplateFieldServiceMongoDB extends GenericTemplateServiceMongoDB<S
   }
 
   @Override
+  public void deleteTemplateField(String templateFieldId, long expectedRevision)
+      throws ArtifactServerResourceNotFoundException, IOException {
+    templateFieldDao.delete(templateFieldId, expectedRevision);
+  }
+
+  @Override
   public void deleteAllTemplateFields() {
     templateFieldDao.deleteAll();
   }

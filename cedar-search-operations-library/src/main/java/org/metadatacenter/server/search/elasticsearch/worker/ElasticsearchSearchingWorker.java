@@ -3,6 +3,8 @@ package org.metadatacenter.server.search.elasticsearch.worker;
 import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.exception.CedarProcessingException;
+import org.opensearch.OpenSearchException;
+import org.opensearch.action.search.ClearScrollRequest;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchScrollRequest;
@@ -35,7 +37,7 @@ public class ElasticsearchSearchingWorker {
     this.config = config;
     this.client = client;
     this.indexName = config.getIndexes().getSearchIndex().getName();
-    this.keepAlive = new TimeValue(config.getScrollKeepAlive());
+    this.keepAlive = new TimeValue(config.getSearchContextKeepAlive());
   }
 
   // Retrieve all values for a fieldName. Dot notation is allowed (e.g. info.@id)
@@ -56,26 +58,49 @@ public class ElasticsearchSearchingWorker {
         .source(searchSourceBuilder)
         .scroll(keepAlive);
 
+    // The scroll id is held across the loop so the context can be released whichever way the read ends.
+    // OpenSearch may answer a page with a new id, so the release targets the one seen last.
+    String scrollId = null;
     try {
       SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT);
 
-      do {
-        for (SearchHit hit : response.getHits().getHits()) {
+      while (true) {
+        scrollId = response.getScrollId();
+        SearchHit[] hits = response.getHits().getHits();
+        if (hits.length == 0) {
+          break;
+        }
+        for (SearchHit hit : hits) {
           String fieldValue = getStringValue(hit.getSourceAsMap(), fieldName);
           if (fieldValue != null) {
             fieldValues.add(fieldValue);
           }
         }
 
-        String scrollId = response.getScrollId();
         SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId).scroll(keepAlive);
         response = client.scroll(scrollRequest, RequestOptions.DEFAULT);
-      } while (response.getHits().getHits().length != 0);
+      }
     } catch (IOException e) {
       throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
+    } finally {
+      clearScroll(scrollId);
     }
 
     return fieldValues;
+  }
+
+  private void clearScroll(String scrollId) {
+    if (scrollId == null) {
+      return;
+    }
+    ClearScrollRequest request = new ClearScrollRequest();
+    request.addScrollId(scrollId);
+    try {
+      client.clearScroll(request, RequestOptions.DEFAULT);
+    } catch (IOException | OpenSearchException e) {
+      // The context expires on its own, and a failure here must not replace the outcome of the read.
+      log.warn("Unable to clear the OpenSearch scroll context", e);
+    }
   }
 
   private String getStringValue(Map<String, Object> source, String fieldName) {

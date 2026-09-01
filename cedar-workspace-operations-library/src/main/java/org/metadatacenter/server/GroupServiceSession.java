@@ -16,17 +16,34 @@ public interface GroupServiceSession {
 
   FolderServerGroup findGroupById(CedarGroupId groupId);
 
+  VersionedResource<FolderServerGroup> findVersionedGroupById(CedarGroupId groupId);
+
   FolderServerGroup findGroupByName(String groupName);
 
   FolderServerGroup createGroup(String groupName, String groupDescription);
 
   FolderServerGroup updateGroupById(CedarGroupId groupId, Map<NodeProperty, String> updateFields);
 
+  VersionedResource<FolderServerGroup> updateGroupById(CedarGroupId groupId,
+                                                        Map<NodeProperty, String> updateFields,
+                                                        RevisionPrecondition precondition);
+
   boolean deleteGroupById(CedarGroupId groupId);
+
+  boolean deleteGroupById(CedarGroupId groupId, RevisionPrecondition precondition);
 
   CedarGroupUsers findGroupUsers(CedarGroupId groupId);
 
-  BackendCallResult updateGroupUsers(CedarGroupId groupId, CedarGroupUsersRequest request);
+  VersionedGroupUsers findVersionedGroupUsers(CedarGroupId groupId);
+
+  BackendCallResult<VersionedGroupUsers> updateGroupUsers(CedarGroupId groupId, CedarGroupUsersRequest request,
+                                                          RevisionPrecondition precondition);
+
+  /** Non-HTTP callers with explicit last-arrival intent may opt into wildcard replacement. */
+  default BackendCallResult<VersionedGroupUsers> updateGroupUsers(CedarGroupId groupId,
+                                                                  CedarGroupUsersRequest request) {
+    return updateGroupUsers(groupId, request, RevisionPrecondition.any());
+  }
 
   boolean userAdministersGroup(CedarGroupId groupId);
 

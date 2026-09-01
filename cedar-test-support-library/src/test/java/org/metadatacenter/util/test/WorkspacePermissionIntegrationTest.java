@@ -15,7 +15,12 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.GroupServiceSession;
+import org.metadatacenter.server.RevisionConflictException;
+import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
+import org.metadatacenter.server.VersionedGroupUsers;
+import org.metadatacenter.server.VersionedResourcePermissions;
+import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarGroupUserRequest;
@@ -230,6 +235,125 @@ public class WorkspacePermissionIntegrationTest {
         "Deleting the emptied parent should succeed");
     Assertions.assertNull(user1Folders.findFolderById(parent.getResourceId()),
         "The deleted parent should no longer be found by id");
+  }
+
+  @Test
+  public void deletingANonEmptyFolderPreservesItsWholeSubtree() {
+    FolderServiceSession user1Folders = foldersOf(user1Context);
+    FolderServerFolder parent = createFolderUnderUser1Home("Protected Nonempty Parent");
+    FolderServerFolder child = createFolderUnder(parent.getResourceId(), "Protected Child");
+
+    Assertions.assertFalse(user1Folders.deleteFolderById(parent.getResourceId()),
+        "Deleting a non-empty folder should be refused atomically");
+    Assertions.assertNotNull(user1Folders.findFolderById(parent.getResourceId()),
+        "The refused deletion must preserve the parent");
+    Assertions.assertNotNull(user1Folders.findFolderById(child.getResourceId()),
+        "The refused deletion must preserve the child");
+    Assertions.assertNotNull(user1Folders.findFilesystemResourceByParentFolderIdAndName(
+            parent.getResourceId(), child.getName()),
+        "The refused deletion must preserve the parent-child relationship");
+  }
+
+  @Test
+  public void staleFolderDeletePreservesANewerRename() {
+    FolderServiceSession folders = foldersOf(user1Context);
+    FolderServerFolder folder = createFolderUnderUser1Home("Versioned Delete Folder");
+    VersionedResource<FolderServerFolder> initial = folders.findVersionedFolderById(folder.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+
+    Map<NodeProperty, String> update = new HashMap<>();
+    update.put(NodeProperty.NAME, "Versioned Delete Folder Renamed");
+    update.put(NodeProperty.NAME_LOWER, "versioned delete folder renamed");
+    folders.updateFolderById(folder.getResourceId(), update);
+
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> folders.deleteFolderById(folder.getResourceId(), RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+    Assertions.assertEquals("Versioned Delete Folder Renamed",
+        folders.findFolderById(folder.getResourceId()).getName());
+    Assertions.assertTrue(folders.deleteFolderById(folder.getResourceId(), RevisionPrecondition.any()));
+  }
+
+  @Test
+  public void staleGroupDeletePreservesANewerEdit() {
+    GroupServiceSession groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
+    FolderServerGroup group = groups.createGroup("versioned-delete-group", "before edit");
+    VersionedResource<FolderServerGroup> initial = groups.findVersionedGroupById(group.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+
+    groups.updateGroupById(group.getResourceId(), Map.of(NodeProperty.DESCRIPTION, "after edit"));
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> groups.deleteGroupById(group.getResourceId(), RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+    Assertions.assertEquals("after edit", groups.findGroupById(group.getResourceId()).getDescription());
+    Assertions.assertTrue(groups.deleteGroupById(group.getResourceId(), RevisionPrecondition.any()));
+  }
+
+  @Test
+  public void staleGroupMembershipReplacementIsRejectedWithoutChangingTheAggregate() {
+    GroupServiceSession groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
+    FolderServerGroup group = groups.createGroup("versioned-membership-integration-group",
+        "Group for the membership revision test");
+    Assertions.assertNotNull(group);
+
+    VersionedGroupUsers initial = groups.findVersionedGroupUsers(group.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+    Assertions.assertEquals(1, initial.content().getUsers().size());
+
+    CedarGroupUsersRequest twoUsers = new CedarGroupUsersRequest();
+    twoUsers.getUsers().add(new CedarGroupUserRequest(
+        new ResourcePermissionUser(user1.getId()), true, true));
+    twoUsers.getUsers().add(new CedarGroupUserRequest(
+        new ResourcePermissionUser(user2.getId()), false, true));
+    BackendCallResult<VersionedGroupUsers> first = groups.updateGroupUsers(
+        group.getResourceId(), twoUsers, RevisionPrecondition.exact(initial.revision()));
+    Assertions.assertFalse(first.isError(), () -> first.getFirstErrorMessage());
+    Assertions.assertEquals(2L, first.getPayload().revision());
+    Assertions.assertEquals(2, first.getPayload().content().getUsers().size());
+
+    CedarGroupUsersRequest staleReplacement = new CedarGroupUsersRequest();
+    staleReplacement.getUsers().add(new CedarGroupUserRequest(
+        new ResourcePermissionUser(user1.getId()), true, true));
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> groups.updateGroupUsers(group.getResourceId(), staleReplacement,
+            RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+
+    VersionedGroupUsers after = groups.findVersionedGroupUsers(group.getResourceId());
+    Assertions.assertEquals(2L, after.revision());
+    Assertions.assertEquals(2, after.content().getUsers().size(),
+        "The stale replacement must not remove the second member");
+  }
+
+  @Test
+  public void staleResourcePermissionReplacementIsRejectedWithoutChangingTheAggregate() {
+    FolderServerFolder folder = createFolderUnderUser1Home("Versioned ACL Folder");
+    ResourcePermissionServiceSession permissions = permissionsOf(user1Context);
+
+    VersionedResourcePermissions initial = permissions.getVersionedResourcePermissions(folder.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+    Assertions.assertEquals(user1.getId(), initial.content().getOwner().getId());
+
+    ResourcePermissionsRequest shared = requestOwnedByUser1();
+    shared.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
+        new ResourcePermissionUser(user2.getId()), FilesystemResourcePermission.READ));
+    BackendCallResult<VersionedResourcePermissions> first = permissions.updateResourcePermissions(
+        folder.getResourceId(), shared, RevisionPrecondition.exact(initial.revision()));
+    Assertions.assertFalse(first.isError(), () -> first.getFirstErrorMessage());
+    Assertions.assertEquals(2L, first.getPayload().revision());
+    Assertions.assertEquals(1, first.getPayload().content().getUserPermissions().size());
+
+    ResourcePermissionsRequest staleReplacement = requestOwnedByUser1();
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> permissions.updateResourcePermissions(folder.getResourceId(), staleReplacement,
+            RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+
+    VersionedResourcePermissions after = permissions.getVersionedResourcePermissions(folder.getResourceId());
+    Assertions.assertEquals(2L, after.revision());
+    Assertions.assertEquals(1, after.content().getUserPermissions().size(),
+        "The stale replacement must not remove the direct user grant");
+    Assertions.assertEquals(user2.getId(), after.content().getUserPermissions().get(0).getUser().getId());
   }
 
 }

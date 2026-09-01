@@ -10,9 +10,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,6 +54,21 @@ class SearchPermissionEnqueueServiceTest {
 
     assertEquals(0, outbox.count(), "restart must not strand a pre-existing outbox event");
     verify(recoveredQueue).enqueueEvent(any());
+  }
+
+  @Test
+  void aBacklogReadFailureDoesNotFailTheMutationThatAppendedANewDurableEvent() {
+    PermissionQueueService queue = mock(PermissionQueueService.class);
+    SearchPermissionOutbox outbox = mock(SearchPermissionOutbox.class);
+    when(outbox.append(any())).thenReturn("new-event");
+    when(outbox.pending(anyInt())).thenThrow(new IllegalArgumentException("malformed older event"));
+    SearchPermissionEnqueueService service = new SearchPermissionEnqueueService(queue, outbox);
+
+    assertDoesNotThrow(() -> service.resourceMoved("resource-1"));
+
+    verify(outbox).append(any());
+    verify(outbox, never()).remove(any());
+    verify(queue, never()).enqueueEvent(any());
   }
 
   private static final class InMemoryOutbox implements SearchPermissionOutbox {

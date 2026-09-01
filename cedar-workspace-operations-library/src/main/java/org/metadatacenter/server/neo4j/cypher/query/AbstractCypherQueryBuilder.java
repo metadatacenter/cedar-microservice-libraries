@@ -87,6 +87,7 @@ public abstract class AbstractCypherQueryBuilder {
     sb.append(buildCreateAssignment(NodeProperty.IS_OPEN)).append(",");
 
     if (newNode instanceof FolderServerFolder newFolder) {
+      sb.append(buildCreateAssignment(NodeProperty.PARENT_FOLDER_ID)).append(",");
       if (newFolder.isRoot()) {
         sb.append(buildCreateAssignment(NodeProperty.IS_ROOT)).append(",");
       }
@@ -141,7 +142,8 @@ public abstract class AbstractCypherQueryBuilder {
     sb.append(NodeProperty.NODE_SORT_ORDER).append(":")
         .append(label.isFolder() ? ORDER_FOLDER : ORDER_NON_FOLDER).append(",");
 
-    sb.append(buildCreateAssignment(NodeProperty.RESOURCE_TYPE));
+    sb.append(buildCreateAssignment(NodeProperty.RESOURCE_TYPE)).append(",");
+    sb.append("_cedarRevision:1");
     sb.append("})");
     return sb.toString();
   }

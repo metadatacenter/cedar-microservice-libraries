@@ -28,6 +28,7 @@ public abstract class AbstractCypherParamBuilder {
     long nowTS = now.getEpochSecond();
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.PARENT_ID, parentFolderId);
+    params.put(NodeProperty.PARENT_FOLDER_ID, parentFolderId);
     params.put(ParameterPlaceholder.USER_ID, newResource.getOwnedBy());
 
     params.put(NodeProperty.ID, newResource.getId());

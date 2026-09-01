@@ -21,10 +21,13 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class PagedQueryValidationTest {
+
+  private static final int RESULT_WINDOW = 1000;
 
   private PaginationConfig config;
 
@@ -33,6 +36,7 @@ class PagedQueryValidationTest {
     config = mock(PaginationConfig.class);
     when(config.getDefaultPageSize()).thenReturn(25);
     when(config.getMaxPageSize()).thenReturn(100);
+    when(config.getMaxOffset()).thenReturn(5000);
   }
 
   @Test
@@ -306,6 +310,70 @@ class PagedQueryValidationTest {
     query.validate();
     assertEquals(version, query.getVersionAsString());
     assertEquals(publication, query.getPublicationStatusAsString());
+  }
+
+  static Stream<Arguments> servableWindows() {
+    return Stream.of(Arguments.of(0, 1), Arguments.of(0, 100), Arguments.of(900, 100), Arguments.of(999, 1));
+  }
+
+  @ParameterizedTest
+  @MethodSource("servableWindows")
+  void shallowSearchAcceptsAWindowTheIndexCanServe(int offset, int limit) throws Exception {
+    PagedSortedTypedSearchQuery query = searchQuery().limit(Optional.of(limit)).offset(Optional.of(offset));
+    query.validate();
+    query.validateShallowWindow(RESULT_WINDOW);
+    assertEquals(offset, query.getOffset());
+  }
+
+  static Stream<Arguments> unservableWindows() {
+    return Stream.of(Arguments.of(1000, 1), Arguments.of(901, 100), Arguments.of(Integer.MAX_VALUE, 100));
+  }
+
+  @ParameterizedTest
+  @MethodSource("unservableWindows")
+  void shallowSearchRefusesAWindowWiderThanTheIndexResultWindow(int offset, int limit) throws Exception {
+    // OpenSearch rejects from+size past index.max_result_window, which reaches the caller as a 500
+    // unless it is refused here. The message has to send them to the call that can serve it.
+    PagedSortedTypedSearchQuery query = searchQuery().limit(Optional.of(limit)).offset(Optional.of(offset));
+    query.validate();
+
+    CedarAssertionException error = assertThrows(CedarAssertionException.class, () -> query.validateShallowWindow(RESULT_WINDOW));
+
+    assertBadRequest(error);
+    assertEquals(offset, error.getErrorPack().getParameters().get("offset"));
+    assertTrue(error.getMessage().contains("/search-deep"), error.getMessage());
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, 1000, 4999, 5000})
+  void deepSearchAcceptsAnyOffsetThroughTheConfiguredMaximum(int offset) throws Exception {
+    PagedSortedTypedSearchQuery query = searchQuery().offset(Optional.of(offset));
+    query.validate();
+    query.validateDeepOffset();
+    assertEquals(offset, query.getOffset());
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {5001, 250_000, Integer.MAX_VALUE})
+  void deepSearchRefusesAnOffsetPastTheWalkItWillPayFor(int offset) throws Exception {
+    PagedSortedTypedSearchQuery query = searchQuery().offset(Optional.of(offset));
+    query.validate();
+
+    CedarAssertionException error = assertThrows(CedarAssertionException.class, query::validateDeepOffset);
+
+    assertBadRequest(error);
+    assertEquals(offset, error.getErrorPack().getParameters().get("offset"));
+    assertTrue(error.getMessage().contains("5000"), error.getMessage());
+  }
+
+  @Test
+  void theDeepMaximumIsTheOnlyOffsetBoundTheDeepCallApplies() throws Exception {
+    // The window that stops the shallow call is exactly what the deep one exists to page past.
+    PagedSortedTypedSearchQuery query = searchQuery().limit(Optional.of(100)).offset(Optional.of(4000));
+    query.validate();
+
+    query.validateDeepOffset();
+    assertThrows(CedarAssertionException.class, () -> query.validateShallowWindow(RESULT_WINDOW));
   }
 
   private PagedSortedTypedQuery typedQuery() {

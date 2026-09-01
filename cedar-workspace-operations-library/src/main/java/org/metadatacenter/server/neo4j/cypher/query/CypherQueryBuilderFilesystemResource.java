@@ -35,7 +35,7 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
         " MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
         " MATCH (child:<LABEL.FILESYSTEM_RESOURCE>)" +
         " MATCH (parent)-[:<REL.CONTAINS>]->(child)" +
-        " WHERE child.<PROP.NAME> = {<PH.NAME>}" +
+        " WHERE child.<PROP.NAME_LOWER> = {<PH.NAME>}" +
         " RETURN child";
   }
 

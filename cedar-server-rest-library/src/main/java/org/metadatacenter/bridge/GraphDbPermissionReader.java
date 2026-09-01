@@ -72,18 +72,20 @@ public class GraphDbPermissionReader {
             .parameter("id", folderId);
       }
 
-      folderSession.addPathAndParentId(folder);
-
-      folder.setPathInfo(PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, folder));
-
-      FolderServerFolderCurrentUserReport folderReport =
-          (FolderServerFolderCurrentUserReport) FolderServerResourceCurrentUserReport.fromResource(folder);
-
-      decorateFolderWithCurrentUserPermissions(permissionSession, folderReport);
-
-      return folderReport;
+      return getFolderCurrentUserReport(context, folderSession, permissionSession, folder);
     }
     return null;
+  }
+
+  public static FolderServerFolderCurrentUserReport getFolderCurrentUserReport(
+      CedarRequestContext context, FolderServiceSession folderSession,
+      ResourcePermissionServiceSession permissionSession, FolderServerFolder folder) throws CedarException {
+    folderSession.addPathAndParentId(folder);
+    folder.setPathInfo(PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, folder));
+    FolderServerFolderCurrentUserReport folderReport =
+        (FolderServerFolderCurrentUserReport) FolderServerResourceCurrentUserReport.fromResource(folder);
+    decorateFolderWithCurrentUserPermissions(permissionSession, folderReport);
+    return folderReport;
   }
 
   private static void decorateFolderWithCurrentUserPermissions(ResourcePermissionServiceSession permissionSession,

@@ -96,7 +96,12 @@ public class ApplicationRequestLog {
   @Column(length = 350)
   private String path;
 
-  @Column(length = 350)
+  // A query string has no length a caller is held to, and this holds the whole parameter map as
+  // pretty-printed JSON, so any fixed width only moves the cliff. A search carrying several filters
+  // passed 350 and MySQL refused the insert, which dead-lettered the app-log message rather than
+  // losing one field of it. Sized like errorPack below, for the same reason.
+  @Lob
+  @Column(length = Length.LONG32)
   private String queryParameters;
 
   // Hibernate 6 sizes a @Lob String from its column length, and the default 255 makes MySQL

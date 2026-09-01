@@ -19,6 +19,8 @@ import org.metadatacenter.server.result.BackendCallError;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.CedarUserApiKey;
+import org.metadatacenter.server.security.model.user.CedarUserRole;
+import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
 import org.metadatacenter.server.user.UserServiceUtil;
 import org.metadatacenter.util.json.JsonMapper;
 
@@ -65,28 +67,43 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
     return executeReadGetOne(q, FolderServerUser.class);
   }
 
-  public BackendCallResult<CedarUser> updateUser(CedarUser user) {
-    BackendCallResult<CedarUser> result = new BackendCallResult<>();
-    String cypher = CypherQueryBuilderUser.updateUser();
+  public BackendCallResult<CedarUser> setHomeFolderId(CedarUserId userId, String homeFolderId) {
+    CypherQuery query = new CypherQueryWithParameters(CypherQueryBuilderUser.setUserHomeFolderId(),
+        CypherParamBuilderUser.setUserHomeFolderId(userId, homeFolderId));
+    return executeUserPropertyWrite(userId, query);
+  }
+
+  public BackendCallResult<CedarUser> replaceRolesAndPermissions(CedarUserId userId, List<CedarUserRole> roles,
+                                                                 List<String> permissions) {
+    CypherQuery query = new CypherQueryWithParameters(CypherQueryBuilderUser.replaceUserRolesAndPermissions(),
+        CypherParamBuilderUser.replaceUserRolesAndPermissions(userId, roles, permissions));
+    return executeUserPropertyWrite(userId, query);
+  }
+
+  public BackendCallResult<CedarUser> replaceUiPreferences(CedarUserId userId,
+                                                            CedarUserUIPreferences uiPreferences) {
     CypherParameters params;
     try {
-      params = CypherParamBuilderUser.updateUser(user, cedarConfig);
+      params = CypherParamBuilderUser.updateUserProfile(userId, uiPreferences);
     } catch (CedarProcessingException e) {
+      BackendCallResult<CedarUser> result = new BackendCallResult<>();
       result.addError(CedarErrorType.SERVER_ERROR)
           .sourceException(e)
-          .message("There was an error while updating the user")
-          .parameter("id", user.getId());
+          .message("There was an error while updating the user preferences")
+          .parameter("id", userId.getId());
       return result;
     }
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    FolderServerUser updatedUser = executeWriteGetOne(q, FolderServerUser.class);
-    // The update matches on id and returns nothing when no such node exists, which happens if the
-    // user is deleted between the request's own lookup and this write. Reported rather than
-    // dereferenced: buildUser() on the null threw, turning the race into a 500.
+    CypherQuery query = new CypherQueryWithParameters(CypherQueryBuilderUser.updateUserProfile(), params);
+    return executeUserPropertyWrite(userId, query);
+  }
+
+  private BackendCallResult<CedarUser> executeUserPropertyWrite(CedarUserId userId, CypherQuery query) {
+    BackendCallResult<CedarUser> result = new BackendCallResult<>();
+    FolderServerUser updatedUser = executeWriteGetOne(query, FolderServerUser.class);
     if (updatedUser == null) {
       result.addError(CedarErrorType.NOT_FOUND)
           .message("The user can not be found by id")
-          .parameter("id", user.getId());
+          .parameter("id", userId.getId());
       return result;
     }
     result.setPayload(updatedUser.buildUser());
@@ -102,48 +119,70 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
 
   public BackendCallResult<CedarUser> patchUser(CedarUserId userId, JsonNode modifications) {
     BackendCallResult<CedarUser> result = new BackendCallResult<>();
-    FolderServerUser oldUser = findUserById(userId);
-    if (oldUser == null) {
-      result.addError(CedarErrorType.NOT_FOUND)
-          .message("The user can not be found by id")
-          .parameter("id", userId.getId());
-      return result;
+    Map<String, Object> modificationsMap = JsonMapper.MAPPER.convertValue(modifications, Map.class);
+    ProfilePatchOutcome outcome = executeInWriteTransaction(tx -> {
+      CypherQuery lockAndRead = new CypherQueryWithParameters(
+          CypherQueryBuilderUser.lockAndReadUserProfile(), CypherParamBuilderUser.getUserById(userId));
+      FolderServerUser current = runInTransactionGetOne(tx, lockAndRead, FolderServerUser.class);
+      if (current == null) {
+        return ProfilePatchOutcome.userNotFound();
+      }
+
+      CedarUser modifiedUser = UserServiceUtil.validateModifications(current.buildUser(), modificationsMap);
+      if (modifiedUser == null) {
+        return ProfilePatchOutcome.invalid();
+      }
+
+      CypherQuery write;
+      try {
+        write = new CypherQueryWithParameters(CypherQueryBuilderUser.updateUserProfile(),
+            CypherParamBuilderUser.updateUserProfile(userId, modifiedUser.getUiPreferences()));
+      } catch (CedarProcessingException e) {
+        return ProfilePatchOutcome.serverError(e);
+      }
+      return ProfilePatchOutcome.written(runInTransactionGetOne(tx, write, FolderServerUser.class));
+    }, "updating a user profile");
+
+    return outcome.into(result, userId, modifications);
+  }
+
+  private record ProfilePatchOutcome(FolderServerUser written, CedarErrorType errorType, String message,
+                                     Exception sourceException) {
+
+    static ProfilePatchOutcome written(FolderServerUser user) {
+      return new ProfilePatchOutcome(user, null, null, null);
     }
 
-    CedarUser oldCedarUser = oldUser.buildUser();
+    static ProfilePatchOutcome userNotFound() {
+      return new ProfilePatchOutcome(null, CedarErrorType.NOT_FOUND, "The user can not be found by id", null);
+    }
 
-    Map<String, Object> modificationsMap = JsonMapper.MAPPER.convertValue(modifications, Map.class);
-    CedarUser modifiedCedarUser = UserServiceUtil.validateModifications(oldCedarUser, modificationsMap);
+    static ProfilePatchOutcome invalid() {
+      return new ProfilePatchOutcome(null, CedarErrorType.INVALID_ARGUMENT,
+          "The requested modifications are invalid", null);
+    }
 
-    if (modifiedCedarUser != null) {
-      String cypher = CypherQueryBuilderUser.updateUser();
-      CypherParameters params;
-      try {
-        params = CypherParamBuilderUser.updateUser(modifiedCedarUser, cedarConfig);
-      } catch (CedarProcessingException e) {
-        result.addError(CedarErrorType.SERVER_ERROR)
-            .sourceException(e)
-            .message("There was an error while updating the user")
-            .parameter("id", oldCedarUser.getId());
+    static ProfilePatchOutcome serverError(Exception e) {
+      return new ProfilePatchOutcome(null, CedarErrorType.SERVER_ERROR,
+          "There was an error while updating the user profile", e);
+    }
+
+    BackendCallResult<CedarUser> into(BackendCallResult<CedarUser> result, CedarUserId userId,
+                                      JsonNode modifications) {
+      if (errorType != null) {
+        BackendCallError error = result.addError(errorType).message(message).parameter("id", userId.getId());
+        if (errorType == CedarErrorType.INVALID_ARGUMENT) {
+          error.parameter("modifications", modifications);
+        }
+        if (sourceException != null) {
+          error.sourceException(sourceException);
+        }
         return result;
       }
-      CypherQuery q = new CypherQueryWithParameters(cypher, params);
-      FolderServerUser updatedUser = executeWriteGetOne(q, FolderServerUser.class);
-      // As in updateUser: the node found at the top of this method can be gone by the time the write
-      // runs, and the write then returns nothing.
-      if (updatedUser == null) {
-        result.addError(CedarErrorType.NOT_FOUND)
-            .message("The user can not be found by id")
-            .parameter("id", oldCedarUser.getId());
-        return result;
+      if (written == null) {
+        return userNotFound().into(result, userId, modifications);
       }
-      result.setPayload(updatedUser.buildUser());
-      return result;
-    } else {
-      result.addError(CedarErrorType.INVALID_ARGUMENT)
-          .message("The requested modifications are invalid")
-          .parameter("id", userId.getId())
-          .parameter("modifications", modifications);
+      result.setPayload(written.buildUser());
       return result;
     }
   }

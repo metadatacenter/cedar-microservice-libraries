@@ -45,6 +45,10 @@ public class PagedQuery {
     return offset;
   }
 
+  protected PaginationConfig getPaginationConfig() {
+    return config;
+  }
+
   protected void validateLimit() throws CedarException {
     int limitDefault = config.getDefaultPageSize();
     int limitMax = config.getMaxPageSize();

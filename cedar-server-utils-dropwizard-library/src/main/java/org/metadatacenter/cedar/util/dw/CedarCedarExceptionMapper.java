@@ -11,6 +11,9 @@ import org.metadatacenter.server.logging.model.AppLogType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.metadatacenter.constant.HttpConstants;
+
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
@@ -37,15 +40,18 @@ public class CedarCedarExceptionMapper extends AbstractExceptionMapper implement
         .param(AppLogParam.EXCEPTION, errorPack)
         .enqueue();
 
-    if (exception.isShowFullStackTrace()) {
-      log.warn(":CCEM:full:", exception);
-    } else {
-      log.warn(":CCEM:msg :" + exception.getMessage());
-    }
-    return Response.status(errorPack.getStatus().getStatusCode())
+    int statusCode = errorPack.getStatus().getStatusCode();
+    logMappedException(log, ":CCEM:", exception, statusCode, exception.isShowFullStackTrace());
+    Response.ResponseBuilder responseBuilder = Response.status(statusCode)
         .entity(clientSafeCopy(errorPack))
-        .type(MediaType.APPLICATION_JSON)
-        .build();
+        .type(MediaType.APPLICATION_JSON);
+    if (statusCode == Response.Status.UNAUTHORIZED.getStatusCode()) {
+      // This mapper builds its own response rather than going through CedarResponse, and it is the
+      // path an unauthenticated request takes: buildRequestContext throws, and the CedarException
+      // arrives here. Without this the most common 401 in the system carries no challenge.
+      responseBuilder.header(HttpHeaders.WWW_AUTHENTICATE, HttpConstants.HTTP_AUTH_CHALLENGE);
+    }
+    return responseBuilder.build();
   }
 
 }

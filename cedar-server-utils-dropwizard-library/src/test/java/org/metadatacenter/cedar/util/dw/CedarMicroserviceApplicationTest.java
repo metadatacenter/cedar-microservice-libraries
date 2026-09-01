@@ -1,13 +1,15 @@
 package org.metadatacenter.cedar.util.dw;
 
 import org.junit.jupiter.api.Test;
+import org.eclipse.jetty.http.UriCompliance;
 
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.eclipse.jetty.servlets.CrossOriginFilter.ALLOWED_ORIGINS_PARAM;
-import static org.eclipse.jetty.servlets.CrossOriginFilter.ALLOW_CREDENTIALS_PARAM;
+import static org.eclipse.jetty.ee10.servlets.CrossOriginFilter.ALLOWED_ORIGINS_PARAM;
+import static org.eclipse.jetty.ee10.servlets.CrossOriginFilter.ALLOW_CREDENTIALS_PARAM;
 
 class CedarMicroserviceApplicationTest {
 
@@ -54,5 +56,25 @@ class CedarMicroserviceApplicationTest {
   @Test
   void exposesArtifactRevisionHeadersToBrowserClients() {
     assertTrue(CedarMicroserviceApplication.HTTP_EXPOSED_HEADERS.contains("ETag"));
+  }
+
+  @Test
+  void allowsOnlyTheEncodedPathSeparatorsUsedInsideArtifactIris() {
+    UriCompliance compliance = CedarMicroserviceApplication.cedarUriCompliance();
+
+    assertTrue(compliance.allows(UriCompliance.Violation.AMBIGUOUS_PATH_SEPARATOR));
+    assertEquals(1, compliance.getAllowed().size());
+  }
+
+  @Test
+  void findsAnApiSpecThatIsOnTheClasspath() {
+    // src/test/resources holds a spec at the location a service that ships one would put it, so this
+    // exercises the production constant rather than a path invented for the test.
+    assertTrue(CedarMicroserviceApplication.shipsApiSpec());
+  }
+
+  @Test
+  void findsNoApiSpecWhereTheServiceShipsNone() {
+    assertFalse(CedarMicroserviceApplication.shipsApiSpec("/assets/swagger-api/absent.json"));
   }
 }

@@ -10,6 +10,7 @@ import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 import static org.metadatacenter.model.ModelPaths.CREATED_BY;
@@ -58,6 +59,17 @@ public class CypherParamBuilderGroup extends AbstractCypherParamBuilder {
 
   public static CypherParameters matchId(CedarGroupId groupId) {
     return matchResourceByIdentity(groupId);
+  }
+
+  public static CypherParameters replaceGroupUsers(CedarGroupId groupId, List<String> userIds,
+                                                    List<String> administratorIds, List<String> memberIds,
+                                                    long currentRevision) {
+    CypherParameters params = matchId(groupId);
+    params.put(ParameterPlaceholder.USER_ID_LIST, userIds);
+    params.put(ParameterPlaceholder.ADMINISTRATOR_ID_LIST, administratorIds);
+    params.put(ParameterPlaceholder.MEMBER_ID_LIST, memberIds);
+    params.put(ParameterPlaceholder.CURRENT_REVISION, currentRevision);
+    return params;
   }
 
   public static void tweakGroupProperties(JsonNode node, CypherParameters params) {

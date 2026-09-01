@@ -15,6 +15,7 @@ import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.model.folderserver.result.ResultTuple;
 import org.metadatacenter.server.logging.AppLogger;
+import org.metadatacenter.server.SiblingNameConflictException;
 import org.metadatacenter.server.logging.filter.LoggingContext;
 import org.metadatacenter.server.logging.filter.ThreadLocalRequestIdHolder;
 import org.metadatacenter.server.logging.model.AppLogMessage;
@@ -24,6 +25,7 @@ import org.metadatacenter.server.logging.model.AppLogType;
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryLiteral;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
+import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.log.CypherQueryLog;
 import org.metadatacenter.server.neo4j.util.Neo4JUtil;
 import org.metadatacenter.util.json.JsonMapper;
@@ -38,21 +40,24 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 public abstract class AbstractNeo4JProxy {
 
-  // The shared outage override deliberately makes pool acquisition and retries fail quickly. A
-  // healthy embedded Bolt server can still need more than one second for its first handshake on a
-  // constrained CI runner, so connection establishment needs independent headroom.
-  static final long MIN_TEST_CONNECTION_TIMEOUT_MILLIS = 5_000;
-
   protected final Neo4JProxies proxies;
   protected final CedarConfig cedarConfig;
 
+  /**
+   * The driver the proxy set owns, shared by every proxy in it. A Neo4j driver is a connection pool
+   * and its Netty event loops, and is designed to be held once per database and used from every
+   * thread; one per proxy meant twelve pools per service, each warming its own connections while
+   * none benefited from another's.
+   */
   protected final Driver driver;
 
   protected static final Logger log = LoggerFactory.getLogger(AbstractNeo4JProxy.class);
@@ -60,45 +65,46 @@ public abstract class AbstractNeo4JProxy {
   protected AbstractNeo4JProxy(Neo4JProxies proxies, CedarConfig cedarConfig) {
     this.proxies = proxies;
     this.cedarConfig = cedarConfig;
-    Config.ConfigBuilder driverConfig = Config.builder();
-    CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> driverConfig
-        .withConnectionTimeout(testConnectionTimeoutMillis(timeout), TimeUnit.MILLISECONDS)
-        .withConnectionAcquisitionTimeout(timeout, TimeUnit.MILLISECONDS)
-        .withMaxTransactionRetryTime(timeout, TimeUnit.MILLISECONDS));
-    driver = GraphDatabase.driver(proxies.config.getUri(),
-        AuthTokens.basic(proxies.config.getUserName(), proxies.config.getUserPassword()),
-        driverConfig.build());
-  }
-
-  static long testConnectionTimeoutMillis(long dependencyTimeoutMillis) {
-    return Math.max(dependencyTimeoutMillis, MIN_TEST_CONNECTION_TIMEOUT_MILLIS);
+    this.driver = proxies.driver;
   }
 
   /**
-   * Closes this proxy's Neo4j driver, releasing its connection pool and Netty event-loop threads.
-   * Each proxy opens its own driver, so a discarded proxy set holds a dozen of these; see
-   * {@link Neo4JProxies#close()} for why they must be reclaimed rather than left to garbage collection.
+   * Reads the revision yielded by a write-lock query.
+   * <p>
+   * A writer can match a node and then wait for its lock while another transaction deletes that
+   * node. Neo4j may complete the waiting query with a row whose revision value is {@code NULL}, not
+   * with an empty result. Treat both forms as a missing aggregate; coercing the null value with
+   * {@code asLong()} turns an ordinary update-versus-delete race into a server error.
    */
-  public void close() {
-    try {
-      driver.close();
-    } catch (RuntimeException e) {
-      log.warn("Error closing the Neo4j driver", e);
+  protected static OptionalLong readLockedRevision(Result result) {
+    if (!result.hasNext()) {
+      return OptionalLong.empty();
     }
-  }
-
-  public void verifyConnectivity() {
-    driver.verifyConnectivity();
+    Value revision = result.next().get("revision");
+    return revision.isNull() ? OptionalLong.empty() : OptionalLong.of(revision.asLong());
   }
 
   private void reportQueryError(ClientException ex, CypherQuery q) {
-    log.error("Error executing Cypher query:", ex);
-    log.error(q.getOriginalQuery());
+    List<String> parameterNames = List.of();
     if (q instanceof CypherQueryWithParameters) {
-      log.error(((CypherQueryWithParameters) q).getParameterMap().toString());
+      parameterNames = ((CypherQueryWithParameters) q).getParameterMap().keySet().stream().sorted().toList();
     }
-    log.error(q.getRunnableQuery());
-    throw new RuntimeException("Error executing Cypher query:" + ex.getMessage());
+    log.error("Error executing Cypher query; parameter names={}", parameterNames, ex);
+    if (isSiblingNameConstraintViolation(ex)) {
+      throw new SiblingNameConflictException(ex);
+    }
+    throw new RuntimeException("Error executing Cypher query:" + ex.getMessage(), ex);
+  }
+
+  private boolean isSiblingNameConstraintViolation(ClientException ex) {
+    String code = ex.code();
+    String message = ex.getMessage();
+    boolean constraintViolation = code != null && (code.endsWith("ConstraintValidationFailed")
+        || code.endsWith("ConstraintViolation"));
+    return constraintViolation && message != null
+        && message.contains(Neo4JUtil.escapePropertyName(NodeProperty.NAME_LOWER.getValue()))
+        && (message.contains(Neo4JUtil.escapePropertyName(NodeProperty.PARENT_FOLDER_ID.getValue()))
+            || message.contains(Neo4JUtil.escapePropertyName(NodeProperty.PARENT_CATEGORY_ID.getValue())));
   }
 
   protected boolean executeWrite(CypherQuery q, String eventDescription) {
@@ -182,6 +188,19 @@ public abstract class AbstractNeo4JProxy {
       return session.writeTransaction(work::apply);
     } catch (ClientException ex) {
       log.error("Error while " + eventDescription, ex);
+      if (isSiblingNameConstraintViolation(ex)) {
+        throw new SiblingNameConflictException(ex);
+      }
+      throw new RuntimeException("Error while " + eventDescription + ": " + ex.getMessage());
+    }
+  }
+
+  /** Runs caller-supplied work against one consistent read transaction. */
+  protected <T> T executeInReadTransaction(Function<Transaction, T> work, String eventDescription) {
+    try (Session session = driver.session()) {
+      return session.readTransaction(work::apply);
+    } catch (ClientException ex) {
+      log.error("Error while " + eventDescription, ex);
       throw new RuntimeException("Error while " + eventDescription + ": " + ex.getMessage());
     }
   }
@@ -260,8 +279,8 @@ public abstract class AbstractNeo4JProxy {
         AppLogger.message(AppLogType.CYPHER_QUERY, AppLogSubType.FULL, globalRequestId, localRequestId)
             .param(AppLogParam.ORIGINAL_QUERY, log.getOriginalQuery())
             .param(AppLogParam.RUNNABLE_QUERY, log.getRunnableQuery())
-            .param(AppLogParam.INTERPOLATED_QUERY, log.getInterpolatedParamsQuery())
-            .param(AppLogParam.QUERY_PARAMETERS, log.getParameterMap())
+            .param(AppLogParam.INTERPOLATED_QUERY, log.getRunnableQuery())
+            .param(AppLogParam.QUERY_PARAMETERS, redactedParameterMap(log.getParameterMap()))
             .param(AppLogParam.RUNNABLE_QUERY_HASH, DigestUtils.md5Hex(log.getRunnableQuery()))
             .param(AppLogParam.QUERY_PARAMETERS_HASH, DigestUtils.md5Hex(paramMapString))
             .param(AppLogParam.OPERATION, log.getOperation());
@@ -281,6 +300,15 @@ public abstract class AbstractNeo4JProxy {
       }
     }
     appLog.enqueue();
+  }
+
+  static Map<String, Object> redactedParameterMap(Map<String, Object> parameterMap) {
+    if (parameterMap == null) {
+      return null;
+    }
+    Map<String, Object> redacted = new LinkedHashMap<>();
+    parameterMap.keySet().stream().sorted().forEach(name -> redacted.put(name, "<redacted>"));
+    return redacted;
   }
 
   protected <T extends CedarResource> T executeWriteGetOne(CypherQuery q, Class<T> type) {
@@ -620,7 +648,7 @@ public abstract class AbstractNeo4JProxy {
     return filtered;
   }
 
-  private <T extends CedarResource> T buildClass(JsonNode node, Class<T> type) {
+  protected <T extends CedarResource> T buildClass(JsonNode node, Class<T> type) {
     T cn = null;
     if (node != null && !node.isMissingNode()) {
       try {

@@ -11,7 +11,8 @@ import io.dropwizard.jetty.HttpConnectorFactory;
 import io.dropwizard.core.server.DefaultServerFactory;
 import io.dropwizard.core.setup.Bootstrap;
 import io.dropwizard.core.setup.Environment;
-import org.eclipse.jetty.servlets.CrossOriginFilter;
+import org.eclipse.jetty.ee10.servlets.CrossOriginFilter;
+import org.eclipse.jetty.http.UriCompliance;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.ServerConfig;
@@ -46,7 +47,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static org.eclipse.jetty.servlets.CrossOriginFilter.*;
+import static org.eclipse.jetty.ee10.servlets.CrossOriginFilter.*;
 
 public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceConfiguration> extends Application<T> {
 
@@ -56,6 +57,14 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   private static final List<String> HTTP_HEADERS;
   private static final List<String> HTTP_METHODS;
   static final List<String> HTTP_EXPOSED_HEADERS;
+
+  /**
+   * The generated OpenAPI document on the classpath, where a service ships one, and the path it is
+   * served at. Four of the services build a spec into their jar; the rest have none, and for them
+   * there is nothing to serve and nothing to advertise.
+   */
+  static final String API_SPEC_ASSET = "/assets/swagger-api/swagger.json";
+  static final String API_SPEC_PATH = "/swagger-api/swagger.json";
 
   protected static CedarConfig cedarConfig;
   protected static UserService userService;
@@ -72,10 +81,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     HTTP_HEADERS.add("Authorization");
     HTTP_HEADERS.add(HttpHeaders.IF_MATCH);
 
-    HTTP_EXPOSED_HEADERS = List.of(
-        HttpHeaders.ETAG,
-        CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS,
-        HttpHeaders.CONTENT_DISPOSITION);
+    HTTP_EXPOSED_HEADERS = CustomHttpConstants.EXPOSED_HEADERS;
     HTTP_HEADERS.add(CedarHeaderParameters.DEBUG);
     HTTP_HEADERS.add(CedarHeaderParameters.CLIENT_SESSION_ID);
 
@@ -96,7 +102,11 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
         new SubstitutingSourceProvider(bootstrap.getConfigurationSourceProvider(), new EnvironmentVariableSubstitutor())
     );
 
-    bootstrap.addBundle(new AssetsBundle("/assets/swagger-api/swagger.json", "/swagger-api/swagger.json"));
+    // Only where there is a spec to serve. Registered unconditionally, the bundle answered 404 on
+    // the ten services that ship no document, while the index resource advertised the link anyway.
+    if (shipsApiSpec()) {
+      bootstrap.addBundle(new AssetsBundle(API_SPEC_ASSET, API_SPEC_PATH));
+    }
 
     log.info("********** Initializing CEDAR Config for " + getName());
     // Initialize map with environment vars that this server expects
@@ -106,6 +116,22 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     cedarConfig = CedarConfig.getInstance(environmentSandbox);
 
     initializeWithBootstrap(bootstrap, cedarConfig);
+  }
+
+  /**
+   * Whether this service ships an API spec.
+   *
+   * <p>Read from the classpath rather than from configuration: the document is built into the jar,
+   * so its presence is the fact, and a flag beside it could only ever disagree with it. An earlier
+   * {@code apiDoc} setting did exactly that — it was set on three services, missed a fourth that had
+   * a spec, and was read by nothing.
+   */
+  static boolean shipsApiSpec() {
+    return shipsApiSpec(API_SPEC_ASSET);
+  }
+
+  static boolean shipsApiSpec(String classpathLocation) {
+    return CedarMicroserviceApplication.class.getResource(classpathLocation) != null;
   }
 
   @Override
@@ -143,7 +169,17 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     initializeApp();
 
     DefaultServerFactory serverFactory = (DefaultServerFactory) configuration.getServerFactory();
-    ((HttpConnectorFactory) serverFactory.getApplicationConnectors().get(0)).setPort(getApplicationHttpPort(configuration));
+    HttpConnectorFactory applicationConnector =
+        (HttpConnectorFactory) serverFactory.getApplicationConnectors().get(0);
+    applicationConnector.setPort(getApplicationHttpPort(configuration));
+    // Artifact identifiers are IRIs carried as one percent-encoded path parameter, so their
+    // encoded "https://" contains %2F by design. Jetty 12 rejects encoded separators by default;
+    // allow precisely that case without enabling its broader Jetty 11 or legacy URI modes.
+    applicationConnector.setUriCompliance(cedarUriCompliance());
+    // Jetty's EE10 Servlet layer has its own guard for ambiguous paths. It must permit decoding
+    // before Jersey can expose the encoded IRI as a path parameter; the connector-level mode above
+    // remains the security boundary and admits only encoded separators.
+    environment.getApplicationContext().getServletHandler().setDecodeAmbiguousURIs(true);
     HttpConnectorFactory adminConnector = (HttpConnectorFactory) serverFactory.getAdminConnectors().get(0);
     adminConnector.setPort(getApplicationAdminPort(configuration));
     // The admin connector answers /metrics and /threads to anyone who reaches it — no credentials, a
@@ -168,6 +204,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     runApp(configuration, environment);
 
     environment.jersey().register(new CedarServerInsightReportResource(cedarConfig));
+    environment.jersey().register(new CedarHealthCheckResource(cedarConfig, environment.healthChecks()));
     environment.jersey().register(RequestIdGeneratorFilter.class);
     environment.jersey().register(ResponseLoggerFilter.class);
     environment.jersey().register(new InstanceContextInjectionFeature(environment.jersey().getResourceConfig()));
@@ -176,6 +213,11 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   private Integer getApplicationHttpPort(T configuration) {
     ServerConfig serverConfig = cedarConfig.getServers().get(getServerName());
     return configuration.getTestPort().orElse(serverConfig.getHttpPort());
+  }
+
+  static UriCompliance cedarUriCompliance() {
+    return UriCompliance.DEFAULT.with(
+        "CEDAR_ARTIFACT_IRI_PATHS", UriCompliance.Violation.AMBIGUOUS_PATH_SEPARATOR);
   }
 
   private Integer getApplicationAdminPort(T configuration) {
@@ -215,6 +257,8 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     environment.jersey().register(new CedarCedarExceptionMapper());
     environment.jersey().register(new CedarExceptionMapper());
 
+    registerSharedHealthChecks(environment);
+
     // Enable CORS headers
     final FilterRegistration.Dynamic cors = environment.servlets().addFilter("CORS", CrossOriginFilter.class);
 
@@ -226,6 +270,29 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     });
     // Add URL mapping
     cors.addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), true, "/*");
+  }
+
+  /**
+   * The two dependencies every CEDAR microservice opens, probed here so that no server can publish
+   * a health endpoint that stays green while they are gone.
+   *
+   * <p>They are gated differently because they fail differently. Neo4j resolves the caller of every
+   * authenticated request through {@link Authorization}, so a server that cannot reach it can serve
+   * nothing and is unhealthy. Redis carries the application log queue, whose enqueue is best-effort
+   * by design and drops events rather than failing the request that produced them, so its loss is
+   * reported and the server stays healthy. A service for which Redis carries something it cannot
+   * drop registers its own gating check on that queue.
+   *
+   * <p>Both handles already exist at this point: {@code run} initializes the Neo4j services and the
+   * logger queue before calling this. A subclass that overrides {@code setupEnvironment} must call
+   * {@code super}, as {@link CedarMicroserviceApplicationWithMongo} does when it adds the document
+   * store.
+   */
+  private void registerSharedHealthChecks(Environment environment) {
+    environment.healthChecks().register("neo4j", CedarDependencyHealthCheck.gating(
+        "Neo4j", CedarDataServices.getInstance().getProxies()::verifyConnectivity));
+    environment.healthChecks().register("app-log-queue", CedarDependencyHealthCheck.reporting(
+        "The Redis application log queue", appLoggerQueueService::verifyConnectivity));
   }
 
   static String resolveCorsAllowedOrigins(Map<String, String> environment) {

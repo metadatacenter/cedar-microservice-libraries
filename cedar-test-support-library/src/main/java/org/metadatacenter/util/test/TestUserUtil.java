@@ -7,7 +7,10 @@ import org.metadatacenter.server.security.CedarApiKeyAuthRequest;
 import org.metadatacenter.server.security.model.AuthRequest;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
-public class TestUserUtil {
+public final class TestUserUtil {
+
+  private TestUserUtil() {
+  }
 
   private static String getTestUserAuthHeader(CedarUserId userId) {
     CedarUser user = CedarDataServices.getInstance().getNeoUserService().findUser(userId);

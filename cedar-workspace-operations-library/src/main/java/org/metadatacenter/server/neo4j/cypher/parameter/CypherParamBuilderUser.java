@@ -12,6 +12,7 @@ import org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.CedarUserApiKey;
 import org.metadatacenter.server.security.model.user.CedarUserRole;
+import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
 import org.metadatacenter.util.CedarUserNameUtil;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
@@ -97,6 +98,37 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
     return params;
   }
 
+  public static CypherParameters updateUserProfile(CedarUserId userId, CedarUserUIPreferences uiPreferences)
+      throws CedarProcessingException {
+    CypherParameters params = touchUser(userId);
+    try {
+      params.put(NodeProperty.UI_PREFERENCES, JsonMapper.MAPPER.writeValueAsString(uiPreferences));
+    } catch (JsonProcessingException e) {
+      throw new CedarProcessingException(e);
+    }
+    return params;
+  }
+
+  public static CypherParameters setUserHomeFolderId(CedarUserId userId, String homeFolderId) {
+    CypherParameters params = touchUser(userId);
+    params.put(NodeProperty.HOME_FOLDER_ID, homeFolderId);
+    return params;
+  }
+
+  public static CypherParameters replaceUserRolesAndPermissions(CedarUserId userId, List<CedarUserRole> roles,
+                                                                 List<String> permissions) {
+    CypherParameters params = touchUser(userId);
+    List<String> roleValues = new ArrayList<>();
+    for (CedarUserRole role : roles) {
+      if (role != null) {
+        roleValues.add(role.getValue());
+      }
+    }
+    params.put(NodeProperty.ROLES, roleValues);
+    params.put(NodeProperty.PERMISSIONS, permissions);
+    return params;
+  }
+
   /**
    * The API key properties as the graph holds them: the key values as a list, and the keys
    * themselves as a JSON object keyed by value. Both are derived from the one list, so they cannot
@@ -128,57 +160,4 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
     return params;
   }
 
-  public static CypherParameters updateUser(CedarUser user, CedarConfig cedarConfig) throws CedarProcessingException {
-    Instant now = Instant.now();
-    String nowString = CedarConstants.xsdDateTimeFormatter.format(now);
-    long nowTS = now.getEpochSecond();
-    CypherParameters params = new CypherParameters();
-    params.put(NodeProperty.ID, user.getId());
-    params.put(NodeProperty.LAST_UPDATED_ON, nowString);
-    params.put(NodeProperty.LAST_UPDATED_ON_TS, nowTS);
-
-    String displayName = CedarUserNameUtil.getDisplayName(cedarConfig, user);
-
-    params.put(NodeProperty.NAME, displayName);
-    params.put(NodeProperty.NAME_LOWER, displayName.toLowerCase());
-    params.put(NodeProperty.FIRST_NAME, user.getFirstName());
-    params.put(NodeProperty.LAST_NAME, user.getLastName());
-    params.put(NodeProperty.EMAIL, user.getEmail());
-    params.put(NodeProperty.HOME_FOLDER_ID, user.getHomeFolderId());
-
-    List<String> justKeys = new ArrayList<>();
-    for (CedarUserApiKey key : user.getApiKeys()) {
-      justKeys.add(key.getKey());
-    }
-    params.put(NodeProperty.API_KEYS, justKeys);
-
-    Map<String, CedarUserApiKey> keyMap = new HashMap<>();
-    for (CedarUserApiKey key : user.getApiKeys()) {
-      keyMap.put(key.getKey(), key);
-    }
-    try {
-      params.put(NodeProperty.API_KEY_MAP, JsonMapper.MAPPER.writeValueAsString(keyMap));
-    } catch (JsonProcessingException e) {
-      throw new CedarProcessingException(e);
-    }
-
-    List<String> justRoles = new ArrayList<>();
-    for (CedarUserRole role : user.getRoles()) {
-      if (role != null) {
-        justRoles.add(role.getValue());
-      }
-    }
-    params.put(NodeProperty.ROLES, justRoles);
-
-    params.put(NodeProperty.PERMISSIONS, user.getPermissions());
-
-    try {
-      params.put(NodeProperty.UI_PREFERENCES, JsonMapper.MAPPER.writeValueAsString(user.getUiPreferences()));
-    } catch (JsonProcessingException e) {
-      throw new CedarProcessingException(e);
-    }
-
-    return params;
-
-  }
 }

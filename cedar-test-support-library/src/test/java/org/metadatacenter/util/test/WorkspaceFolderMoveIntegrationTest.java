@@ -6,14 +6,21 @@ import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
+import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarFolderId;
+import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
+import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
+import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
+import org.metadatacenter.server.RevisionConflictException;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUser;
@@ -75,6 +82,21 @@ public class WorkspaceFolderMoveIntegrationTest {
     CedarFolderId newFolderId = cedarConfig.getLinkedDataUtil().buildNewLinkedDataIdObject(CedarFolderId.class);
     FolderServerFolder created = foldersOf(user1Context).createFolderAsChildOfId(newFolder, parentId, newFolderId);
     Assertions.assertNotNull(created, "The folder '" + name + "' should be created");
+    return created;
+  }
+
+  private static FolderServerArtifact createTemplateUnder(CedarFolderId parentId, String name) {
+    FolderServerTemplate template = new FolderServerTemplate();
+    template.setId(cedarConfig.getLinkedDataUtil().buildNewLinkedDataId(CedarResourceType.TEMPLATE));
+    template.setName(name);
+    template.setDescription("Created by WorkspaceFolderMoveIntegrationTest");
+    template.setVersion("0.0.1");
+    template.setPublicationStatus("bibo:draft");
+    template.setLatestVersion(true);
+    template.setLatestDraftVersion(true);
+    template.setLatestPublishedVersion(false);
+    FolderServerArtifact created = foldersOf(user1Context).createResourceAsChildOfId(template, parentId);
+    Assertions.assertNotNull(created, "The template '" + name + "' should be created");
     return created;
   }
 
@@ -142,6 +164,71 @@ public class WorkspaceFolderMoveIntegrationTest {
     FileSystemResource bStillUnderA =
         user1Folders.findFilesystemResourceByParentFolderIdAndName(a.getResourceId(), "Cycle Guard B");
     Assertions.assertNotNull(bStillUnderA, "The middle folder should still sit under the top folder");
+  }
+
+  @Test
+  public void failedFolderMoveLeavesTheOriginalParentIntact() {
+    FolderServiceSession user1Folders = foldersOf(user1Context);
+    FolderServerFolder oldParent = createFolderUnder(user1HomeId, "Failed Folder Move Parent");
+    FolderServerFolder subject = createFolderUnder(oldParent.getResourceId(), "Failed Folder Move Subject");
+    CedarFolderId missingTarget = cedarConfig.getLinkedDataUtil().buildNewLinkedDataIdObject(CedarFolderId.class);
+
+    Assertions.assertFalse(user1Folders.moveFolder(subject.getResourceId(), missingTarget),
+        "A move to a missing target should fail");
+    FileSystemResource stillUnderOldParent = user1Folders.findFilesystemResourceByParentFolderIdAndName(
+        oldParent.getResourceId(), subject.getName());
+    Assertions.assertNotNull(stillUnderOldParent, "A failed move must not orphan the folder");
+    Assertions.assertEquals(subject.getId(), stillUnderOldParent.getId());
+  }
+
+  @Test
+  public void artifactMoveIsAtomicAndReparentsTheSameNode() {
+    FolderServiceSession user1Folders = foldersOf(user1Context);
+    FolderServerFolder oldParent = createFolderUnder(user1HomeId, "Artifact Move Old Parent");
+    FolderServerFolder newParent = createFolderUnder(user1HomeId, "Artifact Move New Parent");
+    FolderServerArtifact artifact = createTemplateUnder(oldParent.getResourceId(), "Artifact Move Subject");
+    CedarArtifactId artifactId = CedarArtifactId.build(artifact.getId(), artifact.getType());
+    CedarFolderId missingTarget = cedarConfig.getLinkedDataUtil().buildNewLinkedDataIdObject(CedarFolderId.class);
+
+    Assertions.assertFalse(user1Folders.moveResource(artifactId, missingTarget),
+        "A move to a missing target should fail");
+    Assertions.assertNotNull(user1Folders.findFilesystemResourceByParentFolderIdAndName(
+        oldParent.getResourceId(), artifact.getName()), "A failed move must not orphan the artifact");
+
+    Assertions.assertTrue(user1Folders.moveResource(artifactId, newParent.getResourceId()),
+        "Moving the artifact under an existing folder should succeed");
+    Assertions.assertNull(user1Folders.findFilesystemResourceByParentFolderIdAndName(
+        oldParent.getResourceId(), artifact.getName()));
+    FileSystemResource moved = user1Folders.findFilesystemResourceByParentFolderIdAndName(
+        newParent.getResourceId(), artifact.getName());
+    Assertions.assertNotNull(moved);
+    Assertions.assertEquals(artifact.getId(), moved.getId());
+  }
+
+  @Test
+  public void conditionalArtifactMoveChecksAndAdvancesAllAffectedRevisions() {
+    FolderServiceSession folders = foldersOf(user1Context);
+    FolderServerFolder oldParent = createFolderUnder(user1HomeId, "Conditional Artifact Old Parent");
+    FolderServerFolder newParent = createFolderUnder(user1HomeId, "Conditional Artifact New Parent");
+    FolderServerArtifact artifact = createTemplateUnder(oldParent.getResourceId(), "Conditional Artifact");
+    CedarArtifactId artifactId = CedarArtifactId.build(artifact.getId(), artifact.getType());
+
+    VersionedResource<FolderServerArtifact> before = folders.findVersionedArtifactById(artifactId);
+    long oldParentBefore = folders.findVersionedFolderById(oldParent.getResourceId()).revision();
+    long newParentBefore = folders.findVersionedFolderById(newParent.getResourceId()).revision();
+    Assertions.assertThrows(RevisionConflictException.class, () -> folders.moveResource(
+        artifactId, newParent.getResourceId(), RevisionPrecondition.exact(before.revision() + 1)));
+
+    VersionedResource<FolderServerArtifact> moved = folders.moveResource(
+        artifactId, newParent.getResourceId(), RevisionPrecondition.exact(before.revision()));
+    Assertions.assertNotNull(moved);
+    Assertions.assertEquals(before.revision() + 1, moved.revision());
+    Assertions.assertEquals(oldParentBefore + 1,
+        folders.findVersionedFolderById(oldParent.getResourceId()).revision());
+    Assertions.assertEquals(newParentBefore + 1,
+        folders.findVersionedFolderById(newParent.getResourceId()).revision());
+    Assertions.assertThrows(RevisionConflictException.class, () -> folders.moveResource(
+        artifactId, oldParent.getResourceId(), RevisionPrecondition.exact(before.revision())));
   }
 
   @Test

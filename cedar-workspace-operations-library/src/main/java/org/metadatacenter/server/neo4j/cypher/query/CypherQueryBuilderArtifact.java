@@ -47,6 +47,22 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
         " RETURN artifact";
   }
 
+  /** Reparents an artifact atomically, returning no row when either endpoint is absent. */
+  public static String moveArtifact() {
+    return """
+        MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ARTIFACT_ID>}})
+        MATCH (oldParent:<LABEL.FOLDER>)-[oldRelation:<REL.CONTAINS>]->(artifact)
+        MATCH (newParent:<LABEL.FOLDER> {<PROP.ID>:{<PH.PARENT_FOLDER_ID>}})
+        DELETE oldRelation
+        MERGE (newParent)-[:<REL.CONTAINS>]->(artifact)
+        SET artifact._cedarRevision = coalesce(artifact._cedarRevision, 1) + 1
+        SET oldParent._cedarRevision = coalesce(oldParent._cedarRevision, 1) + 1
+        FOREACH (_ IN CASE WHEN oldParent = newParent THEN [] ELSE [1] END |
+          SET newParent._cedarRevision = coalesce(newParent._cedarRevision, 1) + 1)
+        RETURN artifact AS resource, artifact._cedarRevision AS revision
+        """;
+  }
+
   public static String setArtifactOwner() {
     return "" +
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +
@@ -156,14 +172,27 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
         " SET artifact.<PROP.IS_OPEN> = true" +
-        " RETURN artifact";
+        " SET artifact._cedarRevision = coalesce(artifact._cedarRevision, 1) + 1" +
+        " RETURN artifact AS resource, artifact._cedarRevision AS revision";
   }
 
   public static String setNotOpen() {
     return "" +
         " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
         " REMOVE artifact.<PROP.IS_OPEN>" +
-        " RETURN artifact";
+        " SET artifact._cedarRevision = coalesce(artifact._cedarRevision, 1) + 1" +
+        " RETURN artifact AS resource, artifact._cedarRevision AS revision";
+  }
+
+  public static String getVersionedArtifactById() {
+    return " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
+        " RETURN artifact AS resource, coalesce(artifact._cedarRevision, 1) AS revision";
+  }
+
+  public static String lockArtifactRevision() {
+    return " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
+        " SET artifact._cedarRevision = coalesce(artifact._cedarRevision, 1)" +
+        " RETURN artifact._cedarRevision AS revision";
   }
 
 }

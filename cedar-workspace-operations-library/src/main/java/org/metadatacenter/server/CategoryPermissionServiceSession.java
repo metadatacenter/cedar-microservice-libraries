@@ -16,7 +16,15 @@ public interface CategoryPermissionServiceSession {
 
   CategoryPermissions getCategoryPermissions(CedarCategoryId categoryId);
 
-  BackendCallResult updateCategoryPermissions(CedarCategoryId categoryId, CategoryPermissionRequest permissionsRequest);
+  VersionedCategoryPermissions getVersionedCategoryPermissions(CedarCategoryId categoryId);
+
+  default BackendCallResult<VersionedCategoryPermissions> updateCategoryPermissions(
+      CedarCategoryId categoryId, CategoryPermissionRequest permissionsRequest) {
+    return updateCategoryPermissions(categoryId, permissionsRequest, RevisionPrecondition.any());
+  }
+
+  BackendCallResult<VersionedCategoryPermissions> updateCategoryPermissions(
+      CedarCategoryId categoryId, CategoryPermissionRequest permissionsRequest, RevisionPrecondition precondition);
 
   boolean userIsOwnerOfCategory(CedarCategoryId categoryId);
 

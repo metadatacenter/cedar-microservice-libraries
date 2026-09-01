@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarCategoryId;
@@ -15,9 +16,19 @@ import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFilesy
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderCategory;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderGroup;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
+import org.metadatacenter.server.RevisionConflictException;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedResource;
+import org.metadatacenter.server.CategoryNotEmptyException;
+import org.metadatacenter.util.json.JsonMapper;
+import org.neo4j.driver.Record;
+import org.neo4j.driver.Result;
+import org.neo4j.driver.Transaction;
+import org.neo4j.driver.types.Node;
 
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 
 public class Neo4JProxyCategory extends AbstractNeo4JProxy {
 
@@ -55,6 +66,12 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
     return executeReadGetOne(q, FolderServerCategory.class);
   }
 
+  public VersionedResource<FolderServerCategory> getVersionedCategoryById(CedarCategoryId categoryId) {
+    CypherQueryWithParameters query = new CypherQueryWithParameters(
+        CypherQueryBuilderCategory.getVersionedCategoryById(), CypherParamBuilderCategory.matchId(categoryId));
+    return executeInReadTransaction(tx -> readVersionedCategory(run(tx, query)), "reading a versioned category");
+  }
+
   public FolderServerCategory getCategoryByIdentifier(String identifier) {
     String cypher = CypherQueryBuilderCategory.getCategoryByIdentifier();
     CypherParameters params = CypherParamBuilderCategory.matchIdentifier(identifier);
@@ -83,11 +100,70 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
     return executeWriteGetOne(q, FolderServerCategory.class);
   }
 
+  public VersionedResource<FolderServerCategory> updateCategoryById(CedarCategoryId categoryId,
+                                                                     Map<NodeProperty, String> updateFields,
+                                                                     CedarUserId updatedBy,
+                                                                     RevisionPrecondition precondition) {
+    return executeInWriteTransaction(tx -> {
+      Result locked = run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderCategory.lockCategoryRevision(), CypherParamBuilderCategory.matchId(categoryId)));
+      OptionalLong lockedRevision = readLockedRevision(locked);
+      if (lockedRevision.isEmpty()) {
+        return null;
+      }
+      long currentRevision = lockedRevision.getAsLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      CypherParameters params = CypherParamBuilderCategory.updateCategoryById(categoryId, updateFields, updatedBy);
+      return readVersionedCategory(run(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderGroup.updateCategoryById(updateFields), params)));
+    }, "updating a versioned category");
+  }
+
   public boolean deleteCategoryById(CedarCategoryId categoryId) {
-    String cypher = CypherQueryBuilderCategory.deleteCategoryById();
-    CypherParameters params = CypherParamBuilderCategory.matchId(categoryId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "deleting category");
+    return deleteCategoryById(categoryId, RevisionPrecondition.any());
+  }
+
+  public boolean deleteCategoryById(CedarCategoryId categoryId, RevisionPrecondition precondition) {
+    return executeInWriteTransaction(tx -> {
+      CypherQueryWithParameters lock = new CypherQueryWithParameters(
+          CypherQueryBuilderCategory.lockCategoryRevision(), CypherParamBuilderCategory.matchId(categoryId));
+      Result locked = run(tx, lock);
+      OptionalLong lockedRevision = readLockedRevision(locked);
+      if (lockedRevision.isEmpty()) {
+        return false;
+      }
+      long currentRevision = lockedRevision.getAsLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      CypherQueryWithParameters blockersQuery = new CypherQueryWithParameters(
+          CypherQueryBuilderCategory.getCategoryDeletionBlockers(), CypherParamBuilderCategory.matchId(categoryId));
+      Record blockers = run(tx, blockersQuery).single();
+      long childCategoryCount = blockers.get("childCategoryCount").asLong();
+      long artifactCount = blockers.get("artifactCount").asLong();
+      if (childCategoryCount > 0 || artifactCount > 0) {
+        throw new CategoryNotEmptyException(childCategoryCount, artifactCount);
+      }
+      CypherQueryWithParameters delete = new CypherQueryWithParameters(
+          CypherQueryBuilderCategory.deleteCategoryById(), CypherParamBuilderCategory.matchId(categoryId));
+      return run(tx, delete).hasNext();
+    }, "deleting a versioned category");
+  }
+
+  private Result run(Transaction tx, CypherQueryWithParameters query) {
+    return tx.run(query.getRunnableQuery(), query.getParameterMap());
+  }
+
+  private VersionedResource<FolderServerCategory> readVersionedCategory(Result result) {
+    if (!result.hasNext()) {
+      return null;
+    }
+    Record record = result.next();
+    Node node = record.get("resource").asNode();
+    JsonNode json = JsonMapper.MAPPER.valueToTree(node.asMap());
+    return new VersionedResource<>(buildClass(json, FolderServerCategory.class), record.get("revision").asLong());
   }
 
   public FolderServerUser getCategoryOwner(CedarCategoryId categoryId) {
@@ -103,6 +179,26 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     FolderServerCategory category = executeWriteGetOne(q, FolderServerCategory.class);
     return category != null;
+  }
+
+  public boolean attachCategoriesToArtifact(List<CedarCategoryId> categoryIds, CedarArtifactId artifactId) {
+    List<String> distinctCategoryIds = categoryIds.stream()
+        .map(CedarCategoryId::getId)
+        .distinct()
+        .toList();
+    if (distinctCategoryIds.isEmpty()) {
+      return false;
+    }
+    String cypher = CypherQueryBuilderCategory.attachCategoriesToArtifact();
+    CypherParameters params = CypherParamBuilderCategory.categoryIdsAndArtifactId(distinctCategoryIds, artifactId);
+    CypherQueryWithParameters query = new CypherQueryWithParameters(cypher, params);
+    return executeInWriteTransaction(tx -> {
+      Result result = run(tx, query);
+      if (!result.hasNext()) {
+        return false;
+      }
+      return result.next().get("attachedCount").asLong() == distinctCategoryIds.size();
+    }, "attaching categories to artifact");
   }
 
   public boolean detachCategoryFromArtifact(CedarCategoryId categoryId, CedarArtifactId artifactId) {

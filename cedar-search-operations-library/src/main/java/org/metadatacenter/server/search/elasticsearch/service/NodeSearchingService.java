@@ -5,6 +5,7 @@ import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.config.TrustedFoldersConfig;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
+import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarCategoryId;
 import org.metadatacenter.id.CedarGroupId;
@@ -21,6 +22,7 @@ import org.metadatacenter.search.IndexedDocumentDocument;
 import org.metadatacenter.search.IndexedDocumentType;
 import org.metadatacenter.server.CategoryServiceSession;
 import org.metadatacenter.server.search.IndexedDocumentId;
+import org.metadatacenter.server.search.elasticsearch.worker.DeepSearchPage;
 import org.metadatacenter.server.search.elasticsearch.worker.ElasticsearchPermissionEnabledContentSearchingWorker;
 import org.metadatacenter.server.search.elasticsearch.worker.ElasticsearchSearchingWorker;
 import org.metadatacenter.server.search.elasticsearch.worker.SearchResponseResult;
@@ -154,6 +156,37 @@ public class NodeSearchingService extends AbstractSearchingService {
       return assembleResponse(rctx, searchResult, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
           absoluteUrl);
     } catch (CedarDependencyUnavailableException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
+  /**
+   * One page of a walk the caller drives with a continuation rather than an offset. The total is
+   * counted when the walk starts and carried from page to page after that, so every page of one walk
+   * reports the same one.
+   */
+  public DeepSearchPageResponse searchDeepPage(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
+                                               ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                               String categoryId, List<String> sortList, int limit, long rowsSeen,
+                                               long knownTotalCount, String pointInTimeId, Object[] searchAfter,
+                                               String absoluteUrl) throws CedarException {
+    try {
+      DeepSearchPage page = permissionEnabledSearchWorker.searchDeepPage(rctx, query, resourceTypes, version,
+          publicationStatus, categoryId, sortList, limit, pointInTimeId, searchAfter);
+      SearchResponseResult result = page.result();
+      if (pointInTimeId != null) {
+        result.setTotalCount(knownTotalCount);
+      }
+      int offsetOfPage = (int) Math.min(rowsSeen, Integer.MAX_VALUE);
+      FolderServerNodeListResponse response = assembleResponse(rctx, result, query, id, resourceTypes, version,
+          publicationStatus, categoryId, sortList, limit, offsetOfPage, absoluteUrl);
+      response.setCurrentOffset(rowsSeen);
+      return new DeepSearchPageResponse(response, page.pointInTimeId(), page.nextSearchAfter());
+    } catch (CedarException e) {
+      // A continuation that has expired, or one that was refused, is the caller's answer. Wrapping it
+      // would turn a 400 that says what to do into a 500 that says nothing.
       throw e;
     } catch (Exception e) {
       throw new CedarProcessingException(e);

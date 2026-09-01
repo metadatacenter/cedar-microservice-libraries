@@ -14,6 +14,7 @@ import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerCategory;
+import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.model.folderserver.basic.FolderServerSchemaArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
 import org.metadatacenter.model.folderserver.extract.FolderServerArtifactExtract;
@@ -21,10 +22,18 @@ import org.metadatacenter.model.folderserver.extract.FolderServerCategoryExtract
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.CategoryPermissionServiceSession;
+import org.metadatacenter.server.CategoryNotEmptyException;
 import org.metadatacenter.server.CategoryServiceSession;
 import org.metadatacenter.server.FolderServiceSession;
+import org.metadatacenter.server.GroupServiceSession;
+import org.metadatacenter.server.RevisionConflictException;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedCategoryPermissions;
+import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermission;
+import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroup;
+import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroupPermissionPair;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionRequest;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUser;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUserPermissionPair;
@@ -135,6 +144,48 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
   }
 
   @Test
+  public void staleCategoryDeletePreservesANewerEdit() {
+    CategoryServiceSession categories = categoriesOf(user1Context);
+    FolderServerCategory category = createCategoryAsUser1(rootCategoryId, "Versioned Delete Category");
+    VersionedResource<FolderServerCategory> initial = categories.getVersionedCategoryById(category.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+
+    categories.updateCategoryById(category.getResourceId(),
+        Map.of(org.metadatacenter.server.neo4j.cypher.NodeProperty.DESCRIPTION, "newer description"));
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> categories.deleteCategoryById(category.getResourceId(), RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+    Assertions.assertEquals("newer description",
+        categories.getCategoryById(category.getResourceId()).getDescription());
+    Assertions.assertTrue(categories.deleteCategoryById(category.getResourceId(), RevisionPrecondition.any()));
+  }
+
+  @Test
+  public void categoryDeletionRefusesChildrenAndAttachedArtifacts() {
+    CategoryServiceSession categories = categoriesOf(user1Context);
+    FolderServerCategory parent = createCategoryAsUser1(rootCategoryId, "Delete Guard Parent");
+    FolderServerCategory child = createCategoryAsUser1(parent.getResourceId(), "Delete Guard Child");
+
+    CategoryNotEmptyException childConflict = Assertions.assertThrows(CategoryNotEmptyException.class,
+        () -> categories.deleteCategoryById(parent.getResourceId(), RevisionPrecondition.any()));
+    Assertions.assertEquals(1L, childConflict.getChildCategoryCount());
+    Assertions.assertEquals(0L, childConflict.getArtifactCount());
+    Assertions.assertNotNull(categories.getCategoryById(parent.getResourceId()));
+    Assertions.assertNotNull(categories.getCategoryById(child.getResourceId()));
+
+    FolderServerCategory attached = createCategoryAsUser1(rootCategoryId, "Delete Guard Attached");
+    FolderServerArtifact artifact = createTemplateUnderUser1Home(newTemplate("Delete Guard Template", "1.0.0"));
+    Assertions.assertTrue(categories.attachCategoryToArtifact(
+        attached.getResourceId(), CedarTemplateId.build(artifact.getId())));
+
+    CategoryNotEmptyException artifactConflict = Assertions.assertThrows(CategoryNotEmptyException.class,
+        () -> categories.deleteCategoryById(attached.getResourceId(), RevisionPrecondition.any()));
+    Assertions.assertEquals(0L, artifactConflict.getChildCategoryCount());
+    Assertions.assertEquals(1L, artifactConflict.getArtifactCount());
+    Assertions.assertNotNull(categories.getCategoryById(attached.getResourceId()));
+  }
+
+  @Test
   public void categoryTreeIsCreatedAndTraversable() {
     FolderServerCategory child = createCategoryAsUser1(rootCategoryId, "Tree Child");
     FolderServerCategory grandchild = createCategoryAsUser1(child.getResourceId(), "Tree Grandchild");
@@ -203,6 +254,47 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
   }
 
   @Test
+  public void staleCategoryPermissionReplacementIsRejectedWithoutChangingTheAcl() {
+    FolderServerCategory category = createCategoryAsUser1(rootCategoryId, "Versioned Category ACL");
+    GroupServiceSession groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
+    FolderServerGroup group = groups.createGroup("versioned-category-acl-group",
+        "Group for the category ACL revision test");
+    Assertions.assertNotNull(group);
+
+    CategoryPermissionServiceSession permissions = categoryPermissionsOf(user1Context);
+    VersionedCategoryPermissions initial = permissions.getVersionedCategoryPermissions(category.getResourceId());
+    Assertions.assertEquals(1L, initial.revision());
+
+    CategoryPermissionRequest firstReplacement = new CategoryPermissionRequest();
+    firstReplacement.setOwner(new CategoryPermissionUser(user1.getId()));
+    firstReplacement.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
+        new CategoryPermissionUser(user2.getId()), CategoryPermission.WRITE));
+    firstReplacement.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
+        new CategoryPermissionGroup(group.getId()), CategoryPermission.WRITE));
+    BackendCallResult<VersionedCategoryPermissions> first = permissions.updateCategoryPermissions(
+        category.getResourceId(), firstReplacement, RevisionPrecondition.exact(initial.revision()));
+    Assertions.assertFalse(first.isError(), () -> first.getFirstErrorMessage());
+    Assertions.assertEquals(2L, first.getPayload().revision());
+    Assertions.assertEquals(CategoryPermission.WRITE,
+        first.getPayload().content().getGroupPermissions().get(0).getPermission(),
+        "A group WRITE grant should round-trip as the category WRITE relation");
+
+    CategoryPermissionRequest staleReplacement = new CategoryPermissionRequest();
+    staleReplacement.setOwner(new CategoryPermissionUser(user1.getId()));
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> permissions.updateCategoryPermissions(category.getResourceId(), staleReplacement,
+            RevisionPrecondition.exact(initial.revision())));
+    Assertions.assertEquals(2L, conflict.getCurrentRevision());
+
+    VersionedCategoryPermissions fresh = permissions.getVersionedCategoryPermissions(category.getResourceId());
+    Assertions.assertEquals(2L, fresh.revision());
+    Assertions.assertEquals(1, fresh.content().getUserPermissions().size());
+    Assertions.assertEquals(user2.getId(), fresh.content().getUserPermissions().get(0).getUser().getId());
+    Assertions.assertEquals(1, fresh.content().getGroupPermissions().size());
+    Assertions.assertEquals(group.getId(), fresh.content().getGroupPermissions().get(0).getGroup().getId());
+  }
+
+  @Test
   public void categoryAttachesToAndDetachesFromArtifact() {
     FolderServerCategory category = createCategoryAsUser1(rootCategoryId, "Artifact Category");
     FolderServerArtifact template = createTemplateUnderUser1Home(newTemplate("Categorized Template", "0.0.1"));
@@ -221,6 +313,29 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
         "Detaching the category should succeed");
     Assertions.assertTrue(user1Categories.getAttachedCategoryIds(templateId).isEmpty(),
         "After the detach, the template should carry no categories");
+  }
+
+  @Test
+  public void batchCategoryAttachmentAttachesAllAndIsAtomicWhenOneCategoryDoesNotExist() {
+    FolderServerCategory first = createCategoryAsUser1(rootCategoryId, "Atomic Batch Category One");
+    FolderServerCategory second = createCategoryAsUser1(rootCategoryId, "Atomic Batch Category Two");
+    FolderServerArtifact successfulTemplate = createTemplateUnderUser1Home(
+        newTemplate("Successful Atomic Batch Template", "0.0.1"));
+    CedarTemplateId successfulTemplateId = CedarTemplateId.build(successfulTemplate.getId());
+    CedarCategoryId missing = CedarCategoryId.build("https://repo.example/categories/missing-atomic-batch-category");
+
+    CategoryServiceSession categories = categoriesOf(user1Context);
+    Assertions.assertTrue(categories.attachCategoriesToArtifact(
+        List.of(first.getResourceId(), second.getResourceId()), successfulTemplateId));
+    Assertions.assertEquals(2, categories.getAttachedCategoryIds(successfulTemplateId).size());
+
+    FolderServerArtifact failedTemplate = createTemplateUnderUser1Home(
+        newTemplate("Failed Atomic Batch Template", "0.0.1"));
+    CedarTemplateId failedTemplateId = CedarTemplateId.build(failedTemplate.getId());
+    Assertions.assertFalse(categories.attachCategoriesToArtifact(
+        List.of(first.getResourceId(), missing), failedTemplateId));
+    Assertions.assertTrue(categories.getAttachedCategoryIds(failedTemplateId).isEmpty(),
+        "a missing category must roll back the entire attachment batch");
   }
 
   @Test

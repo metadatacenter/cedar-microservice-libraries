@@ -122,6 +122,7 @@ public final class PermissionMatrix {
     } else {
       builder.method(row.verb, HttpRequest.BodyPublishers.noBody());
     }
+    row.headers.forEach(builder::header);
     HttpResponse<String> response = CLIENT.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     return response.statusCode();
   }
@@ -132,6 +133,7 @@ public final class PermissionMatrix {
     private final String path;
     private final String jsonBody;
     private final Map<Actor, int[]> expectations = new LinkedHashMap<>();
+    private final Map<String, String> headers = new LinkedHashMap<>();
 
     private Row(String verb, String path, String jsonBody) {
       this.verb = verb;
@@ -149,6 +151,12 @@ public final class PermissionMatrix {
         throw new IllegalArgumentException("At least one acceptable status is required");
       }
       expectations.put(actor, acceptableStatuses);
+      return this;
+    }
+
+    /** Add one request header to every actor probe in this row. */
+    public Row header(String name, String value) {
+      headers.put(name, value);
       return this;
     }
 

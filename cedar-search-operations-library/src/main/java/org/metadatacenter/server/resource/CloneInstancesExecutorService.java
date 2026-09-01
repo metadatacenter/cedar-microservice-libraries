@@ -28,6 +28,7 @@ import org.metadatacenter.server.valuerecommender.ValuerecommenderReindexQueueSe
 import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexMessageActionType;
 import org.metadatacenter.util.ModelUtil;
 import org.metadatacenter.util.http.CedarUrlUtil;
+import org.metadatacenter.util.http.HttpTimeouts;
 import org.metadatacenter.util.http.ProxyUtil;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
@@ -207,7 +208,7 @@ public class CloneInstancesExecutorService {
     String originalDocument = null;
     try {
       String url = microserviceUrlUtil.getArtifact().getArtifactTypeWithId(resourceType, oldInstanceId);
-      ClassicHttpResponse proxyResponse = ProxyUtil.proxyGet(url, c);
+      ClassicHttpResponse proxyResponse = ProxyUtil.proxyGet(url, c, HttpTimeouts.BATCH);
       HttpEntity entity = proxyResponse.getEntity();
       int statusCode = proxyResponse.getCode();
       if (entity != null) {
@@ -229,7 +230,7 @@ public class CloneInstancesExecutorService {
     try {
       String url = microserviceUrlUtil.getArtifact().getResourceType(resourceType);
 
-      ClassicHttpResponse templateProxyResponse = ProxyUtil.proxyPost(url, c, originalDocument);
+      ClassicHttpResponse templateProxyResponse = ProxyUtil.proxyPost(url, c, originalDocument, HttpTimeouts.BATCH);
 
       int statusCode = templateProxyResponse.getCode();
       if (statusCode != HttpStatus.SC_CREATED) {

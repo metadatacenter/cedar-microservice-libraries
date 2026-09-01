@@ -26,11 +26,15 @@ public interface FolderServiceSession {
 
   FolderServerFolder findFolderById(CedarFolderId folderId);
 
+  VersionedResource<FolderServerFolder> findVersionedFolderById(CedarFolderId folderId);
+
   List<FolderServerResourceExtract> findAllNodes(int limit, int offset, List<String> sortList);
 
   long findAllNodesCount();
 
   FolderServerArtifact findArtifactById(CedarArtifactId artifactId);
+
+  VersionedResource<FolderServerArtifact> findVersionedArtifactById(CedarArtifactId artifactId);
 
   FolderServerSchemaArtifact findSchemaArtifactById(CedarSchemaArtifactId artifactId);
 
@@ -46,9 +50,15 @@ public interface FolderServiceSession {
 
   FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields);
 
+  VersionedResource<FolderServerFolder> updateFolderById(CedarFolderId folderId,
+                                                           Map<NodeProperty, String> updateFields,
+                                                           RevisionPrecondition precondition);
+
   FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType, Map<NodeProperty, String> updateFields);
 
   boolean deleteFolderById(CedarFolderId folderId);
+
+  boolean deleteFolderById(CedarFolderId folderId, RevisionPrecondition precondition);
 
   boolean deleteResourceById(CedarArtifactId resourceId);
 
@@ -78,7 +88,15 @@ public interface FolderServiceSession {
 
   boolean moveResource(CedarArtifactId sourceArtifactId, CedarFolderId targetFolderId);
 
+  VersionedResource<FolderServerArtifact> moveResource(CedarArtifactId sourceArtifactId,
+                                                        CedarFolderId targetFolderId,
+                                                        RevisionPrecondition precondition);
+
   boolean moveFolder(CedarFolderId sourceFolderId, CedarFolderId targetFolderId);
+
+  VersionedResource<FolderServerFolder> moveFolder(CedarFolderId sourceFolderId,
+                                                    CedarFolderId targetFolderId,
+                                                    RevisionPrecondition precondition);
 
   FolderServerFolder ensureUserHomeExists();
 
@@ -130,11 +148,19 @@ public interface FolderServiceSession {
 
   boolean setOpen(CedarArtifactId id);
 
+  VersionedResource<FolderServerArtifact> setOpen(CedarArtifactId id, RevisionPrecondition precondition);
+
   boolean setOpen(CedarFolderId folderId);
+
+  VersionedResource<FolderServerFolder> setOpen(CedarFolderId folderId, RevisionPrecondition precondition);
 
   boolean setNotOpen(CedarArtifactId id);
 
+  VersionedResource<FolderServerArtifact> setNotOpen(CedarArtifactId id, RevisionPrecondition precondition);
+
   boolean setNotOpen(CedarFolderId id);
+
+  VersionedResource<FolderServerFolder> setNotOpen(CedarFolderId id, RevisionPrecondition precondition);
 
   long getNumberOfInstances(CedarTemplateId templateId);
 

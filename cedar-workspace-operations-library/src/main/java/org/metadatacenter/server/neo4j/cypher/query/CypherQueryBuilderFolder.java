@@ -30,7 +30,8 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
     for (NodeProperty property : updateFields.keySet()) {
       sb.append(buildSetter("folder", property));
     }
-    sb.append(" RETURN folder");
+    sb.append(" SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1");
+    sb.append(" RETURN folder AS resource, folder._cedarRevision AS revision");
     return sb.toString();
   }
 
@@ -47,12 +48,35 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " RETURN folder";
   }
 
-  public static String deleteFolderContentsRecursivelyById() {
-    return "" +
-        " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
-        " MATCH (folder)-[relation:<REL.CONTAINS>*0..]->(child)" +
-        " DETACH DELETE child" +
-        " DETACH DELETE folder";
+  /**
+   * Deletes one folder only when it is still empty. The no-op property write locks the folder
+   * before the emptiness check, serializing this mutation with concurrent child relationship
+   * creation. Returning the parent lets the caller distinguish deletion from a missing or
+   * non-empty folder without a separate read.
+   */
+  public static String deleteEmptyFolderById() {
+    return """
+        MATCH (parent:<LABEL.FOLDER>)-[:<REL.CONTAINS>]->
+              (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})
+        SET folder.<PROP.ID> = folder.<PROP.ID>
+        WITH parent, folder
+        WHERE NOT EXISTS {
+          MATCH (folder)-[:<REL.CONTAINS>]->()
+        }
+        DETACH DELETE folder
+        RETURN parent
+        """;
+  }
+
+  public static String getVersionedFolderById() {
+    return " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})"
+        + " RETURN folder AS resource, coalesce(folder._cedarRevision, 1) AS revision";
+  }
+
+  public static String lockFolderRevision() {
+    return " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})"
+        + " SET folder._cedarRevision = coalesce(folder._cedarRevision, 1)"
+        + " RETURN folder._cedarRevision AS revision";
   }
 
   public static String getFolderLookupQueryById() {
@@ -76,7 +100,35 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PH.PARENT_FOLDER_ID>}})" +
         " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.FOLDER_ID>}})" +
         " MERGE (parent)-[:<REL.CONTAINS>]->(folder)" +
+        " SET folder.<PROP.PARENT_FOLDER_ID> = {<PH.PARENT_FOLDER_ID>}" +
         " RETURN folder";
+  }
+
+  /**
+   * Reparents a folder in one statement. The root no-op write serializes all folder moves before
+   * the cycle check; matching both parents before DELETE means a missing target leaves the old edge
+   * intact.
+   */
+  public static String moveFolder() {
+    return """
+        MATCH (treeRoot:<LABEL.FOLDER> {<PROP.IS_ROOT>:true})
+        SET treeRoot.<PROP.ID> = treeRoot.<PROP.ID>
+        WITH treeRoot
+        MATCH (oldParent:<LABEL.FOLDER>)-[oldRelation:<REL.CONTAINS>]->
+              (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.FOLDER_ID>}})
+        MATCH (newParent:<LABEL.FOLDER> {<PROP.ID>:{<PH.PARENT_FOLDER_ID>}})
+        WHERE NOT EXISTS {
+          MATCH (folder)-[:<REL.CONTAINS>*0..]->(newParent)
+        }
+        DELETE oldRelation
+        MERGE (newParent)-[:<REL.CONTAINS>]->(folder)
+        SET folder.<PROP.PARENT_FOLDER_ID> = {<PH.PARENT_FOLDER_ID>}
+        SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1
+        SET oldParent._cedarRevision = coalesce(oldParent._cedarRevision, 1) + 1
+        FOREACH (_ IN CASE WHEN oldParent = newParent THEN [] ELSE [1] END |
+          SET newParent._cedarRevision = coalesce(newParent._cedarRevision, 1) + 1)
+        RETURN folder AS resource, folder._cedarRevision AS revision
+        """;
   }
 
   public static String setFolderOwner() {
@@ -85,6 +137,7 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.FOLDER_ID>}})" +
         " MERGE (user)-[:<REL.OWNS>]->(folder)" +
         " SET folder.<PROP.OWNED_BY> = {<PH.USER_ID>}" +
+        " SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1" +
         " RETURN folder";
   }
 
@@ -95,6 +148,7 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " MATCH (user)-[relation:<REL.OWNS>]->(folder)" +
         " DELETE (relation)" +
         " SET folder.<PROP.OWNED_BY> = null" +
+        " SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1" +
         " RETURN folder";
   }
 
@@ -147,14 +201,16 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
         " SET folder.<PROP.IS_OPEN> = true" +
-        " RETURN folder";
+        " SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1" +
+        " RETURN folder AS resource, folder._cedarRevision AS revision";
   }
 
   public static String setNotOpen() {
     return "" +
         " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
         " REMOVE folder.<PROP.IS_OPEN>" +
-        " RETURN folder";
+        " SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1" +
+        " RETURN folder AS resource, folder._cedarRevision AS revision";
   }
 
   public static String getTotalCount() {

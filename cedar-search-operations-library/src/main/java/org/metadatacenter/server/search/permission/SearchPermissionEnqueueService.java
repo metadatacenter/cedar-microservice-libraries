@@ -37,7 +37,10 @@ public class SearchPermissionEnqueueService implements AutoCloseable {
   private void enqueue(String id, SearchPermissionQueueEventType eventType) {
     SearchPermissionQueueEvent event = new SearchPermissionQueueEvent(id, eventType);
     outbox.append(event);
-    relayPending();
+    // The mutation has already committed and the event is now durable. A pre-existing malformed
+    // entry or a transient queue failure must not turn that successful REST operation into a 500;
+    // the managed relay will retry anything that remains in the outbox.
+    relaySafely();
   }
 
   public synchronized void start() {

@@ -33,7 +33,8 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
     sb.append(buildCreateAssignment(NodeProperty.LAST_UPDATED_BY)).append(",");
     sb.append(buildCreateAssignment(NodeProperty.OWNED_BY)).append(",");
     //
-    sb.append(buildCreateAssignment(NodeProperty.PARENT_CATEGORY_ID));
+    sb.append(buildCreateAssignment(NodeProperty.PARENT_CATEGORY_ID)).append(",");
+    sb.append("_cedarRevision:1");
     sb.append("})");
 
     if (parentCategoryId != null) {
@@ -58,6 +59,17 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
         " RETURN category";
   }
 
+  public static String getVersionedCategoryById() {
+    return " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})"
+        + " RETURN category AS resource, coalesce(category._cedarRevision, 1) AS revision";
+  }
+
+  public static String lockCategoryRevision() {
+    return " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})"
+        + " SET category._cedarRevision = coalesce(category._cedarRevision, 1)"
+        + " RETURN category._cedarRevision AS revision";
+  }
+
   public static String getCategoryByIdentifier() {
     return "" +
         " MATCH (category:<LABEL.CATEGORY> {<PROP.IDENTIFIER>:{<PH.IDENTIFIER>}})" +
@@ -66,7 +78,7 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
 
   public static String getCategoryByParentAndName() {
     return "" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.NAME>:{<PH.NAME>}, <PROP.PARENT_CATEGORY_ID>:{<PH.PARENT_CATEGORY_ID>}})" +
+        " MATCH (category:<LABEL.CATEGORY> {<PROP.NAME_LOWER>:{<PH.NAME>}, <PROP.PARENT_CATEGORY_ID>:{<PH.PARENT_CATEGORY_ID>}})" +
         " RETURN category";
   }
 
@@ -86,9 +98,20 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
   }
 
   public static String deleteCategoryById() {
-    return "" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
-        " DETACH DELETE category";
+    return " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})"
+        + " OPTIONAL MATCH ()-[incoming]->(category)"
+        + " WITH category, collect(incoming) AS incomingRelations"
+        + " FOREACH (relation IN incomingRelations | DELETE relation)"
+        + " DELETE category"
+        + " RETURN true AS deleted";
+  }
+
+  public static String getCategoryDeletionBlockers() {
+    return " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})"
+        + " OPTIONAL MATCH (category)-[:<REL.CONTAINSCATEGORY>]->(child:<LABEL.CATEGORY>)"
+        + " WITH category, count(DISTINCT child) AS childCategoryCount"
+        + " OPTIONAL MATCH (category)-[:<REL.CONTAINSARTIFACT>]->(artifact:<LABEL.RESOURCE>)"
+        + " RETURN childCategoryCount, count(DISTINCT artifact) AS artifactCount";
   }
 
   public static String getCategoryOwner() {
@@ -105,6 +128,18 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
         " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.CATEGORY_ID>} })" +
         " MERGE (category)-[:<REL.CONTAINSARTIFACT>]->(artifact)" +
         " RETURN category";
+  }
+
+  public static String attachCategoriesToArtifact() {
+    return " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ARTIFACT_ID>}})"
+        + " WITH artifact, {<PH.CATEGORY_ID_LIST>} AS requestedCategoryIds"
+        + " MATCH (category:<LABEL.CATEGORY>)"
+        + " WHERE category.<PROP.ID> IN requestedCategoryIds"
+        + " WITH artifact, requestedCategoryIds, collect(category) AS categories"
+        + " WHERE size(categories) = size(requestedCategoryIds)"
+        + " UNWIND categories AS category"
+        + " MERGE (category)-[:<REL.CONTAINSARTIFACT>]->(artifact)"
+        + " RETURN count(category) AS attachedCount";
   }
 
   public static String detachCategoryFromArtifact() {

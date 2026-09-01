@@ -24,6 +24,9 @@ public interface TemplateFieldService<K, T> {
 
   void deleteTemplateField(K templateFieldId) throws ArtifactServerResourceNotFoundException, IOException;
 
+  void deleteTemplateField(K templateFieldId, long expectedRevision)
+      throws ArtifactServerResourceNotFoundException, IOException;
+
   void deleteAllTemplateFields();
 
   long count();

@@ -10,6 +10,8 @@ import org.metadatacenter.model.folderserver.basic.FolderServerCategory;
 import org.metadatacenter.model.folderserver.extract.FolderServerCategoryExtract;
 import org.metadatacenter.model.folderserver.extract.FolderServerCategoryExtractWithChildren;
 import org.metadatacenter.server.CategoryServiceSession;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.neo4j.AbstractNeo4JUserSession;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedCategories;
@@ -43,6 +45,11 @@ public class Neo4JUserSessionCategoryService extends AbstractNeo4JUserSession im
   }
 
   @Override
+  public VersionedResource<FolderServerCategory> getVersionedCategoryById(CedarCategoryId categoryId) {
+    return proxies.category().getVersionedCategoryById(categoryId);
+  }
+
+  @Override
   public long getCategoryCount() {
     return proxies.category().getCategoryCount();
   }
@@ -53,8 +60,20 @@ public class Neo4JUserSessionCategoryService extends AbstractNeo4JUserSession im
   }
 
   @Override
+  public VersionedResource<FolderServerCategory> updateCategoryById(CedarCategoryId categoryId,
+                                                                     Map<NodeProperty, String> updateFields,
+                                                                     RevisionPrecondition precondition) {
+    return proxies.category().updateCategoryById(categoryId, updateFields, cu.getResourceId(), precondition);
+  }
+
+  @Override
   public boolean deleteCategoryById(CedarCategoryId categoryId) {
     return proxies.category().deleteCategoryById(categoryId);
+  }
+
+  @Override
+  public boolean deleteCategoryById(CedarCategoryId categoryId, RevisionPrecondition precondition) {
+    return proxies.category().deleteCategoryById(categoryId, precondition);
   }
 
   @Override
@@ -141,6 +160,11 @@ public class Neo4JUserSessionCategoryService extends AbstractNeo4JUserSession im
   @Override
   public boolean attachCategoryToArtifact(CedarCategoryId categoryId, CedarArtifactId artifactId) {
     return proxies.category().attachCategoryToArtifact(categoryId, artifactId);
+  }
+
+  @Override
+  public boolean attachCategoriesToArtifact(List<CedarCategoryId> categoryIds, CedarArtifactId artifactId) {
+    return proxies.category().attachCategoriesToArtifact(categoryIds, artifactId);
   }
 
   @Override

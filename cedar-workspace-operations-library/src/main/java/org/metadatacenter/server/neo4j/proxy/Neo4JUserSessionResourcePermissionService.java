@@ -5,25 +5,19 @@ import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
-import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.model.folderserver.basic.FolderServerUser;
-import org.metadatacenter.model.folderserver.datagroup.ResourceWithEverybodyPermission;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
+import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionedResourcePermissions;
 import org.metadatacenter.server.neo4j.AbstractNeo4JUserSession;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.*;
 import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
-import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionGroupPermissionPair;
-import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUserPermissionPair;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionsRequest;
-import org.metadatacenter.server.security.model.user.CedarGroupExtract;
 import org.metadatacenter.server.security.model.user.CedarUser;
-import org.metadatacenter.server.security.model.user.CedarUserExtract;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUserSession implements ResourcePermissionServiceSession {
 
@@ -39,97 +33,34 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
 
   @Override
   public CedarNodePermissionsWithExtract getResourcePermissions(CedarFilesystemResourceId resourceId) {
-    FileSystemResource node = proxies.filesystemResource().findResourceById(resourceId);
-    if (node != null) {
-      FolderServerUser owner = getFilesystemResourceOwner(resourceId);
-      List<FolderServerUser> readUsers = getUsersWithDirectPermission(resourceId, FilesystemResourcePermission.READ);
-      List<FolderServerUser> writeUsers = getUsersWithDirectPermission(resourceId, FilesystemResourcePermission.WRITE);
-      List<FolderServerGroup> readGroups = getGroupsWithDirectPermission(resourceId, FilesystemResourcePermission.READ);
-      List<FolderServerGroup> writeGroups = getGroupsWithDirectPermission(resourceId, FilesystemResourcePermission.WRITE);
-      return buildPermissions(owner, readUsers, writeUsers, readGroups, writeGroups);
-    } else {
-      return null;
-    }
-  }
-
-  private List<FolderServerUser> getUsersWithDirectPermission(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    return proxies.permission().getUsersWithDirectPermissionOnResource(resourceId, permission);
-  }
-
-  private List<FolderServerGroup> getGroupsWithDirectPermission(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    return proxies.permission().getGroupsWithDirectPermissionOnResource(resourceId, permission);
+    VersionedResourcePermissions versioned = getVersionedResourcePermissions(resourceId);
+    return versioned == null ? null : versioned.content();
   }
 
   @Override
-  public BackendCallResult updateResourcePermissions(CedarFilesystemResourceId resourceId, ResourcePermissionsRequest request) {
+  public VersionedResourcePermissions getVersionedResourcePermissions(CedarFilesystemResourceId resourceId) {
+    return proxies.permission().getVersionedPermissions(resourceId);
+  }
+
+  @Override
+  public BackendCallResult<VersionedResourcePermissions> updateResourcePermissions(
+      CedarFilesystemResourceId resourceId, ResourcePermissionsRequest request, RevisionPrecondition precondition) {
 
     ResourcePermissionRequestValidator prv = new ResourcePermissionRequestValidator(this, proxies, resourceId, request);
-    BackendCallResult bcr = prv.getCallResult();
+    BackendCallResult<VersionedResourcePermissions> bcr = prv.getCallResult();
     if (bcr.isError()) {
       return bcr;
     } else {
-      CedarNodePermissionsWithExtract currentPermissions = getResourcePermissions(resourceId);
       CedarNodePermissionsWithExtract newPermissions = prv.getPermissions();
-
-      CedarUserId oldOwnerId = currentPermissions.getOwner().getResourceId();
-      CedarUserId newOwnerId = newPermissions.getOwner().getResourceId();
-      CedarUserId changedOwnerId = null;
-      if (oldOwnerId != null && !oldOwnerId.equals(newOwnerId)) {
-        changedOwnerId = newOwnerId;
+      VersionedResourcePermissions updated = proxies.permission().replacePermissions(resourceId, newPermissions, precondition);
+      if (updated == null) {
+        BackendCallResult<VersionedResourcePermissions> failure = new BackendCallResult<>();
+        failure.addError(org.metadatacenter.error.CedarErrorType.SERVER_ERROR)
+            .message("The resource permissions could not be updated");
+        return failure;
       }
-
-      Set<ResourcePermissionUserPermissionPair> oldUserPermissions = new HashSet<>();
-      for (CedarNodeUserPermission up : currentPermissions.getUserPermissions()) {
-        oldUserPermissions.add(up.getAsUserIdPermissionPair());
-      }
-      Set<ResourcePermissionUserPermissionPair> newUserPermissions = new HashSet<>();
-      for (CedarNodeUserPermission up : newPermissions.getUserPermissions()) {
-        newUserPermissions.add(up.getAsUserIdPermissionPair());
-      }
-
-      Set<ResourcePermissionUserPermissionPair> toRemoveUserPermissions = new HashSet<>(oldUserPermissions);
-      toRemoveUserPermissions.removeAll(newUserPermissions);
-
-      Set<ResourcePermissionUserPermissionPair> toAddUserPermissions = new HashSet<>(newUserPermissions);
-      toAddUserPermissions.removeAll(oldUserPermissions);
-
-      Set<ResourcePermissionGroupPermissionPair> oldGroupPermissions = new HashSet<>();
-      for (CedarNodeGroupPermission gp : currentPermissions.getGroupPermissions()) {
-        oldGroupPermissions.add(gp.getAsGroupIdPermissionPair());
-      }
-      Set<ResourcePermissionGroupPermissionPair> newGroupPermissions = new HashSet<>();
-      for (CedarNodeGroupPermission gp : newPermissions.getGroupPermissions()) {
-        newGroupPermissions.add(gp.getAsGroupIdPermissionPair());
-      }
-
-      Set<ResourcePermissionGroupPermissionPair> toRemoveGroupPermissions = new HashSet<>(oldGroupPermissions);
-      toRemoveGroupPermissions.removeAll(newGroupPermissions);
-
-      Set<ResourcePermissionGroupPermissionPair> toAddGroupPermissions = new HashSet<>(newGroupPermissions);
-      toAddGroupPermissions.removeAll(oldGroupPermissions);
-
-      NodeSharePermission setEverybodyPermission = null;
-      ResourceWithEverybodyPermission node = proxies.filesystemResource().findResourceById(resourceId);
-      if (node != null) {
-        FolderServerGroup everybody = proxies.group().getEverybodyGroup();
-        for (ResourcePermissionGroupPermissionPair groupPermission : newGroupPermissions) {
-          if (groupPermission.getGroup().getId().equals(everybody.getId())) {
-            NodeSharePermission everybodyPermissionCandidate = NodeSharePermission.fromGroupPermission(groupPermission);
-            if (everybodyPermissionCandidate != node.getEverybodyPermission()) {
-              setEverybodyPermission = everybodyPermissionCandidate;
-            }
-          }
-        }
-        if (setEverybodyPermission == null && node.getEverybodyPermission() != NodeSharePermission.NONE) {
-          setEverybodyPermission = NodeSharePermission.NONE;
-        }
-      }
-
-      proxies.permission().updatePermissionsAtomically(resourceId, changedOwnerId,
-          toRemoveUserPermissions, toAddUserPermissions,
-          toRemoveGroupPermissions, toAddGroupPermissions, setEverybodyPermission);
-
-      return new BackendCallResult();
+      bcr.setPayload(updated);
+      return bcr;
     }
   }
 
@@ -166,43 +97,6 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
   public boolean userIsOwnerOfResource(CedarFilesystemResourceId resourceId) {
     FolderServerUser owner = getFilesystemResourceOwner(resourceId);
     return owner != null && owner.getId().equals(cu.getId());
-  }
-
-  private CedarNodePermissionsWithExtract buildPermissions(FolderServerUser owner, List<FolderServerUser> readUsers,
-                                                           List<FolderServerUser> writeUsers,
-                                                           List<FolderServerGroup> readGroups, List<FolderServerGroup> writeGroups) {
-    CedarNodePermissionsWithExtract permissions = new CedarNodePermissionsWithExtract();
-    CedarUserExtract o = owner.buildExtract();
-    permissions.setOwner(o);
-    if (readUsers != null) {
-      for (FolderServerUser user : readUsers) {
-        CedarUserExtract u = user.buildExtract();
-        CedarNodeUserPermission up = new CedarNodeUserPermission(u, FilesystemResourcePermission.READ);
-        permissions.addUserPermissions(up);
-      }
-    }
-    if (writeUsers != null) {
-      for (FolderServerUser user : writeUsers) {
-        CedarUserExtract u = user.buildExtract();
-        CedarNodeUserPermission up = new CedarNodeUserPermission(u, FilesystemResourcePermission.WRITE);
-        permissions.addUserPermissions(up);
-      }
-    }
-    if (readGroups != null) {
-      for (FolderServerGroup group : readGroups) {
-        CedarGroupExtract g = group.buildExtract();
-        CedarNodeGroupPermission gp = new CedarNodeGroupPermission(g, FilesystemResourcePermission.READ);
-        permissions.addGroupPermissions(gp);
-      }
-    }
-    if (writeGroups != null) {
-      for (FolderServerGroup group : writeGroups) {
-        CedarGroupExtract g = group.buildExtract();
-        CedarNodeGroupPermission gp = new CedarNodeGroupPermission(g, FilesystemResourcePermission.WRITE);
-        permissions.addGroupPermissions(gp);
-      }
-    }
-    return permissions;
   }
 
   @Override

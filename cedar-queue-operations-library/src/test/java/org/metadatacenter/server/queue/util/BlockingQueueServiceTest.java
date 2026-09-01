@@ -24,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The blocking queue services against a real Redis: what a producer pushes is what a consumer
  * claims, in order, from the queue the configuration names.
  * <p>
- * Every test has a timeout because a regression in the blocking claim must fail the build rather
- * than leave CI waiting indefinitely.
+ * Every test has a timeout because a regression in the claim must fail the build rather than leave
+ * CI waiting indefinitely.
  */
 @Timeout(30)
 class BlockingQueueServiceTest {
@@ -73,7 +73,7 @@ class BlockingQueueServiceTest {
     permissionQueue.initializeBlockingQueue();
     List<String> popped = permissionQueue.waitForMessages();
 
-    assertNotNull(popped, "BLMOVE should return a message, not time out");
+    assertNotNull(popped, "the claim should return a message, not an idle turn");
     assertEquals(QueueTestConfig.queueName(QueueService.SEARCH_PERMISSION_QUEUE_ID), popped.get(0),
         "the compatibility result reports the claimed queue as the first element");
 
@@ -229,6 +229,32 @@ class BlockingQueueServiceTest {
 
     assertEquals("first", readEvent(permissionQueue.waitForMessages().get(1)).getId());
     assertEquals("second", readEvent(permissionQueue.waitForMessages().get(1)).getId());
+  }
+
+  /**
+   * An idle consumer must come back rather than block forever, and must come back empty-handed
+   * rather than with something it did not claim: the caller treats a non-empty result as a message
+   * to handle.
+   */
+  @Test
+  void anEmptyQueueYieldsAnIdleTurn() {
+    permissionQueue.initializeBlockingQueue();
+
+    assertEquals(List.of(), permissionQueue.waitForMessages());
+    assertEquals(0, permissionQueue.inFlightCount(), "an idle turn claims nothing");
+  }
+
+  /**
+   * The claim and the recovery are Lua scripts so that they run on every Redis CEDAR deploys to,
+   * not only on the 6.2 and later that implement LMOVE. A server below the declared minimum is
+   * named by the health check instead of rejecting commands a consumer would retry forever.
+   */
+  @Test
+  void theServerIsVerifiedAgainstTheVersionTheQueuesRequire() {
+    permissionQueue.verifyConnectivity();
+
+    assertTrue(new RedisServerVersion(6, 0, 16).isAtLeast(QueueService.MINIMUM_SERVER_VERSION),
+        "the queues must run on the oldest server in the estate");
   }
 
   @Test

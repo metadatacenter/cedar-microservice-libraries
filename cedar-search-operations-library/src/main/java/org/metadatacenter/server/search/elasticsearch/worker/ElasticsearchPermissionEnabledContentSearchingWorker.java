@@ -7,7 +7,9 @@ import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.join.ScoreMode;
 import org.metadatacenter.config.OpensearchConfig;
+import org.metadatacenter.error.CedarErrorReasonKey;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
+import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
@@ -17,9 +19,12 @@ import org.metadatacenter.server.security.model.permission.resource.FilesystemRe
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
+import org.opensearch.OpenSearchException;
+import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.search.CreatePitRequest;
+import org.opensearch.action.search.DeletePitRequest;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.search.SearchScrollRequest;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.RestHighLevelClient;
 import org.opensearch.common.unit.TimeValue;
@@ -29,8 +34,11 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryStringQueryBuilder;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
+import org.opensearch.search.builder.PointInTimeBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.sort.SortOrder;
+import org.opensearch.core.rest.RestStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,10 +58,17 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
   private final RestHighLevelClient client;
   private final String indexName;
+  private final int deepPageSize;
+  private final TimeValue pointInTimeKeepAlive;
 
   public ElasticsearchPermissionEnabledContentSearchingWorker(OpensearchConfig config, RestHighLevelClient client) {
     this.client = client;
     this.indexName = config.getIndexes().getSearchIndex().getName();
+    // The deep walk skips a whole result window per round trip. Each skipped page re-runs the query
+    // over the entire result set and carries no documents back, so the widest page the index will
+    // serve is also the cheapest way to cross a large offset.
+    this.deepPageSize = Math.max(1, config.getMaxResultWindow());
+    this.pointInTimeKeepAlive = TimeValue.timeValueMillis(config.getSearchContextKeepAlive());
   }
 
   public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
@@ -61,10 +76,11 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                      int offset) throws CedarProcessingException {
 
     try {
-      SearchRequest searchRequest = getSearchRequestBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
+      SearchSourceBuilder searchSourceBuilder =
+          getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
+      SearchRequest searchRequest = new SearchRequest(indexName).source(searchSourceBuilder);
 
       // Set pagination parameters
-      SearchSourceBuilder searchSourceBuilder = searchRequest.source();
       searchSourceBuilder.from(offset);
       searchSourceBuilder.size(limit);
       searchSourceBuilder.trackTotalHits(true);
@@ -85,57 +101,177 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     }
   }
 
-  // It uses the scroll API. It retrieves all results. No pagination and therefore no offset. Scrolling is not
-  // intended for real time user requests, but rather for processing large amounts of data.
-  // More info: https://www.elastic.co/guide/en/elasticsearch/reference/2.3/search-request-scroll.html
+  // Deep paging. The offset is walked with search_after over a point in time rather than asked for in
+  // one oversized request: a page then costs the page, not everything in front of it, and the rows
+  // skipped on the way are read as sort values with no document body. The scroll API cannot serve this
+  // call at all. A scroll batch is capped by index.max_result_window exactly as from+size is, so asking
+  // for offset+limit rows failed for every offset past 10,000 that this endpoint exists to reach.
   public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
                                          ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                          int offset) throws CedarProcessingException {
+    String pointInTimeId = null;
     try {
-      SearchRequest searchRequest = getSearchRequestBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
+      pointInTimeId = openPointInTime();
 
-      // Set scroll and scroll size
-      TimeValue timeout = TimeValue.timeValueMinutes(2);
-      searchRequest.scroll(timeout);
-      searchRequest.source().size(offset + limit);
-      searchRequest.source().trackTotalHits(true);
+      SearchSourceBuilder searchSourceBuilder = getDeepSearchSourceBuilder(rctx, query, resourceTypes, version,
+          publicationStatus, categoryId, sortList, pointInTimeId);
+      searchSourceBuilder.trackTotalHits(true);
 
-      // Execute request
-      SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT);
+      // A point in time carries the indices it was opened on, and OpenSearch rejects a request naming both.
+      SearchRequest searchRequest = new SearchRequest().source(searchSourceBuilder);
 
       SearchResponseResult result = new SearchResponseResult();
-      result.setTotalCount(response.getHits().getTotalHits().value);
+      long totalCount = -1;
+      Object[] searchAfter = null;
 
-      int counter = 0;
-      while (response.getHits().getHits().length != 0) {
-        for (SearchHit hit : response.getHits().getHits()) {
-          if (counter >= offset && counter < offset + limit) {
-            result.add(hit);
-          }
-          counter++;
+      long skipped = 0;
+      while (skipped < offset) {
+        int pageSize = (int) Math.min(deepPageSize, offset - skipped);
+        SearchHits hits = executePage(searchRequest, searchSourceBuilder, pageSize, false, searchAfter);
+        if (totalCount < 0) {
+          totalCount = hits.getTotalHits().value;
         }
-        //next scroll
-        if (response.getHits().getHits().length > 0) {
-          SearchScrollRequest scrollRequest = new SearchScrollRequest(response.getScrollId());
-          scrollRequest.scroll(timeout);
-          response = client.scroll(scrollRequest, RequestOptions.DEFAULT);
-        } else {
-          break;
+        SearchHit[] page = hits.getHits();
+        if (page.length < pageSize) {
+          // The result set ended before the offset was reached, so the requested page holds nothing.
+          result.setTotalCount(totalCount);
+          return result;
         }
+        searchAfter = page[page.length - 1].getSortValues();
+        skipped += page.length;
+        // The first page reported the total; counting it again on every skipped page is work for an
+        // answer already held.
+        searchSourceBuilder.trackTotalHits(false);
+      }
+
+      SearchHits hits = executePage(searchRequest, searchSourceBuilder, limit, true, searchAfter);
+      if (totalCount < 0) {
+        totalCount = hits.getTotalHits().value;
+      }
+      result.setTotalCount(totalCount);
+      for (SearchHit hit : hits.getHits()) {
+        result.add(hit);
       }
       return result;
     } catch (IOException e) {
       throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
+    } finally {
+      closePointInTime(pointInTimeId);
     }
   }
 
-  private SearchRequest getSearchRequestBuilder(CedarRequestContext rctx, String query,
-                                                List<String> resourceTypes,
-                                                ResourceVersionFilter version,
-                                                ResourcePublicationStatusFilter publicationStatus,
-                                                String categoryId, List<String> sortList) throws CedarProcessingException {
+  /**
+   * One page of a walk the caller is driving. The point in time is opened here when the walk starts,
+   * carried by the caller from page to page, and released as soon as a page comes back short, because
+   * a short page is the last one. Nothing is skipped: the page resumes where the previous one stopped,
+   * so a page costs the same wherever in the result set it falls.
+   */
+  public DeepSearchPage searchDeepPage(CedarRequestContext rctx, String query, List<String> resourceTypes,
+                                       ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                       String categoryId, List<String> sortList, int limit, String pointInTimeId,
+                                       Object[] searchAfter) throws CedarException {
+    boolean walkStarts = pointInTimeId == null;
+    String walkPointInTimeId;
+    try {
+      walkPointInTimeId = walkStarts ? openPointInTime() : pointInTimeId;
+    } catch (IOException e) {
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
+    }
+    try {
+      SearchSourceBuilder searchSourceBuilder = getDeepSearchSourceBuilder(rctx, query, resourceTypes, version,
+          publicationStatus, categoryId, sortList, walkPointInTimeId);
+      // Only the first page counts the result set. Every page after it is handed the total the walk
+      // began with, which is also what makes the pages agree with each other.
+      searchSourceBuilder.trackTotalHits(walkStarts);
+      SearchRequest searchRequest = new SearchRequest().source(searchSourceBuilder);
 
-    SearchRequest searchRequest = new SearchRequest(indexName);
+      SearchHits hits = executePage(searchRequest, searchSourceBuilder, limit, true, searchAfter);
+      SearchResponseResult result = new SearchResponseResult();
+      if (walkStarts) {
+        result.setTotalCount(hits.getTotalHits().value);
+      }
+      SearchHit[] page = hits.getHits();
+      for (SearchHit hit : page) {
+        result.add(hit);
+      }
+
+      boolean lastPage = page.length < limit;
+      if (lastPage) {
+        closePointInTime(walkPointInTimeId);
+        return new DeepSearchPage(result, null, null);
+      }
+      return new DeepSearchPage(result, walkPointInTimeId, page[page.length - 1].getSortValues());
+    } catch (IOException e) {
+      closePointInTime(walkPointInTimeId);
+      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
+    } catch (OpenSearchStatusException e) {
+      if (e.status() == RestStatus.NOT_FOUND) {
+        // The snapshot the walk was reading has been released, by its keep alive or by a restart.
+        // There is nothing to resume: the caller has to start the walk again.
+        throw new CedarProcessingException("The continuation has expired. Start the walk again!")
+            .errorReasonKey(CedarErrorReasonKey.CONTINUATION_EXPIRED)
+            .badRequest();
+      }
+      closePointInTime(walkPointInTimeId);
+      throw e;
+    }
+  }
+
+  /**
+   * The search both deep calls run: the caller's query, ordered totally, inside a point in time.
+   */
+  private SearchSourceBuilder getDeepSearchSourceBuilder(CedarRequestContext rctx, String query,
+                                                         List<String> resourceTypes, ResourceVersionFilter version,
+                                                         ResourcePublicationStatusFilter publicationStatus,
+                                                         String categoryId, List<String> sortList,
+                                                         String pointInTimeId) throws CedarProcessingException {
+    SearchSourceBuilder searchSourceBuilder =
+        getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
+    // search_after resumes at a sort position, so the sort must order the hits totally. The caller's
+    // sort fields do not: cid does, and appending it leaves the requested ordering intact. With no
+    // caller sort the ordering is relevance, which has to be named explicitly to be sorted on.
+    if (searchSourceBuilder.sorts() == null || searchSourceBuilder.sorts().isEmpty()) {
+      searchSourceBuilder.sort(SortBuilders.scoreSort());
+    }
+    searchSourceBuilder.sort(SortBuilders.fieldSort(DOCUMENT_CEDAR_ID).order(SortOrder.ASC));
+    searchSourceBuilder.pointInTimeBuilder(new PointInTimeBuilder(pointInTimeId).setKeepAlive(pointInTimeKeepAlive));
+    return searchSourceBuilder;
+  }
+
+  private String openPointInTime() throws IOException {
+    // A partial point in time would silently exclude an unavailable shard from every page below it.
+    CreatePitRequest request = new CreatePitRequest(pointInTimeKeepAlive, false, indexName);
+    return client.createPit(request, RequestOptions.DEFAULT).getId();
+  }
+
+  private void closePointInTime(String pointInTimeId) {
+    if (pointInTimeId == null) {
+      return;
+    }
+    try {
+      client.deletePit(new DeletePitRequest(pointInTimeId), RequestOptions.DEFAULT);
+    } catch (IOException | OpenSearchException e) {
+      // The context expires on its own, and a failure here must not replace the outcome of the search.
+      log.warn("Unable to delete the OpenSearch point in time context", e);
+    }
+  }
+
+  private SearchHits executePage(SearchRequest searchRequest, SearchSourceBuilder searchSourceBuilder, int size,
+                                 boolean withDocuments, Object[] searchAfter) throws IOException {
+    searchSourceBuilder.size(size);
+    searchSourceBuilder.fetchSource(withDocuments);
+    if (searchAfter != null) {
+      searchSourceBuilder.searchAfter(searchAfter);
+    }
+    return client.search(searchRequest, RequestOptions.DEFAULT).getHits();
+  }
+
+  private SearchSourceBuilder getSearchSourceBuilder(CedarRequestContext rctx, String query,
+                                                     List<String> resourceTypes,
+                                                     ResourceVersionFilter version,
+                                                     ResourcePublicationStatusFilter publicationStatus,
+                                                     String categoryId, List<String> sortList) throws CedarProcessingException {
+
     SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
 
     BoolQueryBuilder mainQuery = QueryBuilders.boolQuery();
@@ -226,7 +362,6 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
     // Set main query
     searchSourceBuilder.query(mainQuery);
-    searchRequest.source(searchSourceBuilder);
 
     // Sort by field
     if (sortList != null && !sortList.isEmpty()) {
@@ -243,7 +378,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
         }
       }
     }
-    return searchRequest;
+    return searchSourceBuilder;
   }
 
   private boolean enclosedByQuotes(String keyword) {

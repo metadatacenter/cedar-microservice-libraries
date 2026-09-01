@@ -28,6 +28,9 @@ public interface TemplateElementService<K, T> {
 
   void deleteTemplateElement(K templateElementId) throws ArtifactServerResourceNotFoundException, IOException;
 
+  void deleteTemplateElement(K templateElementId, long expectedRevision)
+      throws ArtifactServerResourceNotFoundException, IOException;
+
   boolean existsTemplateElement(K templateElementId) throws IOException;
 
   void deleteAllTemplateElements();

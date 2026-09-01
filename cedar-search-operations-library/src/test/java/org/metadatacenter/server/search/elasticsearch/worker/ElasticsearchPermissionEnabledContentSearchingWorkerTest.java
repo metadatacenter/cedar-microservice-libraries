@@ -15,6 +15,13 @@ import org.metadatacenter.server.security.model.permission.resource.FilesystemRe
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
+import org.metadatacenter.error.CedarErrorReasonKey;
+import org.metadatacenter.exception.CedarException;
+import org.metadatacenter.http.CedarResponseStatus;
+import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.search.CreatePitRequest;
+import org.opensearch.action.search.CreatePitResponse;
+import org.opensearch.action.search.DeletePitRequest;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchResponse.Clusters;
@@ -22,13 +29,21 @@ import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.RestHighLevelClient;
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
+import org.opensearch.search.builder.SearchSourceBuilder;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
+
+import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -38,6 +53,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
@@ -51,8 +68,11 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
   @BeforeEach
   void setUp() throws Exception {
     OpensearchConfig config = new ObjectMapper().readValue(
-        "{\"indexes\":{\"searchIndex\":{\"name\":\"cedar-search\"}}}", OpensearchConfig.class);
+        "{\"indexes\":{\"searchIndex\":{\"name\":\"cedar-search\"}},\"maxResultWindow\":3,\"searchContextKeepAlive\":60000}",
+        OpensearchConfig.class);
     client = mock(RestHighLevelClient.class);
+    when(client.createPit(any(CreatePitRequest.class), any(RequestOptions.class)))
+        .thenReturn(new CreatePitResponse("pit-1", 0L, 1, 1, 0, 0, ShardSearchFailure.EMPTY_ARRAY));
     worker = new ElasticsearchPermissionEnabledContentSearchingWorker(config, client);
     user = new CedarUser();
     user.setId("user-1");
@@ -236,6 +256,189 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
             List.of("template"), FilesystemResourcePermission.READ, user));
   }
 
+  @Test
+  void deepSearchWalksTheOffsetWithSearchAfterAndFetchesOnlyTheRequestedPage() throws Exception {
+    // The configured window is 3, so an offset of 5 is skipped as 3 rows then 2, before the page of 2 asked for.
+    List<Page> pages = deepPages(response(7, hit(0), hit(1), hit(2)), response(7, hit(3), hit(4)),
+        response(7, hit(5), hit(6)));
+
+    SearchResponseResult result = worker.searchDeep(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, null, 2, 5);
+
+    assertEquals(7, result.getTotalCount());
+    assertEquals(List.of(5, 6), result.getHits().stream().map(SearchHit::docId).toList());
+    assertEquals(List.of(3, 2, 2), pages.stream().map(Page::size).toList());
+    assertEquals(List.of(false, false, true), pages.stream().map(Page::fetchesDocuments).toList());
+    assertEquals(null, pages.get(0).searchAfter());
+    assertEquals("cid-2", pages.get(1).searchAfter()[1]);
+    assertEquals("cid-4", pages.get(2).searchAfter()[1]);
+    // The point in time carries its own indices; naming them again is rejected by OpenSearch.
+    assertEquals(0, pages.get(0).indices().length);
+    assertTrue(pages.get(0).source().contains("pit-1"), pages.get(0).source());
+    verifyPointInTimeDeleted();
+  }
+
+  @Test
+  void deepSearchAsksForOnePageWhenThereIsNoOffsetToWalk() throws Exception {
+    List<Page> pages = deepPages(response(7, hit(0), hit(1)));
+
+    SearchResponseResult result = worker.searchDeep(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, null, 2, 0);
+
+    assertEquals(List.of(0, 1), result.getHits().stream().map(SearchHit::docId).toList());
+    assertEquals(1, pages.size());
+    assertTrue(pages.get(0).fetchesDocuments());
+    verifyPointInTimeDeleted();
+  }
+
+  @Test
+  void deepSearchReturnsAnEmptyPageWithTheTotalWhenTheOffsetIsPastTheLastRow() throws Exception {
+    List<Page> pages = deepPages(response(2, hit(0), hit(1)));
+
+    SearchResponseResult result = worker.searchDeep(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, null, 2, 100);
+
+    assertEquals(2, result.getTotalCount());
+    assertTrue(result.getHits().isEmpty());
+    assertEquals(1, pages.size());
+    verifyPointInTimeDeleted();
+  }
+
+  static Stream<Arguments> deepSortOrderings() {
+    return Stream.of(
+        Arguments.of(null, List.of("_score", "cid")),
+        Arguments.of(List.of("name"), List.of("info.schema:name", "cid")),
+        Arguments.of(List.of("-lastUpdatedOnTS"), List.of("info.pav:lastUpdatedOn", "cid")));
+  }
+
+  @ParameterizedTest
+  @MethodSource("deepSortOrderings")
+  void deepSearchAppendsTheIdTiebreakerSoSearchAfterOrdersTheHitsTotally(List<String> sortList,
+                                                                        List<String> expectedOrder) throws Exception {
+    List<Page> pages = deepPages(response(1, hit(0)));
+
+    worker.searchDeep(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, sortList, 2, 0);
+
+    String source = pages.get(0).source();
+    int previous = -1;
+    for (String field : expectedOrder) {
+      int at = source.indexOf("\"" + field + "\"", previous + 1);
+      assertTrue(at > previous, () -> "Expected " + expectedOrder + " in sort order, got " + source);
+      previous = at;
+    }
+  }
+
+  @Test
+  void deepSearchDeletesItsPointInTimeWhenAPageFails() throws Exception {
+    doThrow(new IOException("connection refused"))
+        .when(client).search(any(SearchRequest.class), any(RequestOptions.class));
+
+    assertThrows(CedarDependencyUnavailableException.class,
+        () -> worker.searchDeep(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+            ResourcePublicationStatusFilter.ALL, null, null, 2, 5));
+
+    verifyPointInTimeDeleted();
+  }
+
+  @Test
+  void aStartedWalkOpensAPointInTimeCountsTheResultSetAndHandsBackWhereToResume() throws Exception {
+    List<Page> pages = deepPages(response(40, hit(0), hit(1)));
+
+    DeepSearchPage page = worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, null, 2, null, null);
+
+    assertEquals(40, page.result().getTotalCount());
+    assertEquals(List.of(0, 1), page.result().getHits().stream().map(SearchHit::docId).toList());
+    assertEquals("pit-1", page.pointInTimeId());
+    assertEquals("cid-1", page.nextSearchAfter()[1]);
+    assertEquals(1, pages.size());
+    assertEquals(2, pages.get(0).size());
+    assertTrue(pages.get(0).fetchesDocuments());
+    assertEquals(null, pages.get(0).searchAfter());
+    verify(client).createPit(any(CreatePitRequest.class), any(RequestOptions.class));
+    verifyPointInTimeKept();
+  }
+
+  @Test
+  void aContinuedWalkResumesInTheSamePointInTimeWithoutOpeningOrCountingAgain() throws Exception {
+    List<Page> pages = deepPages(response(0, hit(2), hit(3)));
+    Object[] resumeAt = {1.0f, "cid-1"};
+
+    DeepSearchPage page = worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-carried", resumeAt);
+
+    assertEquals(List.of(2, 3), page.result().getHits().stream().map(SearchHit::docId).toList());
+    assertEquals("pit-carried", page.pointInTimeId());
+    assertEquals("cid-1", pages.get(0).searchAfter()[1]);
+    assertTrue(pages.get(0).source().contains("pit-carried"), pages.get(0).source());
+    // The walk counted its result set on the first page; every page after it is handed that total.
+    assertEquals(0, page.result().getTotalCount());
+    verify(client, never()).createPit(any(CreatePitRequest.class), any(RequestOptions.class));
+    verifyPointInTimeKept();
+  }
+
+  @Test
+  void aShortPageEndsTheWalkAndReleasesTheSnapshot() throws Exception {
+    deepPages(response(0, hit(9)));
+
+    DeepSearchPage page = worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-carried", new Object[]{1.0f, "cid-8"});
+
+    assertEquals(List.of(9), page.result().getHits().stream().map(SearchHit::docId).toList());
+    assertEquals(null, page.pointInTimeId());
+    assertEquals(null, page.nextSearchAfter());
+    ArgumentCaptor<DeletePitRequest> deleteRequest = ArgumentCaptor.forClass(DeletePitRequest.class);
+    verify(client).deletePit(deleteRequest.capture(), any(RequestOptions.class));
+    assertEquals(List.of("pit-carried"), deleteRequest.getValue().getPitIds());
+  }
+
+  @Test
+  void aSnapshotThatIsGoneIsAnExpiredContinuationRatherThanAServerFault() throws Exception {
+    // OpenSearch answers 404 search_context_missing once a point in time has been released.
+    when(client.search(any(SearchRequest.class), any(RequestOptions.class)))
+        .thenThrow(new OpenSearchStatusException("No search context found for id [42]", RestStatus.NOT_FOUND));
+
+    CedarException error = assertThrows(CedarException.class,
+        () -> worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+            ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-gone", new Object[]{1.0f, "cid-1"}));
+
+    assertEquals(CedarResponseStatus.BAD_REQUEST, error.getErrorPack().getStatus());
+    assertEquals(CedarErrorReasonKey.CONTINUATION_EXPIRED, error.getErrorPack().getErrorReasonKey());
+    assertTrue(error.getMessage().contains("expired"), error.getMessage());
+  }
+
+  private void verifyPointInTimeKept() throws Exception {
+    verify(client, never()).deletePit(any(DeletePitRequest.class), any(RequestOptions.class));
+  }
+
+  private void verifyPointInTimeDeleted() throws Exception {
+    ArgumentCaptor<DeletePitRequest> deleteRequest = ArgumentCaptor.forClass(DeletePitRequest.class);
+    verify(client).deletePit(deleteRequest.capture(), any(RequestOptions.class));
+    assertEquals(List.of("pit-1"), deleteRequest.getValue().getPitIds());
+  }
+
+  /**
+   * Answers each search with the next given response, recording what the request asked for at the moment
+   * it was made. The worker reuses one source builder across the walk, so only a snapshot is evidence.
+   */
+  private List<Page> deepPages(SearchResponse... responses) throws IOException {
+    List<Page> seen = new ArrayList<>();
+    Deque<SearchResponse> remaining = new ArrayDeque<>(List.of(responses));
+    doAnswer(invocation -> {
+      SearchRequest request = invocation.getArgument(0);
+      SearchSourceBuilder source = request.source();
+      seen.add(new Page(request.indices(), source.size(),
+          source.fetchSource() == null || source.fetchSource().fetchSource(),
+          source.searchAfter(), source.toString()));
+      return remaining.poll();
+    }).when(client).search(any(SearchRequest.class), any(RequestOptions.class));
+    return seen;
+  }
+
+  private record Page(String[] indices, int size, boolean fetchesDocuments, Object[] searchAfter, String source) {
+  }
+
   private SearchResponseResult executeSearch(String query, List<String> resourceTypes, ResourceVersionFilter version,
                                              ResourcePublicationStatusFilter publicationStatus, String categoryId,
                                              List<String> sort, int limit, int offset) throws Exception {
@@ -247,7 +450,20 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
   }
 
   private static SearchResponse emptyResponse(long total) {
-    SearchHits hits = new SearchHits(SearchHits.EMPTY,
+    return response(total);
+  }
+
+  private static SearchHit hit(int docId) {
+    SearchHit hit = new SearchHit(docId);
+    hit.sortValues(new Object[]{1.0f, "cid-" + docId},
+        new DocValueFormat[]{DocValueFormat.RAW, DocValueFormat.RAW});
+    return hit;
+  }
+
+
+
+  private static SearchResponse response(long total, SearchHit... searchHits) {
+    SearchHits hits = new SearchHits(searchHits,
         new TotalHits(total, TotalHits.Relation.EQUAL_TO), Float.NaN);
     SearchResponseSections sections = new SearchResponseSections(hits, null, null, false, null, null, 1);
     return new SearchResponse(sections, null, 1, 1, 0, 1L, ShardSearchFailure.EMPTY_ARRAY, Clusters.EMPTY);

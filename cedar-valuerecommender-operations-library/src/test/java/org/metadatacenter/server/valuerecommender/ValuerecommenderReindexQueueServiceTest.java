@@ -21,6 +21,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The value-recommender reindex queue against a real Redis. Unlike the other queue services this
@@ -113,7 +115,8 @@ class ValuerecommenderReindexQueueServiceTest {
 
   @Test
   void nothingIsDroppedWhileRedisIsReachable() {
-    reindexQueue.enqueueEvent(message(ValuerecommenderReindexMessageActionType.UPDATED));
+    assertTrue(reindexQueue.enqueueEventWithResult(
+        message(ValuerecommenderReindexMessageActionType.UPDATED)));
 
     assertEquals(0, reindexQueue.getDroppedEventCount());
     assertEquals(1, reindexQueue.messageCount());
@@ -125,7 +128,7 @@ class ValuerecommenderReindexQueueServiceTest {
         new ValuerecommenderReindexQueueService(QueueTestConfig.onPort(EmbeddedRedis.freePort()));
     try {
       assertDoesNotThrow(() -> offline.enqueueEvent(message(ValuerecommenderReindexMessageActionType.CREATED)));
-      assertDoesNotThrow(() -> offline.enqueueEvent(message(ValuerecommenderReindexMessageActionType.UPDATED)));
+      assertFalse(offline.enqueueEventWithResult(message(ValuerecommenderReindexMessageActionType.UPDATED)));
 
       assertEquals(2, offline.getDroppedEventCount());
     } finally {

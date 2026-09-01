@@ -27,22 +27,23 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
         " RETURN user";
   }
 
-  public static String updateUser() {
+  public static String setUserHomeFolderId() {
     StringBuilder sb = new StringBuilder();
     sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})");
-    sb.append(buildSetter("user", NodeProperty.NAME));
-    sb.append(buildSetter("user", NodeProperty.NAME_LOWER));
-    sb.append(buildSetter("user", NodeProperty.FIRST_NAME));
-    sb.append(buildSetter("user", NodeProperty.LAST_NAME));
-    sb.append(buildSetter("user", NodeProperty.EMAIL));
     sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON));
     sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON_TS));
     sb.append(buildSetter("user", NodeProperty.HOME_FOLDER_ID));
-    sb.append(buildSetter("user", NodeProperty.API_KEYS));
-    sb.append(buildSetter("user", NodeProperty.API_KEY_MAP));
+    sb.append(" RETURN user");
+    return sb.toString();
+  }
+
+  public static String replaceUserRolesAndPermissions() {
+    StringBuilder sb = new StringBuilder();
+    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})");
+    sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON));
+    sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON_TS));
     sb.append(buildSetter("user", NodeProperty.ROLES));
     sb.append(buildSetter("user", NodeProperty.PERMISSIONS));
-    sb.append(buildSetter("user", NodeProperty.UI_PREFERENCES));
     sb.append(" RETURN user");
     return sb.toString();
   }
@@ -70,9 +71,32 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
   }
 
   /**
-   * Writes the API key properties and nothing else. {@link #updateUser()} sets every field of the
-   * node from one in-memory snapshot, so using it to change a key also wrote back the name, email,
-   * roles, permissions and UI preferences as they stood when that snapshot was read.
+   * Takes the user node's write lock without changing its value, then returns the state protected by
+   * that lock. Profile patches are computed in Java, so their read must be serialized with the write
+   * or two patches can both be derived from the same preferences snapshot.
+   */
+  public static String lockAndReadUserProfile() {
+    return """
+        MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})
+        SET user.<PROP.UI_PREFERENCES> = user.<PROP.UI_PREFERENCES>
+        RETURN user
+        """;
+  }
+
+  /** Writes profile preferences and timestamps, leaving credentials and authorization state alone. */
+  public static String updateUserProfile() {
+    StringBuilder sb = new StringBuilder();
+    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})");
+    sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON));
+    sb.append(buildSetter("user", NodeProperty.LAST_UPDATED_ON_TS));
+    sb.append(buildSetter("user", NodeProperty.UI_PREFERENCES));
+    sb.append(" RETURN user");
+    return sb.toString();
+  }
+
+  /**
+   * Writes the API key properties and nothing else, so a credential change cannot write an older
+   * copy of the profile or authorization fields back over a concurrent change.
    */
   public static String updateUserApiKeys() {
     StringBuilder sb = new StringBuilder();
@@ -94,7 +118,9 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
     return """
         MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
         MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.GROUP_ID>}})
-        MERGE (user)-[:<REL.MEMBEROF>]->(group)
+        MERGE (user)-[membership:<REL.MEMBEROF>]->(group)
+        ON CREATE SET group._cedarMembershipRevision =
+          coalesce(group._cedarMembershipRevision, 1) + 1
         RETURN user
         """;
   }

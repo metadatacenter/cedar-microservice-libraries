@@ -105,6 +105,52 @@ public final class RouteSurface {
   }
 
   /**
+   * Returns the JAX-RS resource classes among the instances a booted Jersey application actually
+   * registered. This keeps route probes tied to runtime wiring: adding a resource to the
+   * application automatically adds all of its endpoints to the probe without requiring a second,
+   * hand-maintained class list.
+   *
+   * @param registeredComponents resources from Jersey's {@code ResourceConfig#getResources()}
+   * @param packagePrefix       limits discovery to the application's own resources and excludes
+   *                            framework-provided endpoints
+   */
+  public static List<Class<?>> registeredResourceClasses(Iterable<?> registeredComponents,
+                                                          String packagePrefix) {
+    List<Class<?>> resourceClasses = new ArrayList<>();
+    for (Object component : registeredComponents) {
+      if (component instanceof Class<?> componentClass) {
+        addResourceClass(resourceClasses, componentClass, packagePrefix);
+      } else {
+        addResourceClass(resourceClasses, component.getClass(), packagePrefix);
+      }
+      try {
+        Iterable<?> handlerClasses = (Iterable<?>) component.getClass().getMethod("getHandlerClasses").invoke(component);
+        for (Object handlerClass : handlerClasses) {
+          addResourceClass(resourceClasses, (Class<?>) handlerClass, packagePrefix);
+        }
+        Iterable<?> handlerInstances =
+            (Iterable<?>) component.getClass().getMethod("getHandlerInstances").invoke(component);
+        for (Object handlerInstance : handlerInstances) {
+          addResourceClass(resourceClasses, handlerInstance.getClass(), packagePrefix);
+        }
+      } catch (NoSuchMethodException ignored) {
+        // A directly registered resource instance/class has already been handled above.
+      } catch (ReflectiveOperationException e) {
+        throw new IllegalArgumentException("Registered component does not expose Jersey resource handlers", e);
+      }
+    }
+    resourceClasses = resourceClasses.stream().distinct().sorted(Comparator.comparing(Class::getName)).toList();
+    return resourceClasses;
+  }
+
+  private static void addResourceClass(List<Class<?>> resourceClasses, Class<?> resourceClass,
+                                       String packagePrefix) {
+    if (resourceClass.getName().startsWith(packagePrefix) && resourceClass.isAnnotationPresent(Path.class)) {
+      resourceClasses.add(resourceClass);
+    }
+  }
+
+  /**
    * Probes every endpoint against the booted application and asserts each answers
    * {@code expectedStatus}. A 404 or 405 is called out separately: it means the route vanished or
    * changed verb, which is the regression this net exists to catch.
