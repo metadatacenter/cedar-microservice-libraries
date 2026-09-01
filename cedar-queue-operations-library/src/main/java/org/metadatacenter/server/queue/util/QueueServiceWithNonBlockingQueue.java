@@ -4,7 +4,6 @@ import org.metadatacenter.config.CacheServerPersistent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.args.ListDirection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,10 +11,6 @@ import java.util.List;
 public abstract class QueueServiceWithNonBlockingQueue extends QueueService {
 
   private static final Logger log = LoggerFactory.getLogger(QueueServiceWithNonBlockingQueue.class);
-  private static final String DEAD_LETTER_SUFFIX = "-dead-letter";
-  private static final String PROCESSING_SUFFIX = "-processing";
-  private static final String DEAD_LETTER_SCRIPT = "local removed = redis.call('LREM', KEYS[1], 1, ARGV[1]); "
-      + "if removed == 1 then redis.call('RPUSH', KEYS[2], ARGV[1]); end; return removed";
   protected String queueName;
   protected String processingQueueName;
 
@@ -44,8 +39,7 @@ public abstract class QueueServiceWithNonBlockingQueue extends QueueService {
     try (Jedis jedis = pool.getResource()) {
       recoverInFlightMessages(jedis);
       while (messages.size() < maximumCount) {
-        String message = jedis.lmove(queueName, processingQueueName,
-            ListDirection.LEFT, ListDirection.RIGHT);
+        String message = moveHeadToTail(jedis, queueName, processingQueueName);
         if (message != null) {
           messages.add(message);
         } else {
@@ -97,9 +91,8 @@ public abstract class QueueServiceWithNonBlockingQueue extends QueueService {
   }
 
   private void recoverInFlightMessages(Jedis jedis) {
-    while (jedis.lmove(processingQueueName, queueName,
-        ListDirection.RIGHT, ListDirection.LEFT) != null) {
-      // Atomic Redis move; see the blocking queue counterpart for ordering rationale.
+    while (moveTailToHead(jedis, processingQueueName, queueName) != null) {
+      // Atomic move; see the blocking queue counterpart for ordering rationale.
     }
   }
 
