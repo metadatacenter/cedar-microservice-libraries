@@ -3,7 +3,6 @@ package org.metadatacenter.util.test;
 import org.junit.jupiter.api.Assertions;
 
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
@@ -46,8 +45,6 @@ public final class PermissionMatrix {
     OTHER_USER,
     ADMIN
   }
-
-  private static final HttpClient CLIENT = HttpClient.newHttpClient();
 
   private final String baseUrl;
   private final Map<Actor, String> authHeaders;
@@ -123,7 +120,7 @@ public final class PermissionMatrix {
       builder.method(row.verb, HttpRequest.BodyPublishers.noBody());
     }
     row.headers.forEach(builder::header);
-    HttpResponse<String> response = CLIENT.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    HttpResponse<String> response = ProbeClient.send(builder.build());
     return response.statusCode();
   }
 

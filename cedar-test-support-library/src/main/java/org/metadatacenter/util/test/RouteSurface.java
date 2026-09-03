@@ -9,7 +9,6 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -39,7 +38,6 @@ import java.util.regex.Pattern;
 public final class RouteSurface {
 
   private static final Pattern PATH_TEMPLATE_VARIABLE = Pattern.compile("\\{([^}]+)}");
-  private static final HttpClient CLIENT = HttpClient.newHttpClient();
 
   private RouteSurface() {
   }
@@ -204,7 +202,7 @@ public final class RouteSurface {
     } else {
       builder.method(endpoint.verb, HttpRequest.BodyPublishers.noBody());
     }
-    HttpResponse<String> response = CLIENT.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    HttpResponse<String> response = ProbeClient.send(builder.build());
     return response.statusCode();
   }
 
