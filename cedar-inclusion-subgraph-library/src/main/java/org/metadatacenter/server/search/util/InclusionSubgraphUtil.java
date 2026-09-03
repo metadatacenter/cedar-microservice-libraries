@@ -37,7 +37,8 @@ public class InclusionSubgraphUtil {
 
   public static void updateResourceInclusionInfo(CedarRequestContext context, CedarConfig cedarConfig,
                                                  FolderServerResourceExtract resource,
-                                                 InclusionSubgraphServiceSession inclusionSubgraphSession) {
+                                                 InclusionSubgraphServiceSession inclusionSubgraphSession)
+      throws CedarProcessingException {
     Response responseFromArtifact = null;
     try {
       responseFromArtifact =
@@ -49,8 +50,13 @@ public class InclusionSubgraphUtil {
       updateResourceInclusionInfo(resource, inclusionSubgraphSession, entityJsonNode);
     } catch (CedarProcessingException e) {
       log.error("Error while retrieving artifact from artifact server", e);
-    } catch (RuntimeException | IOException e) {
+      throw e;
+    } catch (IOException e) {
       log.error("Error while processing artifact response from artifact server", e);
+      throw new CedarProcessingException("Error while processing artifact response from artifact server", e);
+    } catch (RuntimeException e) {
+      log.error("Error while processing artifact response from artifact server", e);
+      throw e;
     }
   }
 
@@ -58,7 +64,9 @@ public class InclusionSubgraphUtil {
                                                  InclusionSubgraphServiceSession inclusionSubgraphSession,
                                                  JsonNode entityJsonNode) {
     List<String> includedIds = extractFirstLevelIncludedIds(entityJsonNode);
-    inclusionSubgraphSession.updateInclusionArcs(resource.getResourceId(), includedIds);
+    if (!inclusionSubgraphSession.updateInclusionArcs(resource.getResourceId(), includedIds)) {
+      throw new IllegalStateException("Failed to update inclusion arcs for " + resource.getId());
+    }
   }
 
   private static List<String> extractFirstLevelIncludedIds(JsonNode artifact) {

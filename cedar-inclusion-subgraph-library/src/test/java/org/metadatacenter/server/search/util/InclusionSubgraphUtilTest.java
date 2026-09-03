@@ -30,6 +30,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -39,6 +40,19 @@ import static org.mockito.Mockito.when;
 class InclusionSubgraphUtilTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
+
+  @Test
+  void failedInclusionArcWriteIsPropagated() {
+    FolderServerResourceExtract resource = FolderServerResourceExtract.forType(CedarResourceType.TEMPLATE);
+    resource.setId("template-1");
+    InclusionSubgraphServiceSession session = mock(InclusionSubgraphServiceSession.class);
+    when(session.updateInclusionArcs(any(), any())).thenReturn(false);
+
+    IllegalStateException failure = assertThrows(IllegalStateException.class,
+        () -> InclusionSubgraphUtil.updateResourceInclusionInfo(resource, session, artifact()));
+
+    assertEquals("Failed to update inclusion arcs for template-1", failure.getMessage());
+  }
 
   @Test
   void extractsOnlyFirstLevelFieldAndElementInclusionsAcrossSingleAndArraySchemas() {
@@ -274,6 +288,7 @@ class InclusionSubgraphUtilTest {
     FolderServerResourceExtract resource = FolderServerResourceExtract.forType(CedarResourceType.TEMPLATE);
     resource.setId("template-1");
     InclusionSubgraphServiceSession session = mock(InclusionSubgraphServiceSession.class);
+    when(session.updateInclusionArcs(any(), any())).thenReturn(true);
     InclusionSubgraphUtil.updateResourceInclusionInfo(resource, session, artifact);
     @SuppressWarnings("unchecked")
     ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
