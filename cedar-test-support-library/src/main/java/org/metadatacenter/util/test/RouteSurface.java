@@ -161,25 +161,24 @@ public final class RouteSurface {
         "No endpoints were found by reflection — the resource class list is wrong, "
             + "which would make this test vacuously pass");
 
-    StringBuilder failures = new StringBuilder();
+    List<String> divergences = new ArrayList<>();
     for (Endpoint endpoint : endpoints) {
       int status;
       try {
         status = probe(baseUrl, endpoint);
       } catch (Exception e) {
-        failures.append(endpoint.key()).append(": request failed - ").append(e).append('\n');
+        divergences.add(endpoint.key() + ": request failed - " + e);
         continue;
       }
       if (status == 404 || status == 405) {
-        failures.append(endpoint.key()).append(": got ").append(status)
-            .append(" - the route vanished or changed verb\n");
+        divergences.add(endpoint.key() + ": got " + status + " - the route vanished or changed verb");
       } else if (status != expectedStatus) {
-        failures.append(endpoint.key()).append(": expected ").append(expectedStatus)
-            .append(" but got ").append(status).append('\n');
+        divergences.add(endpoint.key() + ": expected " + expectedStatus + " but got " + status);
       }
     }
-    Assertions.assertEquals(0, failures.length(),
-        "Route responses diverged from the expected status " + expectedStatus + ":\n" + failures);
+    Assertions.assertEquals(0, divergences.size(),
+        "Route responses diverged from the expected status " + expectedStatus + ":\n"
+            + String.join("\n", divergences));
   }
 
   /**

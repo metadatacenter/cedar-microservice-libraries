@@ -77,10 +77,10 @@ public final class PermissionMatrix {
   /** Probe every cell and assert the whole grid at once. */
   public void verify() {
     Assertions.assertFalse(rows.isEmpty(), "The permission matrix is empty, so it asserts nothing");
-    StringBuilder failures = new StringBuilder();
+    List<String> divergences = new ArrayList<>();
     for (Row row : rows) {
       if (row.expectations.isEmpty()) {
-        failures.append(row.describe()).append(": no expectations declared for this operation\n");
+        divergences.add(row.describe() + ": no expectations declared for this operation");
         continue;
       }
       for (Map.Entry<Actor, int[]> cell : row.expectations.entrySet()) {
@@ -90,18 +90,17 @@ public final class PermissionMatrix {
         try {
           status = probe(row, actor);
         } catch (Exception e) {
-          failures.append(row.describe()).append(" as ").append(actor)
-              .append(": request failed - ").append(e).append('\n');
+          divergences.add(row.describe() + " as " + actor + ": request failed - " + e);
           continue;
         }
         if (Arrays.stream(acceptable).noneMatch(code -> code == status)) {
-          failures.append(row.describe()).append(" as ").append(actor)
-              .append(": expected ").append(Arrays.toString(acceptable))
-              .append(" but got ").append(status).append('\n');
+          divergences.add(row.describe() + " as " + actor + ": expected "
+              + Arrays.toString(acceptable) + " but got " + status);
         }
       }
     }
-    Assertions.assertEquals(0, failures.length(), "Authorization matrix diverged:\n" + failures);
+    Assertions.assertEquals(0, divergences.size(),
+        "Authorization matrix diverged:\n" + String.join("\n", divergences));
   }
 
   private int probe(Row row, Actor actor) throws Exception {
