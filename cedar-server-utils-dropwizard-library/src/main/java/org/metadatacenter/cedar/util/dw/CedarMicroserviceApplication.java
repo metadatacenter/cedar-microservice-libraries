@@ -204,6 +204,9 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     runApp(configuration, environment);
 
     environment.jersey().register(new CedarServerInsightReportResource(cedarConfig));
+    // getClass() is the concrete application, so the build report names this service's own
+    // artifact rather than the shared library every service loads.
+    environment.jersey().register(new CedarServerReportResource(cedarConfig, getServerName(), getClass()));
     environment.jersey().register(new CedarHealthCheckResource(cedarConfig, environment.healthChecks()));
     environment.jersey().register(RequestIdGeneratorFilter.class);
     environment.jersey().register(ResponseLoggerFilter.class);
@@ -264,7 +267,10 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     // Configure CORS parameters
     log.info("Setting up CORS...");
-    corsInitParameters(System.getenv()).forEach((name, value) -> {
+    // The sandbox, not System.getenv. CEDAR_CORS_ALLOWED_ORIGINS is declared by every microservice, so
+    // it arrives here the way every other setting does; reading the process environment directly meant
+    // the one variable governing which origins may call CEDAR was invisible to the environment report.
+    corsInitParameters(CedarConfig.getInstanceEnvironment()).forEach((name, value) -> {
       log.info(name + ":" + value);
       cors.setInitParameter(name, value);
     });

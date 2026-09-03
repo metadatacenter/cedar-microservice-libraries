@@ -181,6 +181,61 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
     return new CoverageResult(tables, notes);
   }
 
+  // ---- freshness ---------------------------------------------------------------------------------
+
+  /**
+   * How recent the newest row in each raw log table is.
+   *
+   * <p>Separate from {@link #coverage()} on purpose. Coverage answers what is queryable and pays a
+   * {@code COUNT(*)} per table to do it, which on the raw tables is a full scan; this is asked on a
+   * page that refreshes, and needs to stay an index lookup. Both time columns are indexed, so each
+   * table costs one {@code MAX()}.
+   *
+   * <p>The number this produces is the log pipeline's lag. Rows reach these tables only through the
+   * worker draining the Redis queue, so a queue that is growing while the newest row stops moving is
+   * the worker being down — and because that path is asynchronous by design, nothing else about CEDAR
+   * looks wrong while it happens.
+   */
+  public List<TableFreshness> freshness() {
+    List<TableFreshness> result = new ArrayList<>();
+    for (String key : List.of(LogQueryColumns.T_REQUEST, LogQueryColumns.T_CYPHER)) {
+      TableDef table = LogQueryColumns.table(key);
+      // Both the timestamp and the lag are computed by the database, against the database's own UTC
+      // clock, so that no timezone conversion happens anywhere on the way here.
+      //
+      // This is not caution for its own sake. These columns hold UTC wall-clock, the connection runs
+      // with serverTimezone=America/Los_Angeles (cedar-main.yml documents why that is deliberate), and
+      // a native query returns java.sql.Timestamp, whose toInstant() resolves against the *JVM's* zone
+      // rather than the connection's. Reading MAX(time) into Java and subtracting it from Instant.now()
+      // therefore lands the offset between those two zones — seven hours here — in the answer, which
+      // for a lag reading means the page reports zero until the worker has been down longer than the
+      // offset. Comparing inside the database compares two values that were never converted.
+      String sql = "SELECT DATE_FORMAT(MAX(" + table.timeColumn() + "), '%Y-%m-%dT%H:%i:%SZ'),"
+          + " TIMESTAMPDIFF(SECOND, MAX(" + table.timeColumn() + "), UTC_TIMESTAMP())"
+          + " FROM " + table.sqlTable();
+      Object[] row = (Object[]) currentSession().createNativeQuery(sql).getSingleResult();
+      String newestAt = row[0] == null ? null : String.valueOf(row[0]);
+      Long lagSeconds = row[1] == null ? null : ((Number) row[1]).longValue();
+      result.add(new TableFreshness(key, table.sqlTable(), table.timeColumn(), newestAt, lagSeconds));
+    }
+    return result;
+  }
+
+  /**
+   * The newest row in one log table, and how far behind it is.
+   *
+   * @param table      the table's key in the query engine
+   * @param sqlTable   the physical table name
+   * @param timeColumn the column the newest row was found by
+   * @param newestAt   that row's timestamp in UTC, ISO-8601, or null when the table is empty
+   * @param lagSeconds seconds between that row and the database's UTC clock, or null when the table is
+   *                   empty. Negative means the newest row is stamped in the future, which is a clock
+   *                   disagreement rather than a lag, and is reported rather than flattened to zero.
+   */
+  public record TableFreshness(String table, String sqlTable, String timeColumn, String newestAt,
+                               Long lagSeconds) {
+  }
+
   // ---- trace -------------------------------------------------------------------------------------
 
   /**
@@ -401,6 +456,19 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
       return null;
     }
     if (o instanceof Timestamp t) {
+      // NOT FIXED, deliberately. toInstant() resolves against the JVM's zone, which is wrong for a
+      // column holding UTC wall-clock and puts every time this method returns ahead by the local
+      // offset — coverage() reports the newest row seven hours in the future today, and the Explorer
+      // renders the same shift on every row.
+      //
+      // The correct conversion depends on what the column actually holds, and that is not settled.
+      // Live writes are UTC: MAX(requestTime) matches UTC_TIMESTAMP() and not NOW(), measured against
+      // traffic being written at the time. But cedar-main.yml records that these tables hold years of
+      // LA-stored rows and calls assuming otherwise a prod landmine. If both are true the table is
+      // mixed and no single conversion is right for all of it: this one is correct for recent rows and
+      // wrong for old ones, and toInstant() is correct for old rows and wrong for recent ones.
+      //
+      // Changing it is a data question, not a code question. See the 2026-09-03 worklog.
       return t.toInstant().toString();
     }
     if (o instanceof java.sql.Date d) {

@@ -40,6 +40,13 @@ public final class CedarTestEnvironment {
     put(env, CEDAR_NET_GATEWAY, "127.0.0.1");
     put(env, CEDAR_KEYCLOAK_ALLOW_INSECURE_TLS, "false");
 
+    // Every service now declares its own version, and the monitor also declares CEDAR_HOME, because
+    // both are reported on /server-report and /host. A declared variable this map does not supply
+    // fails assertGrantedVariablesSupplied before the configuration is even built.
+    put(env, CEDAR_VERSION, "0.0.0-TEST");
+    put(env, CEDAR_VERSION_MODIFIER, "-0");
+    put(env, CEDAR_HOME, "/tmp/cedar-test-home");
+
     put(env, CEDAR_ADMIN_USER_PASSWORD, "adminPassword");
     put(env, CEDAR_ADMIN_USER_API_KEY, "1234");
     put(env, CEDAR_CADSR_ADMIN_USER_API_KEY, "5678");
@@ -152,9 +159,11 @@ public final class CedarTestEnvironment {
 
   /**
    * Fails with the names of the variables missing from {@link #build()}, if any server component is
-   * granted a variable this environment does not supply. A boolean is exempt: the variable provider
-   * defaults an absent one to {@code false}, so its absence resolves rather than leaving a
-   * placeholder behind.
+   * granted a variable this environment does not supply. Two kinds are exempt. A boolean, because the
+   * variable provider defaults an absent one to {@code false}, so its absence resolves rather than
+   * leaving a placeholder behind. And an optional variable, because the component that declares it
+   * carries its own default and is expected to run without it — the worker's fifteen log aggregation
+   * settings are all of this kind.
    */
   public static void assertCoversEveryServerComponent() {
     Map<String, String> env = build();
@@ -164,7 +173,7 @@ public final class CedarTestEnvironment {
         continue;
       }
       for (CedarEnvironmentVariable variable : CedarConfigEnvironmentDescriptor.getVariableNamesFor(component)) {
-        if (!variable.isBoolean() && !env.containsKey(variable.getName())) {
+        if (!variable.isBoolean() && !variable.isOptional() && !env.containsKey(variable.getName())) {
           missing.append("\n  ").append(variable.getName()).append(" (granted to ").append(component).append(")");
         }
       }
