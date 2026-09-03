@@ -12,7 +12,6 @@ import java.nio.charset.StandardCharsets;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -136,29 +135,20 @@ public class ArtifactYamlTranscoderConversionTest {
     assertEquals("Minimal Study", node.get("schema:name").asText());
   }
 
-  /**
-   * The compact form transcodes like any other, and names no artifact.
-   *
-   * <p>It used to be refused here, by its signature: an id with none of the system-recorded keys, since
-   * storing it would silently regenerate what it strips. Compact stopped carrying the identifier, which
-   * leaves it the same document as the minimal authoring form — so there is nothing left to recognise,
-   * and nothing to refuse on a create, where the server supplies what the form omits.
-   *
-   * <p>What the guard protected is protected by the identifier rule instead: with no id in the body,
-   * this document cannot be an update, because an update must name the artifact it updates.
-   */
   @Test
-  public void compactYamlTranscodesAndNamesNoArtifact() throws IOException {
+  public void compactYamlIsRejected() throws IOException {
+    // The compact form keeps the id but strips the system-recorded keys; storing it would
+    // silently regenerate that content.
     JsonNode template = JsonMapper.MAPPER.readTree(readFixture("SimpleTemplate.json"));
     String compact = ArtifactYamlTranscoder.jsonToYaml(template, CedarResourceType.TEMPLATE, true);
-    assertFalse(compact.contains("\nid:"), "compact carries no identifier, which is what made it unrecognisable");
 
-    String json = ArtifactYamlTranscoder.yamlToJsonString(compact, CedarResourceType.TEMPLATE);
-    JsonNode node = JsonMapper.MAPPER.readTree(json);
-
-    assertEquals(template.get("schema:name").asText(), node.get("schema:name").asText());
-    assertTrue(node.get("@id") == null || node.get("@id").isNull(),
-        "and names no artifact, so it can create but never update");
+    try {
+      ArtifactYamlTranscoder.yamlToJsonString(compact, CedarResourceType.TEMPLATE);
+      fail("The compact form must be rejected");
+    } catch (ArtifactYamlTranscoder.CompactYamlBodyException e) {
+      assertTrue(e.getMessage().contains("compact form"));
+      assertTrue(e.getMessage().contains("minimal-and-full"));
+    }
   }
 
   @Test
