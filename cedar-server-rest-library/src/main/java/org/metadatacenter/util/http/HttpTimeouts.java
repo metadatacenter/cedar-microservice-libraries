@@ -68,6 +68,11 @@ public final class HttpTimeouts {
             .setConnectionRequestTimeout(Timeout.ofMilliseconds(leaseMillis))
             .build())
         .useSystemProperties()
+        // A 503 is not proof that a write did not happen. HttpClient's default strategy retries
+        // repeatable request entities after 429 and 503 responses without regard to the method, so
+        // a POST whose first outcome is uncertain can create the same logical resource twice.
+        // Retrying belongs at a call site that knows its operation is safe to repeat.
+        .disableAutomaticRetries()
         .evictExpiredConnections()
         .evictIdleConnections(TimeValue.ofMinutes(1))
         .build());
