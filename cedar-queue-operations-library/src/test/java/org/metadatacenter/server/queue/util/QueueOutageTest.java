@@ -98,8 +98,11 @@ class QueueOutageTest {
    */
   @Test
   void theServiceRecoversWhenTheQueueComesBack() {
-    int port = EmbeddedRedis.freePort();
-    EmbeddedRedis redis = EmbeddedRedis.startOn(port);
+    // start() picks a free port and retries if another process wins the race for it; startOn() with
+    // a port that nothing has bound yet has no such second chance, and lost that race often enough
+    // to fail a build over an unrelated change.
+    EmbeddedRedis redis = EmbeddedRedis.start();
+    int port = redis.port();
     PermissionQueueService queue = new PermissionQueueService(QueueTestConfig.onPort(port));
     try {
       queue.enqueueEvent(event("before-the-outage"));
@@ -109,7 +112,7 @@ class QueueOutageTest {
       queue.enqueueEvent(event("during-the-outage"));
       assertEquals(1, queue.getDroppedEventCount(), "the event sent during the outage is dropped");
 
-      redis = EmbeddedRedis.startOn(port);
+      redis = EmbeddedRedis.restartOn(port);
       queue.enqueueEvent(event("after-the-outage"));
 
       assertEquals(1, queue.getDroppedEventCount(),
