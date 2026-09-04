@@ -119,7 +119,7 @@ public final class PermissionMatrix {
       builder.method(row.verb, HttpRequest.BodyPublishers.noBody());
     }
     row.headers.forEach(builder::header);
-    HttpResponse<String> response = ProbeClient.send(builder.build());
+    HttpResponse<String> response = TestHttpClient.send(builder.build());
     return response.statusCode();
   }
 

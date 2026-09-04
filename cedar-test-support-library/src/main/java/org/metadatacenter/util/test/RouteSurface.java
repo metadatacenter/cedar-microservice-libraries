@@ -202,7 +202,7 @@ public final class RouteSurface {
     } else {
       builder.method(endpoint.verb, HttpRequest.BodyPublishers.noBody());
     }
-    HttpResponse<String> response = ProbeClient.send(builder.build());
+    HttpResponse<String> response = TestHttpClient.send(builder.build());
     return response.statusCode();
   }
 
