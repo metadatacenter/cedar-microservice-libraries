@@ -79,11 +79,21 @@ public final class EmbeddedCedarMongo {
       return;
     }
     try {
-      running.close();
+      closeProcess(running);
     } finally {
       running = null;
       userName = null;
       password = null;
+    }
+  }
+
+  static void closeProcess(AutoCloseable process) {
+    try {
+      process.close();
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new IllegalStateException("Could not stop the embedded Mongo process", e);
     }
   }
 
