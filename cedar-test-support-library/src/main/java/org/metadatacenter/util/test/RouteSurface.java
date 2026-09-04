@@ -9,13 +9,13 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,7 +39,6 @@ import java.util.regex.Pattern;
 public final class RouteSurface {
 
   private static final Pattern PATH_TEMPLATE_VARIABLE = Pattern.compile("\\{([^}]+)}");
-  private static final HttpClient CLIENT = HttpClient.newHttpClient();
 
   private RouteSurface() {
   }
@@ -163,25 +162,24 @@ public final class RouteSurface {
         "No endpoints were found by reflection — the resource class list is wrong, "
             + "which would make this test vacuously pass");
 
-    StringBuilder failures = new StringBuilder();
+    List<String> divergences = new ArrayList<>();
     for (Endpoint endpoint : endpoints) {
       int status;
       try {
         status = probe(baseUrl, endpoint);
       } catch (Exception e) {
-        failures.append(endpoint.key()).append(": request failed - ").append(e).append('\n');
+        divergences.add(endpoint.key() + ": request failed - " + e);
         continue;
       }
       if (status == 404 || status == 405) {
-        failures.append(endpoint.key()).append(": got ").append(status)
-            .append(" - the route vanished or changed verb\n");
+        divergences.add(endpoint.key() + ": got " + status + " - the route vanished or changed verb");
       } else if (status != expectedStatus) {
-        failures.append(endpoint.key()).append(": expected ").append(expectedStatus)
-            .append(" but got ").append(status).append('\n');
+        divergences.add(endpoint.key() + ": expected " + expectedStatus + " but got " + status);
       }
     }
-    Assertions.assertEquals(0, failures.length(),
-        "Route responses diverged from the expected status " + expectedStatus + ":\n" + failures);
+    Assertions.assertEquals(0, divergences.size(),
+        "Route responses diverged from the expected status " + expectedStatus + ":\n"
+            + String.join("\n", divergences));
   }
 
   /**
@@ -204,7 +202,7 @@ public final class RouteSurface {
     } else {
       builder.method(endpoint.verb, HttpRequest.BodyPublishers.noBody());
     }
-    HttpResponse<String> response = CLIENT.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    HttpResponse<String> response = ProbeClient.send(builder.build());
     return response.statusCode();
   }
 
@@ -227,9 +225,24 @@ public final class RouteSurface {
   }
 
   /**
-   * Replaces every path template variable with a syntactically plausible URL-encoded CEDAR
-   * artifact id. The value only has to survive path matching and parameter binding: these probes
-   * are expected to stop at the authentication assertion, before any id is dereferenced.
+   * Path parameters whose value has to be drawn from a fixed vocabulary rather than made up, keyed
+   * by the parameter's name.
+   *
+   * <p>A probe only has to reach the endpoint's authentication assertion, and for an identifier any
+   * syntactically plausible string does. A name is different: a route that resolves {@code {server}}
+   * against the list of CEDAR servers and answers 404 when nothing matches is behaving correctly,
+   * but a probe that sends an artifact IRI as the server name reads that correct 404 as the route
+   * having vanished. Sending a name the vocabulary contains keeps the probe measuring the gate.
+   */
+  private static final Map<String, String> VOCABULARY_PARAMETERS = Map.of(
+      "server", "artifact");
+
+  /**
+   * Replaces every path template variable with a value that will bind: a name from
+   * {@link #VOCABULARY_PARAMETERS} where the parameter has one, and otherwise a syntactically
+   * plausible URL-encoded CEDAR artifact id. The value only has to survive path matching and
+   * parameter binding — these probes are expected to stop at the authentication assertion, before
+   * any id is dereferenced.
    */
   private static String substitutePathParameters(String pathTemplate) {
     int nextSlash = pathTemplate.indexOf('/', 1);
@@ -238,8 +251,16 @@ public final class RouteSurface {
         : "artifacts";
     String plausibleId = "https://repo.metadatacenter.org/" + root + "/8bc64ab5-df6b-48c8-8c61-6c016245918e";
     String encodedId = URLEncoder.encode(plausibleId, StandardCharsets.UTF_8);
+
     Matcher matcher = PATH_TEMPLATE_VARIABLE.matcher(pathTemplate);
-    return matcher.replaceAll(Matcher.quoteReplacement(encodedId));
+    StringBuilder resolved = new StringBuilder();
+    while (matcher.find()) {
+      String name = matcher.group(1);
+      String value = VOCABULARY_PARAMETERS.getOrDefault(name, encodedId);
+      matcher.appendReplacement(resolved, Matcher.quoteReplacement(value));
+    }
+    matcher.appendTail(resolved);
+    return resolved.toString();
   }
 
   private static String httpVerbOf(Method method) {

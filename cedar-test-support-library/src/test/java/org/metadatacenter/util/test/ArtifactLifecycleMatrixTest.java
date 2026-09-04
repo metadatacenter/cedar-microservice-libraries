@@ -180,24 +180,25 @@ public class ArtifactLifecycleMatrixTest {
 
     // ── run it ────────────────────────────────────────────────────────────────────────────────
     Assertions.assertFalse(cells.isEmpty(), "The lifecycle table is empty, so it asserts nothing");
-    StringBuilder failures = new StringBuilder();
+    List<String> divergences = new ArrayList<>();
     for (Cell cell : cells) {
       OutcomeWithReason outcome = ask(cell);
       String label = cell.state() + " / " + cell.operation();
       if (cell.expectedReason() == null) {
         if (!outcome.isPositive()) {
-          failures.append(label).append(": expected to be allowed but was refused with ")
-              .append(outcome.getReason()).append('\n');
+          divergences.add(label + ": expected to be allowed but was refused with "
+              + outcome.getReason());
         }
       } else if (outcome.isPositive()) {
-        failures.append(label).append(": expected refusal ").append(cell.expectedReason())
-            .append(" but it was allowed\n");
+        divergences.add(label + ": expected refusal " + cell.expectedReason()
+            + " but it was allowed");
       } else if (outcome.getReason() != cell.expectedReason()) {
-        failures.append(label).append(": expected refusal ").append(cell.expectedReason())
-            .append(" but got ").append(outcome.getReason()).append('\n');
+        divergences.add(label + ": expected refusal " + cell.expectedReason()
+            + " but got " + outcome.getReason());
       }
     }
-    Assertions.assertEquals(0, failures.length(), "Artifact lifecycle rules diverged:\n" + failures);
+    Assertions.assertEquals(0, divergences.size(),
+        "Artifact lifecycle rules diverged:\n" + String.join("\n", divergences));
   }
 
   private OutcomeWithReason ask(Cell cell) {

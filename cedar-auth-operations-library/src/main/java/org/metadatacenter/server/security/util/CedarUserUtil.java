@@ -6,12 +6,8 @@ import org.metadatacenter.config.BlueprintUserProfile;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.server.security.CedarUserRolePermissionUtil;
 import org.metadatacenter.server.security.model.user.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +16,8 @@ import java.util.UUID;
 
 public class CedarUserUtil {
 
-  private static final Logger log = LoggerFactory.getLogger(CedarUserUtil.class);
+  private static final int API_KEY_BYTES = 32;
+  private static final SecureRandom API_KEY_RANDOM = new SecureRandom();
 
   private CedarUserUtil() {
   }
@@ -46,7 +43,7 @@ public class CedarUserUtil {
     } else if (caDSRAdminUserName.equals(username)) {
       apiKeyObject.setKey(cedarConfig.getCaDSRAdminUserConfig().getApiKey());
     } else {
-      apiKeyObject.setKey(generateApiKey(blueprintProfile.getDefaultAPIKey().getSalt(), (ur.getId())));
+      apiKeyObject.setKey(generateApiKey());
     }
     apiKeyObject.setCreationDate(now);
     apiKeyObject.setEnabled(true);
@@ -115,21 +112,9 @@ public class CedarUserUtil {
     }
   }
 
-  private static String generateApiKey(String salt, String userId) {
-    MessageDigest digest = null;
-    try {
-      digest = MessageDigest.getInstance("SHA-256");
-    } catch (NoSuchAlgorithmException e) {
-      log.error("Error while building SHA-256 digest");
-    }
-    digest.update(salt.getBytes(StandardCharsets.UTF_8));
-    byte[] hash = digest.digest(userId.getBytes(StandardCharsets.UTF_8));
-
-    for (int i = 0; i < 1000; i++) {
-      hash = digest.digest(hash);
-    }
-    char[] chars = Hex.encodeHex(hash);
-    String key = new String(chars);
-    return key;
+  static String generateApiKey() {
+    byte[] bytes = new byte[API_KEY_BYTES];
+    API_KEY_RANDOM.nextBytes(bytes);
+    return Hex.encodeHexString(bytes);
   }
 }

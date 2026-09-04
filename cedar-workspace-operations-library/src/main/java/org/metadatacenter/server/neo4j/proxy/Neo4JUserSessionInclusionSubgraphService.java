@@ -22,12 +22,7 @@ public class Neo4JUserSessionInclusionSubgraphService extends AbstractNeo4JUserS
 
   @Override
   public boolean updateInclusionArcs(CedarResourceId sourceId, List<String> includedIds) {
-    if (includedIds.isEmpty()) {
-      return proxies.graph().updateInclusionArcsDelete(sourceId, includedIds);
-    } else {
-      proxies.graph().updateInclusionArcsDelete(sourceId, includedIds);
-      return proxies.graph().updateInclusionArcsCreate(sourceId, includedIds);
-    }
+    return proxies.graph().updateInclusionArcs(sourceId, includedIds);
   }
 
   // The session, not the caller, supplies the user the listing is filtered for. Taking it as an argument

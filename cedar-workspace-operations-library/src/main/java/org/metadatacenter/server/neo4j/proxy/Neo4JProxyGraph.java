@@ -79,18 +79,16 @@ public class Neo4JProxyGraph extends AbstractNeo4JProxy {
     return executeWrite(q, "creating arc");
   }
 
-  public boolean updateInclusionArcsDelete(CedarResourceId sourceId, List<String> includedIds) {
-    String cypher = CypherQueryBuilderGraph.updateInclusionArcsDelete(RelationLabel.INCLUDES);
+  public boolean updateInclusionArcs(CedarResourceId sourceId, List<String> includedIds) {
     CypherParameters params = AbstractCypherParamBuilder.matchSourceAndTargetIds(sourceId, includedIds);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "deleting old inclusion arcs");
-  }
-
-  public boolean updateInclusionArcsCreate(CedarResourceId sourceId, List<String> includedIds) {
-    String cypher = CypherQueryBuilderGraph.updateInclusionArcsCreate(RelationLabel.INCLUDES);
-    CypherParameters params = AbstractCypherParamBuilder.matchSourceAndTargetIds(sourceId, includedIds);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "creating new inclusion arcs");
+    CypherQuery delete = new CypherQueryWithParameters(
+        CypherQueryBuilderGraph.updateInclusionArcsDelete(RelationLabel.INCLUDES), params);
+    if (includedIds.isEmpty()) {
+      return executeWriteBatch(List.of(delete), "updating inclusion arcs");
+    }
+    CypherQuery create = new CypherQueryWithParameters(
+        CypherQueryBuilderGraph.updateInclusionArcsCreate(RelationLabel.INCLUDES), params);
+    return executeWriteBatch(List.of(delete, create), "updating inclusion arcs");
   }
 
   public List<FolderServerTemplate> listIncludingTemplates(CedarResourceId sourceId, CedarUser cu) {

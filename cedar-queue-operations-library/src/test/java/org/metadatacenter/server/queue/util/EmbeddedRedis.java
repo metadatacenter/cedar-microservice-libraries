@@ -4,6 +4,7 @@ import redis.embedded.RedisServer;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.function.IntSupplier;
 
 /**
  * A real redis-server for the queue tests, in place of the live cache. It runs on a free port
@@ -17,6 +18,8 @@ import java.net.ServerSocket;
  */
 public final class EmbeddedRedis implements AutoCloseable {
 
+  private static final int START_ATTEMPTS = 5;
+
   private final RedisServer server;
   private final int port;
 
@@ -26,7 +29,20 @@ public final class EmbeddedRedis implements AutoCloseable {
   }
 
   public static EmbeddedRedis start() {
-    return startOn(freePort());
+    return start(EmbeddedRedis::freePort);
+  }
+
+  static EmbeddedRedis start(IntSupplier portSupplier) {
+    IllegalStateException lastFailure = null;
+    for (int attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
+      try {
+        return startOn(portSupplier.getAsInt());
+      } catch (IllegalStateException e) {
+        lastFailure = e;
+      }
+    }
+    throw new IllegalStateException("Could not start the embedded Redis after "
+        + START_ATTEMPTS + " attempts", lastFailure);
   }
 
   /**
@@ -45,8 +61,9 @@ public final class EmbeddedRedis implements AutoCloseable {
   }
 
   /**
-   * A port free at this instant. Nothing reserves it, so a caller should bind it promptly; that is
-   * good enough here and avoids requiring a fixed port that a developer's machine may be using.
+   * A port free at this instant. Nothing reserves it, so a caller should bind it promptly. The
+   * ordinary {@link #start()} path retries if another embedded dependency wins that race; callers
+   * that only need a deliberately unreachable address can use this value directly.
    */
   public static int freePort() {
     try (ServerSocket socket = new ServerSocket(0)) {

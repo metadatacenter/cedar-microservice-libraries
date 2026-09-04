@@ -94,12 +94,15 @@ public abstract class AbstractCedarConfigTest {
    * that is present and empty, and the lookup then refuses to build anything. This assertion runs
    * first so the failure names the variable and the component that was granted it, rather than
    * arriving as a construction error from inside Dropwizard. Booleans are exempt: the provider turns
-   * an absent one into {@code false} rather than a miss.
+   * an absent one into {@code false} rather than a miss, and so are optional variables, whose whole
+   * point is that the component reading them carries its own default.
    */
   private void assertGrantedVariablesSupplied(Map<String, String> environment) {
     SystemComponent component = getSystemComponent();
     for (CedarEnvironmentVariable variable : CedarConfigEnvironmentDescriptor.getVariableNamesFor(component)) {
-      if (variable.isBoolean()) {
+      if (variable.isBoolean() || variable.isOptional()) {
+        // Booleans default to false and optional variables to whatever the component that reads them
+        // uses when unset, so neither has to be supplied for the configuration to build.
         continue;
       }
       Assertions.assertNotNull(environment.get(variable.getName()),
