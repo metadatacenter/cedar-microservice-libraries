@@ -6,6 +6,7 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -20,6 +21,12 @@ public abstract class QueueService {
 
   protected static final String DEAD_LETTER_SUFFIX = "-dead-letter";
   protected static final String PROCESSING_SUFFIX = "-processing";
+
+  // Queue writes can happen on request threads. Keep Redis as a small bulkhead and, critically, put
+  // a deadline on borrowing from it: the Jedis defaults are eight connections, blocking enabled and
+  // an infinite wait, which lets a reporting-only queue exhaust every request thread.
+  private static final int POOL_MAX_TOTAL = 8;
+  private static final Duration POOL_MAX_WAIT = Duration.ofMillis(100);
 
   /**
    * The oldest Redis these queues can drive.
@@ -60,9 +67,12 @@ public abstract class QueueService {
 
   public QueueService(CacheServerPersistent cacheConfig) {
     this.cacheConfig = cacheConfig;
-    pool = new JedisPool(new JedisPoolConfig(), cacheConfig.getConnection().getHost(),
+    JedisPoolConfig poolConfig = new JedisPoolConfig();
+    poolConfig.setMaxTotal(POOL_MAX_TOTAL);
+    poolConfig.setBlockWhenExhausted(true);
+    poolConfig.setMaxWait(POOL_MAX_WAIT);
+    pool = new JedisPool(poolConfig, cacheConfig.getConnection().getHost(),
         cacheConfig.getConnection().getPort(), cacheConfig.getConnection().getTimeout());
-
   }
 
   /**
@@ -74,7 +84,7 @@ public abstract class QueueService {
    */
   protected void reportDroppedEvent(Logger log, String eventNoun, Exception cause) {
     droppedEventLogger.report(log, "The " + eventNoun + " could not be enqueued. "
-        + "The queue (Redis) may be unreachable. Dropping it.", "dropped", cause);
+        + "The queue (Redis) may be unreachable or overloaded. Dropping it.", "dropped", cause);
   }
 
   public long getDroppedEventCount() {
