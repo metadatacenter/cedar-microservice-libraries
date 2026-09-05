@@ -17,12 +17,12 @@ import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * The retry in {@link ProbeClient} exists for a race — a pooled connection the server closes just
- * as the next probe is written to it — which no test could lose reliably. A stub server scripts the
- * outcome of that race instead, one behaviour per connection, so both the recovery and its limit
- * are asserted deterministically.
+ * The retry in {@link TestHttpClient} exists for a race — a pooled connection the server closes just
+ * as the next request is written to it — which no test could lose reliably. A stub server scripts
+ * the outcome of that race instead, one behaviour per connection, so both the recovery and its
+ * limit are asserted deterministically.
  */
-public class ProbeClientTest {
+public class TestHttpClientTest {
 
   /** How the stub answers one connection. */
   private enum Behavior {
@@ -36,19 +36,19 @@ public class ProbeClientTest {
   @Test
   public void aConnectionClosedBeforeAnsweringIsRetried() throws Exception {
     try (StubServer server = new StubServer(List.of(Behavior.CLOSE_WITHOUT_ANSWERING, Behavior.ANSWER_204))) {
-      HttpResponse<String> response = ProbeClient.send(probeRequest(server.baseUrl()));
+      HttpResponse<String> response = TestHttpClient.send(requestWithABody(server.baseUrl()));
 
       Assertions.assertEquals(204, response.statusCode(),
           "the retry should have reached the server on a fresh connection");
       Assertions.assertEquals(2, server.connections(),
-          "the probe should have taken exactly one retry");
+          "the send should have taken exactly one retry");
     }
   }
 
   @Test
-  public void aServerThatAnsweredIsNotProbedTwice() throws Exception {
+  public void aServerThatAnsweredIsNotSentTheRequestTwice() throws Exception {
     try (StubServer server = new StubServer(List.of(Behavior.ANSWER_GARBAGE, Behavior.ANSWER_204))) {
-      Assertions.assertThrows(IOException.class, () -> ProbeClient.send(probeRequest(server.baseUrl())));
+      Assertions.assertThrows(IOException.class, () -> TestHttpClient.send(requestWithABody(server.baseUrl())));
 
       Assertions.assertEquals(1, server.connections(),
           "response bytes arrived, so the request reached the server and the failure must stand");
@@ -60,8 +60,8 @@ public class ProbeClientTest {
    * the retry was written for. Sending it twice also proves the request and its body publisher
    * survive resubscription.
    */
-  private static HttpRequest probeRequest(String baseUrl) {
-    return HttpRequest.newBuilder(URI.create(baseUrl + "/probe"))
+  private static HttpRequest requestWithABody(String baseUrl) {
+    return HttpRequest.newBuilder(URI.create(baseUrl + "/command"))
         .header("Content-Type", "application/json")
         .POST(HttpRequest.BodyPublishers.ofString("{}"))
         .build();
@@ -75,7 +75,7 @@ public class ProbeClientTest {
 
     StubServer(List<Behavior> script) throws IOException {
       serverSocket = new ServerSocket(0, script.size(), InetAddress.getLoopbackAddress());
-      Thread thread = new Thread(() -> serve(script), "probe-client-stub");
+      Thread thread = new Thread(() -> serve(script), "test-http-client-stub");
       thread.setDaemon(true);
       thread.start();
     }

@@ -34,6 +34,7 @@ public final class EmbeddedCedarMongo {
   private static TransitionWalker.ReachedState<RunningMongodProcess> running;
   private static String userName;
   private static String password;
+  private static boolean shutdownHookRegistered;
 
   private EmbeddedCedarMongo() {
   }
@@ -45,6 +46,7 @@ public final class EmbeddedCedarMongo {
   public static synchronized void startAndRedirectEnvironment(Map<String, String> extraEnvironment) {
     if (running == null) {
       running = Mongod.instance().start(Version.Main.V5_0);
+      registerShutdownHook();
       ServerAddress address = running.current().getServerAddress();
 
       userName = valueOrDefault(CedarEnvironmentSource.get("CEDAR_MONGO_APP_USER_NAME"), DEFAULT_TEST_USER);
@@ -65,6 +67,42 @@ public final class EmbeddedCedarMongo {
     environment.put("CEDAR_MONGO_APP_USER_PASSWORD", password);
     environment.putAll(extraEnvironment);
     CedarEnvironmentSource.setOverride(environment);
+  }
+
+  /**
+   * Stops the child process synchronously. Package-private so the lifecycle regression test can
+   * prove that closing the reached state releases the listening port; normal consumers rely on the
+   * JVM shutdown hook registered when the process starts.
+   */
+  static synchronized void stop() {
+    if (running == null) {
+      return;
+    }
+    try {
+      closeProcess(running);
+    } finally {
+      running = null;
+      userName = null;
+      password = null;
+    }
+  }
+
+  static void closeProcess(AutoCloseable process) {
+    try {
+      process.close();
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new IllegalStateException("Could not stop the embedded Mongo process", e);
+    }
+  }
+
+  private static void registerShutdownHook() {
+    if (!shutdownHookRegistered) {
+      Runtime.getRuntime().addShutdownHook(
+          new Thread(EmbeddedCedarMongo::stop, "embedded-cedar-mongo-shutdown"));
+      shutdownHookRegistered = true;
+    }
   }
 
   private static String valueOrDefault(String value, String defaultValue) {

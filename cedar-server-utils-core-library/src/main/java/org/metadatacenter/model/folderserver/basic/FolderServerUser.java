@@ -140,6 +140,32 @@ public class FolderServerUser extends AbstractCedarResourceWithDates implements 
     return new CedarUserExtract(getId(), getFirstName(), getLastName(), getEmail());
   }
 
+  /**
+   * The stored keys, taken from the map that holds their metadata.
+   *
+   * <p>When that map could not be read, the secrets in the apiKeys property are reported instead.
+   * Those are what authentication matches, so reporting none would contradict what the graph still
+   * accepts. Only the secret survives such a record: the metadata the map carried is gone.</p>
+   */
+  private List<CedarUserApiKey> buildApiKeyList() {
+    List<CedarUserApiKey> apiKeyList = new ArrayList<>();
+    if (apiKeyMap != null && apiKeyMap.isUnreadable()) {
+      for (String key : apiKeys == null ? List.<String>of() : apiKeys) {
+        CedarUserApiKey recovered = new CedarUserApiKey();
+        recovered.setKey(key);
+        // The stored flag is unreadable along with the rest of the record, and the graph matches
+        // this secret whatever the flag said, so reporting it as enabled is the honest reading.
+        recovered.setEnabled(true);
+        apiKeyList.add(recovered);
+      }
+      return apiKeyList;
+    }
+    for (String key : apiKeyMap.keySet()) {
+      apiKeyList.add(apiKeyMap.get(key));
+    }
+    return apiKeyList;
+  }
+
   public CedarUser buildUser() {
     CedarUser u = new CedarUser();
     u.setId(baseDataGroup.getId());
@@ -151,11 +177,7 @@ public class FolderServerUser extends AbstractCedarResourceWithDates implements 
     u.setPermissions(permissions);
     u.setUiPreferences(uiPreferences);
 
-    List<CedarUserApiKey> apiKeyList = new ArrayList<>();
-    for (String key : apiKeyMap.keySet()) {
-      apiKeyList.add(apiKeyMap.get(key));
-    }
-    u.setApiKeys(apiKeyList);
+    u.setApiKeys(buildApiKeyList());
 
     return u;
   }

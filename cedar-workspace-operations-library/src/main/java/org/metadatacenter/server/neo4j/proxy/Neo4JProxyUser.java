@@ -19,6 +19,7 @@ import org.metadatacenter.server.result.BackendCallError;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.CedarUserApiKey;
+import org.metadatacenter.server.security.model.user.CedarUserApiKeyMap;
 import org.metadatacenter.server.security.model.user.CedarUserRole;
 import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
 import org.metadatacenter.server.user.UserServiceUtil;
@@ -261,6 +262,14 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
         return ApiKeyOutcome.userNotFound();
       }
 
+      if (hasUnreadableApiKeyMap(current)) {
+        // Writing here would derive the whole key set from a record that could not be read, and
+        // updateUserApiKeys SETs both stored properties from it, destroying the keys that still
+        // authenticate. Fail instead, leaving the stored record for an operator to repair.
+        return ApiKeyOutcome.serverError(new CedarProcessingException(
+            "The stored API key map for this user could not be read; refusing to rewrite the key set"));
+      }
+
       List<CedarUserApiKey> keys = new ArrayList<>(current.buildUser().getApiKeys());
       ApiKeyOutcome refused = change.apply(keys);
       if (refused != null) {
@@ -278,6 +287,15 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
     }, eventDescription);
 
     return outcome.into(result, userId);
+  }
+
+  /**
+   * Whether the user's stored key map failed to parse. Such a record reports no keys while its
+   * secrets still authenticate, so it must not be used as the basis of a write.
+   */
+  static boolean hasUnreadableApiKeyMap(FolderServerUser user) {
+    CedarUserApiKeyMap map = user.getApiKeyMap();
+    return map != null && map.isUnreadable();
   }
 
   private static CedarUserApiKey findById(List<CedarUserApiKey> keys, String keyId) {

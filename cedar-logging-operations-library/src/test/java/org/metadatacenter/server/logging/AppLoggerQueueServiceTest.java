@@ -17,26 +17,44 @@ import org.metadatacenter.server.queue.util.QueueTestConfig;
 import org.metadatacenter.util.json.JsonMapper;
 import redis.clients.jedis.Jedis;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * The application log queue against a real Redis.
  * <p>
- * This is the highest-volume queue in the system - one message per HTTP request through every
- * server - so both halves of its behaviour matter: what it enqueues has to survive the round trip
- * intact, and a Redis that is not there has to cost the request nothing.
+ * This is the highest-volume queue in the system - normally three messages per HTTP request through
+ * every server - so both halves of its behaviour matter: what it enqueues has to survive the round
+ * trip intact, and a Redis that is not there has to cost the request nothing.
  */
 @Timeout(30)
 class AppLoggerQueueServiceTest {
 
+  private static class ExhaustibleAppLoggerQueueService extends AppLoggerQueueService {
+
+    ExhaustibleAppLoggerQueueService(CacheServerPersistent cacheConfig) {
+      super(cacheConfig);
+    }
+
+    List<Jedis> borrowEveryConnection() {
+      List<Jedis> connections = new ArrayList<>();
+      for (int i = 0; i < pool.getMaxTotal(); i++) {
+        connections.add(pool.getResource());
+      }
+      return connections;
+    }
+  }
+
   private static EmbeddedRedis redis;
   private static CacheServerPersistent config;
 
-  private AppLoggerQueueService appLogQueue;
+  private ExhaustibleAppLoggerQueueService appLogQueue;
 
   @BeforeAll
   static void startRedis() {
@@ -51,7 +69,7 @@ class AppLoggerQueueServiceTest {
 
   @BeforeEach
   void setUp() {
-    appLogQueue = new AppLoggerQueueService(config);
+    appLogQueue = new ExhaustibleAppLoggerQueueService(config);
     try (Jedis jedis = new Jedis("127.0.0.1", redis.port())) {
       jedis.flushAll();
     }
@@ -122,6 +140,24 @@ class AppLoggerQueueServiceTest {
       assertEquals(2, offline.getDroppedEventCount(), "each dropped log message is counted");
     } finally {
       offline.close();
+    }
+  }
+
+  /**
+   * A slow Redis can occupy every connection without failing one. The next request must shed its
+   * best-effort log message on a short deadline instead of inheriting commons-pool's infinite wait.
+   */
+  @Test
+  void anExhaustedPoolCannotParkTheRequestThread() {
+    List<Jedis> borrowed = appLogQueue.borrowEveryConnection();
+    try {
+      assertTimeoutPreemptively(Duration.ofSeconds(1),
+          () -> appLogQueue.enqueueEvent(message("dropped-while-busy")));
+
+      assertEquals(1, appLogQueue.getDroppedEventCount(),
+          "the borrow timeout should be handled as a dropped best-effort log message");
+    } finally {
+      borrowed.forEach(Jedis::close);
     }
   }
 }

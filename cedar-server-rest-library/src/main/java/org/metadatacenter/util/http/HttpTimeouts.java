@@ -6,7 +6,13 @@ import org.apache.hc.client5.http.fluent.Executor;
 import org.apache.hc.client5.http.fluent.Request;
 import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.HttpRequestRetryStrategy;
 import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.HttpRequest;
+import org.apache.hc.core5.http.HttpResponse;
+import org.apache.hc.core5.http.Method;
+import org.apache.hc.core5.http.NoHttpResponseException;
+import org.apache.hc.core5.http.protocol.HttpContext;
 import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
 import org.metadatacenter.constant.HttpConnectionConstants;
@@ -43,6 +49,44 @@ public final class HttpTimeouts {
       HttpConnectionConstants.BATCH_SOCKET_TIMEOUT,
       10, 20);
 
+  /**
+   * The only outbound failure worth repeating: a pooled connection the dependency had already
+   * closed, which produces no response at all.
+   *
+   * <p>Two failures look alike from a call site and are not alike. A 503 is a real answer, so the
+   * dependency read the request and may have acted on it, and repeating a POST after one can create
+   * the same logical resource twice; a response is therefore never retried, whatever its status. A
+   * {@link NoHttpResponseException} out of the response-header read is the other case. The
+   * dependency wrote nothing, which is what a connection closed before the request was read looks
+   * like, and a pooling client meets it whenever a peer retires an idle connection between the
+   * lease and the write. Repeating an idempotent request there costs a connection and settles it.
+   *
+   * <p>The restriction to idempotent methods is what keeps the first paragraph true of this case
+   * too. The dependency cannot have answered, but proving it never acted would need to rule out a
+   * server that read the request, did the work and died before writing, and no client can see the
+   * difference. So GET, HEAD, PUT, DELETE, OPTIONS and TRACE recover, and POST and PATCH surface
+   * the failure to a call site that knows whether repeating is safe.
+   */
+  private static final HttpRequestRetryStrategy ANSWERLESS_CONNECTION = new HttpRequestRetryStrategy() {
+
+    @Override
+    public boolean retryRequest(HttpRequest request, IOException exception, int execCount, HttpContext context) {
+      return execCount == 1
+          && exception instanceof NoHttpResponseException
+          && Method.isIdempotent(request.getMethod());
+    }
+
+    @Override
+    public boolean retryRequest(HttpResponse response, int execCount, HttpContext context) {
+      return false;
+    }
+
+    @Override
+    public TimeValue getRetryInterval(HttpResponse response, int execCount, HttpContext context) {
+      return TimeValue.ZERO_MILLISECONDS;
+    }
+  };
+
   private final Timeout connectTimeout;
   private final Timeout responseTimeout;
   private final Executor executor;
@@ -68,6 +112,7 @@ public final class HttpTimeouts {
             .setConnectionRequestTimeout(Timeout.ofMilliseconds(leaseMillis))
             .build())
         .useSystemProperties()
+        .setRetryStrategy(ANSWERLESS_CONNECTION)
         .evictExpiredConnections()
         .evictIdleConnections(TimeValue.ofMinutes(1))
         .build());
