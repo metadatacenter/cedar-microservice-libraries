@@ -4,9 +4,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.ServerSocket;
 import java.util.Map;
 
 import static org.metadatacenter.util.test.PermissionMatrix.Actor.ANONYMOUS;
@@ -55,14 +52,9 @@ public class PermissionMatrixTest {
     Assertions.assertThrows(AssertionFailedError.class, matrix::verify);
   }
 
-  /** A loopback address and a port that was bound just long enough to know nothing else holds it. */
-  private static String unreachableBaseUrl() throws IOException {
-    InetAddress loopback = InetAddress.getLoopbackAddress();
-    int port;
-    try (ServerSocket reserved = new ServerSocket(0, 1, loopback)) {
-      port = reserved.getLocalPort();
-    }
-    return "http://" + loopback.getHostAddress() + ":" + port;
+  /** Port 1 is the backend-test convention for a deliberately unavailable loopback dependency. */
+  private static String unreachableBaseUrl() {
+    return "http://127.0.0.1:1";
   }
 
 }
