@@ -58,13 +58,12 @@ class GroupUsersRequestValidatorTest {
   }
 
   @Test
-  void authorizedEmptyReplacementIsValid() {
+  void authorizedEmptyReplacementIsRejectedBecauseAGroupNeedsAnAdministrator() {
     Fixture f = new Fixture();
 
     GroupUsersRequestValidator validator = f.validate(new CedarGroupUsersRequest());
 
-    assertTrue(validator.getCallResult().isOk());
-    assertTrue(validator.getUsers().getUsers().isEmpty());
+    assertError(validator, CedarErrorKey.GROUP_REQUIRES_ADMINISTRATOR);
   }
 
   @Test
@@ -129,16 +128,25 @@ class GroupUsersRequestValidatorTest {
   }
 
   @ParameterizedTest
-  @CsvSource({"true,true", "true,false", "false,true", "false,false"})
-  void administratorAndMemberFlagsRemainIndependent(boolean administrator, boolean member) {
+  @CsvSource({"true", "false"})
+  void administratorAndMemberFlagsRemainIndependent(boolean member) {
     Fixture f = new Fixture();
 
-    GroupUsersRequestValidator validator = f.validate(request(entry(USER_1, administrator, member)));
+    GroupUsersRequestValidator validator = f.validate(request(
+        entry(USER_1, true, true), entry(USER_2, false, member)));
 
     assertTrue(validator.getCallResult().isOk());
-    CedarGroupUser result = validator.getUsers().getUsers().get(0);
-    assertEquals(administrator, result.isAdministrator());
+    CedarGroupUser result = validator.getUsers().getUsers().get(1);
+    assertFalse(result.isAdministrator());
     assertEquals(member, result.isMember());
+  }
+
+  @Test
+  void replacementWithoutAnAdministratorIsRejected() {
+    Fixture f = new Fixture();
+
+    assertError(f.validate(request(entry(USER_1, false, true))),
+        CedarErrorKey.GROUP_REQUIRES_ADMINISTRATOR);
   }
 
   @Test

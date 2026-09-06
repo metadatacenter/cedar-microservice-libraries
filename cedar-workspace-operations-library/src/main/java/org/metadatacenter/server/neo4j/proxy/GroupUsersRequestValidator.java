@@ -42,6 +42,10 @@ public class GroupUsersRequestValidator {
     if (callResult.isOk()) {
       validateAndSetUsers();
     }
+
+    if (callResult.isOk()) {
+      validateAdministratorRemains();
+    }
   }
 
   private void validateRequest() {
@@ -135,6 +139,16 @@ public class GroupUsersRequestValidator {
             new CedarUserExtract(userId, null, null, null), u.isAdministrator(), u.isMember())
         );
       }
+    }
+  }
+
+  private void validateAdministratorRemains() {
+    boolean hasAdministrator = users.getUsers().stream().anyMatch(CedarGroupUser::isAdministrator);
+    if (!hasAdministrator) {
+      callResult.addError(CedarErrorType.INVALID_ARGUMENT)
+          .errorKey(CedarErrorKey.GROUP_REQUIRES_ADMINISTRATOR)
+          .message("A group must have at least one administrator")
+          .parameter("groupId", groupId);
     }
   }
 
