@@ -96,13 +96,15 @@ public class CypherQueryBuilderCategoryPermission extends AbstractCypherQueryBui
     return """
         MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
         MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.CATEGORY_ID>}})
-        OPTIONAL MATCH (user)-[:<REL.OWNSCATEGORY>]->(owned:<LABEL.CATEGORY>)
-          -[:<REL.CONTAINSCATEGORY>*0..]->(category)
-        WITH user, category, count(DISTINCT owned) > 0 AS owner
+        OPTIONAL MATCH (user)-[directOwnership:<REL.OWNSCATEGORY>]->(category)
+        WITH user, category, count(directOwnership) > 0 AS owner
+        OPTIONAL MATCH (user)-[:<REL.OWNSCATEGORY>]->(ancestor:<LABEL.CATEGORY>)
+          -[:<REL.CONTAINSCATEGORY>*1..]->(category)
+        WITH user, category, owner, count(DISTINCT ancestor) > 0 AS ancestorOwner
         OPTIONAL MATCH (user)-[:<REL.MEMBEROF>*0..1]->(principal)
           -[grant:VIEWER_ROLE|CANATTACHCATEGORY|EDITOR_ROLE|CANWRITECATEGORY]->(granted:<LABEL.CATEGORY>)
           -[:<REL.CONTAINSCATEGORY>*0..]->(category)
-        RETURN owner, collect(DISTINCT type(grant)) AS roleRelations
+        RETURN owner, ancestorOwner, collect(DISTINCT type(grant)) AS roleRelations
         """;
   }
 

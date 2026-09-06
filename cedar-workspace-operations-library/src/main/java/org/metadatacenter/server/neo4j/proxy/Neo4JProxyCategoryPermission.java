@@ -198,7 +198,7 @@ public class Neo4JProxyCategoryPermission extends AbstractNeo4JProxy {
         return new CategoryAuthority(null, false);
       }
       Record record = result.next();
-      CategoryRole strongest = null;
+      CategoryRole strongest = record.get("ancestorOwner").asBoolean() ? CategoryRole.MANAGER : null;
       for (Object relation : record.get("roleRelations").asList()) {
         strongest = CategoryRole.strongest(strongest, roleForRelation(relation.toString()));
       }
