@@ -23,7 +23,7 @@ import org.metadatacenter.server.security.model.auth.NodeSharePermission;
 import org.metadatacenter.server.security.model.auth.CedarNodeGroupPermission;
 import org.metadatacenter.server.security.model.auth.CedarNodePermissionsWithExtract;
 import org.metadatacenter.server.security.model.auth.CedarNodeUserPermission;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.util.json.JsonMapper;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Result;
@@ -52,48 +52,36 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
                                                    RevisionPrecondition precondition) {
     CedarUserId ownerId = requested.getOwner().getResourceId();
     List<String> userIds = new ArrayList<>();
-    List<String> readUserIds = new ArrayList<>();
-    List<String> writeUserIds = new ArrayList<>();
-    List<String> changeOwnerUserIds = new ArrayList<>();
-    List<String> changePermissionsUserIds = new ArrayList<>();
-    List<String> publishUserIds = new ArrayList<>();
-    List<String> createDraftUserIds = new ArrayList<>();
-    for (CedarNodeUserPermission permission : requested.getUserPermissions()) {
-      String id = permission.getUser().getId();
+    List<String> viewerUserIds = new ArrayList<>();
+    List<String> editorUserIds = new ArrayList<>();
+    List<String> managerUserIds = new ArrayList<>();
+    for (CedarNodeUserPermission grant : requested.getUserPermissions()) {
+      String id = grant.getUser().getId();
       userIds.add(id);
-      switch (permission.getPermission()) {
-        case READ -> readUserIds.add(id);
-        case WRITE -> writeUserIds.add(id);
-        case CHANGEOWNER -> changeOwnerUserIds.add(id);
-        case CHANGEPERMISSIONS -> changePermissionsUserIds.add(id);
-        case PUBLISH -> publishUserIds.add(id);
-        case CREATE_DRAFT -> createDraftUserIds.add(id);
+      switch (grant.getRole()) {
+        case VIEWER -> viewerUserIds.add(id);
+        case EDITOR -> editorUserIds.add(id);
+        case MANAGER -> managerUserIds.add(id);
       }
     }
 
     List<String> groupIds = new ArrayList<>();
-    List<String> readGroupIds = new ArrayList<>();
-    List<String> writeGroupIds = new ArrayList<>();
-    List<String> changeOwnerGroupIds = new ArrayList<>();
-    List<String> changePermissionsGroupIds = new ArrayList<>();
-    List<String> publishGroupIds = new ArrayList<>();
-    List<String> createDraftGroupIds = new ArrayList<>();
+    List<String> viewerGroupIds = new ArrayList<>();
+    List<String> editorGroupIds = new ArrayList<>();
+    List<String> managerGroupIds = new ArrayList<>();
     NodeSharePermission everybodyPermission = NodeSharePermission.NONE;
     FolderServerGroup everybody = proxies.group().getEverybodyGroup();
-    for (CedarNodeGroupPermission permission : requested.getGroupPermissions()) {
-      String id = permission.getGroup().getId();
+    for (CedarNodeGroupPermission grant : requested.getGroupPermissions()) {
+      String id = grant.getGroup().getId();
       groupIds.add(id);
-      switch (permission.getPermission()) {
-        case READ -> readGroupIds.add(id);
-        case WRITE -> writeGroupIds.add(id);
-        case CHANGEOWNER -> changeOwnerGroupIds.add(id);
-        case CHANGEPERMISSIONS -> changePermissionsGroupIds.add(id);
-        case PUBLISH -> publishGroupIds.add(id);
-        case CREATE_DRAFT -> createDraftGroupIds.add(id);
+      switch (grant.getRole()) {
+        case VIEWER -> viewerGroupIds.add(id);
+        case EDITOR -> editorGroupIds.add(id);
+        case MANAGER -> managerGroupIds.add(id);
       }
       if (everybody != null && everybody.getId().equals(id)) {
-        everybodyPermission = permission.getPermission() == FilesystemResourcePermission.WRITE
-            ? NodeSharePermission.WRITE : NodeSharePermission.READ;
+        everybodyPermission = grant.getRole() == ResourceRole.VIEWER
+            ? NodeSharePermission.READ : NodeSharePermission.NONE;
       }
     }
 
@@ -114,12 +102,36 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
       CypherQueryWithParameters replace = new CypherQueryWithParameters(
           CypherQueryBuilderFilesystemResourcePermission.replacePermissions(),
           CypherParamBuilderFilesystemResource.replacePermissions(resourceId, ownerId,
-              userIds, readUserIds, writeUserIds, changeOwnerUserIds, changePermissionsUserIds,
-              publishUserIds, createDraftUserIds, groupIds, readGroupIds, writeGroupIds,
-              changeOwnerGroupIds, changePermissionsGroupIds, publishGroupIds, createDraftGroupIds,
+              userIds, viewerUserIds, editorUserIds, managerUserIds,
+              groupIds, viewerGroupIds, editorGroupIds, managerGroupIds,
               finalEverybodyPermission, currentRevision));
       return readVersionedPermissions(run(tx, replace));
     }, "replacing versioned resource permissions");
+  }
+
+  VersionedResourcePermissions transferOwnership(CedarFilesystemResourceId resourceId,
+                                                  CedarUserId currentOwnerId,
+                                                  CedarUserId newOwnerId,
+                                                  RevisionPrecondition precondition) {
+    return executeInWriteTransaction(tx -> {
+      CypherQueryWithParameters lock = new CypherQueryWithParameters(
+          CypherQueryBuilderFilesystemResourcePermission.lockPermissions(),
+          CypherParamBuilderFilesystemResource.matchFilesystemResource(resourceId));
+      Result lockResult = run(tx, lock);
+      if (!lockResult.hasNext()) {
+        return null;
+      }
+      long currentRevision = lockResult.next().get("revision").asLong();
+      if (!precondition.matches(currentRevision)) {
+        throw new RevisionConflictException(currentRevision);
+      }
+      CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResourceAndUser(resourceId, newOwnerId);
+      params.put(org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder.OWNER_ID, currentOwnerId);
+      params.put(org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder.CURRENT_REVISION, currentRevision);
+      CypherQueryWithParameters transfer = new CypherQueryWithParameters(
+          CypherQueryBuilderFilesystemResourcePermission.transferOwnership(), params);
+      return readVersionedPermissions(run(tx, transfer));
+    }, "transferring resource ownership");
   }
 
   private Result run(Transaction tx, CypherQueryWithParameters query) {
@@ -137,18 +149,18 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
         permissions.setOwner(owner.buildExtract());
       }
       if (!record.get("principal").isNull()) {
-        String permissionName = record.get("permission").asString();
-        RelationLabel relation = RelationLabel.forValue(permissionName);
-        FilesystemResourcePermission permission = relation == null ? null : relation.getFilesystemResourcePermission();
-        if (permission == null) {
-          throw new IllegalStateException("Unexpected resource permission relation: " + permissionName);
+        String relationName = record.get("permission").asString();
+        RelationLabel relation = RelationLabel.forValue(relationName);
+        ResourceRole role = relation == null ? null : relation.getResourceRole();
+        if (role == null) {
+          throw new IllegalStateException("Unexpected resource role relation: " + relationName);
         }
         if ("user".equals(record.get("principalType").asString())) {
           FolderServerUser user = buildNode(record.get("principal").asNode(), FolderServerUser.class);
-          permissions.addUserPermissions(new CedarNodeUserPermission(user.buildExtract(), permission));
+          permissions.addUserPermissions(new CedarNodeUserPermission(user.buildExtract(), role));
         } else {
           FolderServerGroup group = buildNode(record.get("principal").asNode(), FolderServerGroup.class);
-          permissions.addGroupPermissions(new CedarNodeGroupPermission(group.buildExtract(), permission));
+          permissions.addGroupPermissions(new CedarNodeGroupPermission(group.buildExtract(), role));
         }
       }
     }
@@ -160,135 +172,124 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
     return buildClass(json, clazz);
   }
 
-  boolean addPermission(CedarFilesystemResourceId resourceId, CedarGroupId groupId, FilesystemResourcePermission permission) {
-    return executeWrite(addPermissionQuery(resourceId, groupId, permission), "adding permission");
+  boolean addRole(CedarFilesystemResourceId resourceId, CedarGroupId groupId, ResourceRole role) {
+    return executeWrite(addRoleQuery(resourceId, groupId, role), "adding resource role");
   }
 
-  boolean removePermission(CedarFilesystemResourceId resourceId, CedarGroupId groupId, FilesystemResourcePermission permission) {
-    return executeWrite(removePermissionQuery(resourceId, groupId, permission), "removing permission");
+  boolean removeRole(CedarFilesystemResourceId resourceId, CedarGroupId groupId, ResourceRole role) {
+    return executeWrite(removeRoleQuery(resourceId, groupId, role), "removing resource role");
   }
 
-  boolean addPermission(CedarFilesystemResourceId resourceId, CedarUserId userId, FilesystemResourcePermission permission) {
-    return executeWrite(addPermissionQuery(resourceId, userId, permission), "adding permission");
+  boolean addRole(CedarFilesystemResourceId resourceId, CedarUserId userId, ResourceRole role) {
+    return executeWrite(addRoleQuery(resourceId, userId, role), "adding resource role");
   }
 
-  boolean removePermission(CedarFilesystemResourceId resourceId, CedarUserId userId, FilesystemResourcePermission permission) {
-    return executeWrite(removePermissionQuery(resourceId, userId, permission), "removing permission");
+  boolean removeRole(CedarFilesystemResourceId resourceId, CedarUserId userId, ResourceRole role) {
+    return executeWrite(removeRoleQuery(resourceId, userId, role), "removing resource role");
   }
 
-  private CypherQuery addPermissionQuery(CedarFilesystemResourceId resourceId, CedarGroupId groupId,
-                                         FilesystemResourcePermission permission) {
+  private CypherQuery addRoleQuery(CedarFilesystemResourceId resourceId, CedarGroupId groupId,
+                                   ResourceRole role) {
     return new CypherQueryWithParameters(
-        CypherQueryBuilderFilesystemResourcePermission.addPermissionToFilesystemResourceForGroup(permission),
+        CypherQueryBuilderFilesystemResourcePermission.addRoleToFilesystemResourceForGroup(role),
         CypherParamBuilderFilesystemResource.matchFilesystemResourceAndGroup(resourceId, groupId));
   }
 
-  private CypherQuery removePermissionQuery(CedarFilesystemResourceId resourceId, CedarGroupId groupId,
-                                            FilesystemResourcePermission permission) {
+  private CypherQuery removeRoleQuery(CedarFilesystemResourceId resourceId, CedarGroupId groupId,
+                                      ResourceRole role) {
     return new CypherQueryWithParameters(
-        CypherQueryBuilderFilesystemResourcePermission.removePermissionForFilesystemResourceFromGroup(permission),
+        CypherQueryBuilderFilesystemResourcePermission.removeRoleForFilesystemResourceFromGroup(role),
         CypherParamBuilderFilesystemResource.matchFilesystemResourceAndGroup(resourceId, groupId));
   }
 
-  private CypherQuery addPermissionQuery(CedarFilesystemResourceId resourceId, CedarUserId userId,
-                                         FilesystemResourcePermission permission) {
+  private CypherQuery addRoleQuery(CedarFilesystemResourceId resourceId, CedarUserId userId,
+                                   ResourceRole role) {
     return new CypherQueryWithParameters(
-        CypherQueryBuilderFilesystemResourcePermission.addPermissionToFilesystemResourceForUser(permission),
+        CypherQueryBuilderFilesystemResourcePermission.addRoleToFilesystemResourceForUser(role),
         CypherParamBuilderFilesystemResource.matchFilesystemResourceAndUser(resourceId, userId));
   }
 
-  private CypherQuery removePermissionQuery(CedarFilesystemResourceId resourceId, CedarUserId userId,
-                                            FilesystemResourcePermission permission) {
+  private CypherQuery removeRoleQuery(CedarFilesystemResourceId resourceId, CedarUserId userId,
+                                      ResourceRole role) {
     return new CypherQueryWithParameters(
-        CypherQueryBuilderFilesystemResourcePermission.removePermissionForFilesystemResourceFromUser(permission),
+        CypherQueryBuilderFilesystemResourcePermission.removeRoleForFilesystemResourceFromUser(role),
         CypherParamBuilderFilesystemResource.matchFilesystemResourceAndUser(resourceId, userId));
   }
 
-  void addPermissionToUser(CedarFilesystemResourceId resourceId, CedarUserId userId, FilesystemResourcePermission permission) {
+  void addRoleToUser(CedarFilesystemResourceId resourceId, CedarUserId userId, ResourceRole role) {
     FolderServerUser user = proxies.user().findUserById(userId);
     if (user != null) {
       FileSystemResource node = proxies.filesystemResource().findResourceById(resourceId);
       if (node != null) {
-        addPermission(resourceId, userId, permission);
+        addRole(resourceId, userId, role);
       }
     }
   }
 
-  void removePermissionFromUser(CedarFilesystemResourceId resourceId, CedarUserId userId, FilesystemResourcePermission permission) {
+  void removeRoleFromUser(CedarFilesystemResourceId resourceId, CedarUserId userId, ResourceRole role) {
     FolderServerUser user = proxies.user().findUserById(userId);
     if (user != null) {
       FileSystemResource node = proxies.filesystemResource().findResourceById(resourceId);
       if (node != null) {
-        removePermission(resourceId, userId, permission);
+        removeRole(resourceId, userId, role);
       }
     }
   }
 
-  void addPermissionToGroup(CedarFilesystemResourceId resourceId, CedarGroupId groupId, FilesystemResourcePermission permission) {
+  void addRoleToGroup(CedarFilesystemResourceId resourceId, CedarGroupId groupId, ResourceRole role) {
     FolderServerGroup group = proxies.group().findGroupById(groupId);
     if (group != null) {
       FileSystemResource node = proxies.filesystemResource().findResourceById(resourceId);
       if (node != null) {
-        proxies.permission().addPermission(resourceId, groupId, permission);
+        proxies.permission().addRole(resourceId, groupId, role);
       }
     }
   }
 
-  void removePermissionFromGroup(CedarFilesystemResourceId resourceId, CedarGroupId groupId, FilesystemResourcePermission permission) {
+  void removeRoleFromGroup(CedarFilesystemResourceId resourceId, CedarGroupId groupId, ResourceRole role) {
     FolderServerGroup group = proxies.group().findGroupById(groupId);
     if (group != null) {
       FileSystemResource node = proxies.filesystemResource().findResourceById(resourceId);
       if (node != null) {
-        proxies.permission().removePermission(resourceId, groupId, permission);
+        proxies.permission().removeRole(resourceId, groupId, role);
       }
     }
   }
 
-  boolean userHasReadAccessToFilesystemResource(CedarUserId userId, CedarFilesystemResourceId resourceId) {
-    String cypher = CypherQueryBuilderFilesystemResourcePermission.userCanReadFilesystemResource();
-    CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResourceAndUser(resourceId, userId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    FolderServerUser cedarFSUser = executeReadGetOne(q, FolderServerUser.class);
-    return cedarFSUser != null;
-  }
-
-  boolean userHasWriteAccessToFilesystemResource(CedarUserId userId, CedarFilesystemResourceId resourceId) {
-    String cypher = CypherQueryBuilderFilesystemResourcePermission.userCanWriteFilesystemResource();
-    CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResourceAndUser(resourceId, userId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    FolderServerUser cedarFSUser = executeReadGetOne(q, FolderServerUser.class);
-    return cedarFSUser != null;
-  }
-
-  List<FolderServerUser> getUsersWithDirectPermissionOnResource(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    RelationLabel relationLabel = switch (permission) {
-      case READ -> RelationLabel.CANREAD;
-      case WRITE -> RelationLabel.CANWRITE;
-      default -> null;
+  boolean userHasRoleOnFilesystemResource(CedarUserId userId, CedarFilesystemResourceId resourceId,
+                                          ResourceRole requiredRole) {
+    String cypher = switch (requiredRole) {
+      case VIEWER -> CypherQueryBuilderFilesystemResourcePermission.userHasViewerRoleOnFilesystemResource();
+      case EDITOR -> CypherQueryBuilderFilesystemResourcePermission.userHasEditorRoleOnFilesystemResource();
+      case MANAGER -> CypherQueryBuilderFilesystemResourcePermission.userHasManagerRoleOnFilesystemResource();
     };
+    CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResourceAndUser(resourceId, userId);
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    FolderServerUser cedarFSUser = executeReadGetOne(q, FolderServerUser.class);
+    return cedarFSUser != null;
+  }
+
+  List<FolderServerUser> getUsersWithDirectRoleOnResource(CedarFilesystemResourceId resourceId, ResourceRole role) {
+    RelationLabel relationLabel = RelationLabel.forResourceRole(role);
     String cypher = CypherQueryBuilderFilesystemResourcePermission.getUsersWithDirectPermissionOnFilesystemResource(relationLabel);
     CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResource(resourceId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, FolderServerUser.class);
   }
 
-  List<FolderServerGroup> getGroupsWithDirectPermissionOnResource(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    RelationLabel relationLabel = switch (permission) {
-      case READ -> RelationLabel.CANREAD;
-      case WRITE -> RelationLabel.CANWRITE;
-      default -> null;
-    };
+  List<FolderServerGroup> getGroupsWithDirectRoleOnResource(CedarFilesystemResourceId resourceId, ResourceRole role) {
+    RelationLabel relationLabel = RelationLabel.forResourceRole(role);
     String cypher = CypherQueryBuilderFilesystemResourcePermission.getGroupsWithDirectPermissionOnFilesystemResource(relationLabel);
     CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResource(resourceId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, FolderServerGroup.class);
   }
 
-  List<CedarUserId> getUserIdsWithTransitivePermissionOnResource(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    String cypher = switch (permission) {
-      case READ -> CypherQueryBuilderFilesystemResourcePermission.getUserIdsWithTransitiveReadOnFilesystemResource();
-      case WRITE -> CypherQueryBuilderFilesystemResourcePermission.getUserIdsWithTransitiveWriteOnFilesystemResource();
-      default -> null;
+  List<CedarUserId> getUserIdsWithTransitiveRoleOnResource(CedarFilesystemResourceId resourceId, ResourceRole role) {
+    String cypher = switch (role) {
+      case VIEWER -> CypherQueryBuilderFilesystemResourcePermission.getUserIdsWithTransitiveViewerRoleOnFilesystemResource();
+      case EDITOR -> CypherQueryBuilderFilesystemResourcePermission.getUserIdsWithTransitiveEditorRoleOnFilesystemResource();
+      case MANAGER -> CypherQueryBuilderFilesystemResourcePermission.getUserIdsWithTransitiveManagerRoleOnFilesystemResource();
     };
 
     CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResource(resourceId);
@@ -296,11 +297,11 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
     return executeReadGetIdList(q, CedarUserId.class);
   }
 
-  List<CedarGroupId> getGroupIdsWithTransitivePermissionOnResource(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    String cypher = switch (permission) {
-      case READ -> CypherQueryBuilderFilesystemResourcePermission.getGroupIdsWithTransitiveReadOnFilesystemResource();
-      case WRITE -> CypherQueryBuilderFilesystemResourcePermission.getGroupIdsWithTransitiveWriteOnFilesystemResource();
-      default -> null;
+  List<CedarGroupId> getGroupIdsWithTransitiveRoleOnResource(CedarFilesystemResourceId resourceId, ResourceRole role) {
+    String cypher = switch (role) {
+      case VIEWER -> CypherQueryBuilderFilesystemResourcePermission.getGroupIdsWithTransitiveViewerRoleOnFilesystemResource();
+      case EDITOR -> CypherQueryBuilderFilesystemResourcePermission.getGroupIdsWithTransitiveEditorRoleOnFilesystemResource();
+      case MANAGER -> CypherQueryBuilderFilesystemResourcePermission.getGroupIdsWithTransitiveManagerRoleOnFilesystemResource();
     };
 
     CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResource(resourceId);

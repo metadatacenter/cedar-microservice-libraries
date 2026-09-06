@@ -23,7 +23,7 @@ import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.VersionServiceSession;
 import org.metadatacenter.outcome.OutcomeWithReason;
 import org.metadatacenter.server.result.BackendCallResult;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUser;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUserPermissionPair;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionsRequest;
@@ -150,29 +150,12 @@ public class ArtifactLifecycleMatrixTest {
     cells.add(new Cell("draft, latest, asked by a non-owner", Operation.VERSION, draftLatest, user2Context,
         CedarErrorKey.VERSIONING_ONLY_BY_OWNER));
 
-    // Versioning is owner-only, and no grant changes that. FilesystemResourcePermission declares
-    // PUBLISH and CREATE_DRAFT alongside READ and WRITE, but userCanPerformVersioning asks
-    // userIsOwnerOfFilesystemResource and nothing else, and neither level appears anywhere in
-    // production code. So granting PUBLISH cannot let the grantee publish, and granting CREATE_DRAFT
-    // cannot let them create a draft: the levels name operations they do not confer.
-    //
-    // These rows demonstrate that rather than arguing it from the absence of references — the same
-    // refusal arrives whether the grantee holds nothing, WRITE, PUBLISH or CREATE_DRAFT. If the levels
-    // are ever enforced, these rows fail and should become allowances.
-    FolderServerArtifact grantedWrite = createTemplate("Lifecycle Granted Write", "0.0.1", "bibo:draft", null);
-    grantToUser2(grantedWrite, FilesystemResourcePermission.WRITE);
-    FolderServerArtifact grantedPublish = createTemplate("Lifecycle Granted Publish", "0.0.1", "bibo:draft", null);
-    grantToUser2(grantedPublish, FilesystemResourcePermission.PUBLISH);
-    FolderServerArtifact grantedCreateDraft =
-        createTemplate("Lifecycle Granted Create Draft", "1.0.0", "bibo:published", null);
-    grantToUser2(grantedCreateDraft, FilesystemResourcePermission.CREATE_DRAFT);
+    // Artifact versioning is outside the resource-role hierarchy. Even Manager does not confer it.
+    FolderServerArtifact grantedManager = createTemplate("Lifecycle Granted Manager", "0.0.1", "bibo:draft", null);
+    grantToUser2(grantedManager, ResourceRole.MANAGER);
 
-    cells.add(new Cell("draft, latest, grantee holds WRITE", Operation.VERSION, grantedWrite, user2Context,
+    cells.add(new Cell("draft, latest, grantee holds Manager", Operation.VERSION, grantedManager, user2Context,
         CedarErrorKey.VERSIONING_ONLY_BY_OWNER));
-    cells.add(new Cell("draft, latest, grantee holds PUBLISH", Operation.VERSION, grantedPublish, user2Context,
-        CedarErrorKey.VERSIONING_ONLY_BY_OWNER));
-    cells.add(new Cell("published, latest, grantee holds CREATE_DRAFT", Operation.VERSION, grantedCreateDraft,
-        user2Context, CedarErrorKey.VERSIONING_ONLY_BY_OWNER));
 
     // Instances carry no version chain, so versioning them is refused on type alone.
     cells.add(new Cell("instance (a non-versioned type)", Operation.VERSION, instance, user1Context,
@@ -215,19 +198,19 @@ public class ArtifactLifecycleMatrixTest {
   }
 
   /**
-   * Grants user 2 the given permission on the artifact, as its owner. The request replaces the whole
-   * permission set, so it restates user 1 as owner; the validator rejects a request without one.
+   * Grants user 2 the given role on the artifact, as its owner. The request replaces the whole
+   * grant set and repeats the unchanged owner for compatibility with existing clients.
    */
-  private void grantToUser2(FolderServerArtifact artifact, FilesystemResourcePermission permission) {
+  private void grantToUser2(FolderServerArtifact artifact, ResourceRole role) {
     CedarUser user2 = TestAuthUtil.getTestUser2(cedarConfig);
     ResourcePermissionsRequest request = new ResourcePermissionsRequest();
     request.setOwner(new ResourcePermissionUser(user1.getId()));
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
-        new ResourcePermissionUser(user2.getId()), permission));
+        new ResourcePermissionUser(user2.getId()), role));
     BackendCallResult result = CedarDataServices.getInstance().getResourcePermissionServiceSession(user1Context)
         .updateResourcePermissions(artifact.getResourceId(), request);
     Assertions.assertFalse(result.isError(),
-        "granting " + permission + " should succeed: "
+        "granting " + role + " should succeed: "
             + (result.isError() ? result.getFirstErrorMessage() : ""));
   }
 

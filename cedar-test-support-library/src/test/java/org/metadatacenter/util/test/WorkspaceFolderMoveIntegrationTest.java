@@ -22,7 +22,7 @@ import org.metadatacenter.server.RevisionConflictException;
 import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.result.BackendCallResult;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUser;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUserPermissionPair;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionsRequest;
@@ -242,14 +242,14 @@ public class WorkspaceFolderMoveIntegrationTest {
     ResourcePermissionsRequest request = new ResourcePermissionsRequest();
     request.setOwner(new ResourcePermissionUser(user1.getId()));
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
-        new ResourcePermissionUser(user2.getId()), FilesystemResourcePermission.READ));
+        new ResourcePermissionUser(user2.getId()), ResourceRole.VIEWER));
     BackendCallResult result = CedarDataServices.getInstance().getResourcePermissionServiceSession(user1Context)
         .updateResourcePermissions(grantedRoot.getResourceId(), request);
     Assertions.assertFalse(result.isError(), "The permission update should succeed");
 
     ResourcePermissionServiceSession user2Permissions =
         CedarDataServices.getInstance().getResourcePermissionServiceSession(user2Context);
-    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(child.getResourceId()),
+    Assertions.assertTrue(user2Permissions.userHasRole(child.getResourceId(), ResourceRole.VIEWER),
         "Before the move, user2 should read the child through the grant on its parent");
 
     Assertions.assertTrue(user1Folders.moveFolder(child.getResourceId(), neutral.getResourceId()),
@@ -257,9 +257,9 @@ public class WorkspaceFolderMoveIntegrationTest {
 
     // Access is derived from the current ancestor chain at query time; leaving the granted
     // subtree severs it, with no revocation step involved
-    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(child.getResourceId()),
+    Assertions.assertFalse(user2Permissions.userHasRole(child.getResourceId(), ResourceRole.VIEWER),
         "After the move, user2 should no longer read the child");
-    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(grantedRoot.getResourceId()),
+    Assertions.assertTrue(user2Permissions.userHasRole(grantedRoot.getResourceId(), ResourceRole.VIEWER),
         "The grant on the original folder itself should be unaffected");
   }
 

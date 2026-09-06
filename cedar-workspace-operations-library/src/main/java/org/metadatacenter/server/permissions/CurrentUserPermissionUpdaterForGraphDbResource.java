@@ -12,6 +12,9 @@ import org.metadatacenter.server.VersionServiceSession;
 import org.metadatacenter.server.security.model.InstanceArtifactWithIsBasedOn;
 import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
 import org.metadatacenter.server.security.model.auth.FilesystemResourceWithCurrentUserPermissions;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAuthority;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAction;
+import org.metadatacenter.server.security.model.permission.resource.ResourceActionPolicy;
 
 public class CurrentUserPermissionUpdaterForGraphDbResource extends CurrentUserPermissionUpdater {
 
@@ -36,17 +39,12 @@ public class CurrentUserPermissionUpdaterForGraphDbResource extends CurrentUserP
   @Override
   public void update(CurrentUserResourcePermissions currentUserResourcePermissions){
     CedarFilesystemResourceId id = resource.getResourceId();
-    if (permissionSession.userHasWriteAccessToResource(id)) {
-      currentUserResourcePermissions.setCanWrite(true);
-      currentUserResourcePermissions.setCanDelete(true);
-      currentUserResourcePermissions.setCanRead(true);
-      currentUserResourcePermissions.setCanShare(true);
-    } else if (permissionSession.userHasReadAccessToResource(id)) {
-      currentUserResourcePermissions.setCanRead(true);
-    }
-    if (permissionSession.userCanChangeOwnerOfResource(id)) {
-      currentUserResourcePermissions.setCanChangeOwner(true);
-    }
+    ResourceAuthority authority = permissionSession.getResourceAuthority(id);
+    currentUserResourcePermissions.applyAccess(authority, permissionSession.getResourceCapabilities(id));
+    Boolean open = resource instanceof ResourceWithOpenFlag resourceWithOpenFlag
+        ? resourceWithOpenFlag.isOpen() : null;
+    currentUserResourcePermissions.setAvailableActions(ResourceActionPolicy.evaluate(
+        resource.getType(), currentUserResourcePermissions.getCapabilities(), open));
     OutcomeWithReason versioningOutcome = versionSession.userCanPerformVersioning(resource);
     if (versioningOutcome.isNegative()) {
       currentUserResourcePermissions.setCreateDraftErrorKey(versioningOutcome.getReason());
@@ -54,19 +52,16 @@ public class CurrentUserPermissionUpdaterForGraphDbResource extends CurrentUserP
     } else {
       OutcomeWithReason publishOutcome = versionSession.resourceCanBePublished(resource);
       if (publishOutcome.isPositive()) {
-        currentUserResourcePermissions.setCanPublish(true);
+        currentUserResourcePermissions.setActionAvailable(ResourceAction.PUBLISH, true);
       } else {
         currentUserResourcePermissions.setPublishErrorKey(publishOutcome.getReason());
       }
       OutcomeWithReason createDraftOutcome = versionSession.resourceCanBeDrafted(resource);
       if (createDraftOutcome.isPositive()) {
-        currentUserResourcePermissions.setCanCreateDraft(true);
+        currentUserResourcePermissions.setActionAvailable(ResourceAction.CREATE_DRAFT, true);
       } else {
         currentUserResourcePermissions.setCreateDraftErrorKey(createDraftOutcome.getReason());
       }
-    }
-    if (resource.getType() == CedarResourceType.TEMPLATE) {
-      currentUserResourcePermissions.setCanPopulate(true);
     }
     if (resource.getType() == CedarResourceType.INSTANCE) {
       InstanceArtifactWithIsBasedOn instance = (InstanceArtifactWithIsBasedOn) resource;
@@ -74,17 +69,9 @@ public class CurrentUserPermissionUpdaterForGraphDbResource extends CurrentUserP
       if (basedOnTemplate != null) {
         String basedOnTemplateId = basedOnTemplate.getId();
         if (isSubmittable(basedOnTemplateId)) {
-          currentUserResourcePermissions.setCanSubmit(true);
+          currentUserResourcePermissions.setActionAvailable(ResourceAction.SUBMIT, true);
         }
       }
-    }
-    currentUserResourcePermissions.setCanCopy(true);
-    if (resource instanceof ResourceWithOpenFlag res) {
-      currentUserResourcePermissions.setCanMakeOpen(!res.isOpen());
-      currentUserResourcePermissions.setCanMakeNotOpen(res.isOpen());
-    } else {
-      currentUserResourcePermissions.setCanMakeOpen(false);
-      currentUserResourcePermissions.setCanMakeNotOpen(false);
     }
   }
 

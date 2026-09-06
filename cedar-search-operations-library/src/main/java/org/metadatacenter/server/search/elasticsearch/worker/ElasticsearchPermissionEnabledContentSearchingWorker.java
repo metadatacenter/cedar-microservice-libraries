@@ -15,7 +15,7 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
@@ -293,8 +293,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     String userId = rctx.getCedarUser().getId();
     if (!rctx.getCedarUser().has(CedarPermission.READ_NOT_READABLE_NODE)) {
       // Filter by user
-      QueryBuilder userIdQuery = QueryBuilders.termQuery(USERS, CedarNodeMaterializedPermissions.getKey(userId,
-          FilesystemResourcePermission.READ));
+      QueryBuilder userIdQuery = QueryBuilders.termsQuery(USERS, accessibleRoleKeys(userId, ResourceRole.VIEWER));
       BoolQueryBuilder permissionQuery = QueryBuilders.boolQuery();
 
       QueryBuilder everybodyReadQuery = QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION,
@@ -709,7 +708,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   }
 
   public long searchAccessibleResourceCountByUser(List<String> resourceTypes,
-                                                  FilesystemResourcePermission permission,
+                                                  ResourceRole role,
                                                   CedarUser user) throws CedarProcessingException {
     try {
       SearchRequest searchRequest = new SearchRequest(indexName);
@@ -718,15 +717,15 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
       if (!user.has(CedarPermission.READ_NOT_READABLE_NODE)) {
         // Filter by user
-        QueryBuilder userIdQuery = QueryBuilders.termQuery(USERS, CedarNodeMaterializedPermissions.getKey(user.getId(), permission));
+        QueryBuilder userIdQuery = QueryBuilders.termsQuery(USERS, accessibleRoleKeys(user.getId(), role));
         BoolQueryBuilder permissionQuery = QueryBuilders.boolQuery();
 
         permissionQuery.should(userIdQuery);
-        if (permission == FilesystemResourcePermission.READ) {
+        if (role == ResourceRole.VIEWER) {
           permissionQuery.should(QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION,
               NodeSharePermission.READ.getValue()));
         }
-        if (permission == FilesystemResourcePermission.READ || permission == FilesystemResourcePermission.WRITE) {
+        if (role == ResourceRole.VIEWER || role == ResourceRole.EDITOR || role == ResourceRole.MANAGER) {
           permissionQuery.should(QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION,
               NodeSharePermission.WRITE.getValue()));
         }
@@ -751,5 +750,19 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     } catch (IOException e) {
       throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
     }
+  }
+
+  private static List<String> accessibleRoleKeys(String principalId, ResourceRole requiredRole) {
+    java.util.ArrayList<String> keys = new java.util.ArrayList<>();
+    for (ResourceRole candidate : ResourceRole.values()) {
+      if (candidate.includes(requiredRole)) {
+        keys.add(CedarNodeMaterializedPermissions.getKey(principalId, candidate));
+      }
+    }
+    if (requiredRole == ResourceRole.VIEWER) {
+      keys.add(principalId + "|read");
+    }
+    keys.add(principalId + "|write");
+    return keys;
   }
 }

@@ -3,15 +3,23 @@ package org.metadatacenter.server.search.elasticsearch.permission;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.model.BiboStatus;
+import org.metadatacenter.model.CedarResourceType;
+import org.metadatacenter.model.folderserver.info.FolderServerNodeInfo;
 import org.metadatacenter.outcome.OutcomeWithReason;
 import org.metadatacenter.permission.currentuserpermission.CurrentUserPermissionUpdater;
 import org.metadatacenter.search.IndexedDocumentDocument;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.auth.NodeSharePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAuthority;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAccessContext;
+import org.metadatacenter.server.security.model.permission.resource.ResourceCapability;
+import org.metadatacenter.server.security.model.permission.resource.ResourceCapabilityPolicy;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.List;
+import java.util.Set;
 
 public abstract class AbstractCurrentUserPermissionUpdaterForSearch extends CurrentUserPermissionUpdater {
 
@@ -27,23 +35,50 @@ public abstract class AbstractCurrentUserPermissionUpdaterForSearch extends Curr
     this.cedarConfig = cedarConfig;
   }
 
-  protected boolean userCanWrite() {
-    if (cedarUser.has(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE)) {
-      return true;
+  protected ResourceAuthority resourceAuthority() {
+    boolean owner = documentIsOwned();
+    if (owner) {
+      return new ResourceAuthority(null, true);
     }
-    return containsPermissions(indexedDocument.getUsers(), FilesystemResourcePermission.WRITE);
+    ResourceRole role = indexedRole();
+    return new ResourceAuthority(role, false);
   }
 
-  protected boolean userCanRead() {
-    if (cedarUser.has(CedarPermission.READ_NOT_READABLE_NODE)) {
-      return true;
-    }
-    return containsPermissions(indexedDocument.getUsers(), FilesystemResourcePermission.READ);
+  protected Set<ResourceCapability> resourceCapabilities(ResourceAuthority authority) {
+    FolderServerNodeInfo info = indexedDocument.getInfo();
+    boolean protectedFolder = info.getType() == CedarResourceType.FOLDER
+        && (info.getIsRoot() || info.getIsSystem() || info.getIsUserHome());
+    return ResourceCapabilityPolicy.evaluate(authority,
+        new ResourceAccessContext(info.getType(), protectedFolder), cedarUser);
   }
 
-  protected boolean containsPermissions(List<String> users, FilesystemResourcePermission permission) {
-    //TODO: Optimize this, use map instead
-    String lookup = CedarNodeMaterializedPermissions.getKey(cedarUser.getId(), permission);
+  private ResourceRole indexedRole() {
+    ResourceRole role = null;
+    if (containsRole(indexedDocument.getUsers(), ResourceRole.MANAGER) || containsLegacyPermission("write")) {
+      role = ResourceRole.MANAGER;
+    } else if (containsRole(indexedDocument.getUsers(), ResourceRole.EDITOR)) {
+      role = ResourceRole.EDITOR;
+    } else if (containsRole(indexedDocument.getUsers(), ResourceRole.VIEWER) || containsLegacyPermission("read")) {
+      role = ResourceRole.VIEWER;
+    }
+    NodeSharePermission everyone = indexedDocument.getComputedEverybodyPermission();
+    if (everyone == NodeSharePermission.WRITE) {
+      role = ResourceRole.strongest(role, ResourceRole.MANAGER);
+    } else if (everyone == NodeSharePermission.READ) {
+      role = ResourceRole.strongest(role, ResourceRole.VIEWER);
+    }
+    return role;
+  }
+
+  private boolean containsRole(List<String> users, ResourceRole role) {
+    return containsKey(users, CedarNodeMaterializedPermissions.getKey(cedarUser.getId(), role));
+  }
+
+  private boolean containsLegacyPermission(String permission) {
+    return containsKey(indexedDocument.getUsers(), cedarUser.getId() + "|" + permission);
+  }
+
+  private static boolean containsKey(List<String> users, String lookup) {
     if (users == null) {
       return false;
     }
@@ -53,14 +88,6 @@ public abstract class AbstractCurrentUserPermissionUpdaterForSearch extends Curr
       }
     }
     return false;
-  }
-
-  protected boolean userCanChangeOwnerOfFolder() {
-    if (cedarUser.has(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE)) {
-      return true;
-    } else {
-      return documentIsOwned();
-    }
   }
 
   private boolean documentIsOwned() {

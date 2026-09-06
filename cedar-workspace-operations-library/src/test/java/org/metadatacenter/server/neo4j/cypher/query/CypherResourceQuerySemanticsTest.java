@@ -1,6 +1,7 @@
 package org.metadatacenter.server.neo4j.cypher.query;
 
 import org.junit.jupiter.api.Test;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
@@ -11,6 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CypherResourceQuerySemanticsTest {
 
+  private static final String ALL_RESOURCE_ROLE_RELATIONSHIPS =
+      "CANREAD|VIEWER_ROLE|EDITOR_ROLE|CANWRITE|MANAGER_ROLE";
+
   @Test
   void sharedWithMeLookupAndCountBothDeduplicateResourcesReachedThroughMultipleGroups() {
     String lookup = CypherQueryBuilderResource.getSharedWithMeLookupQuery(
@@ -20,6 +24,28 @@ class CypherResourceQuerySemanticsTest {
 
     assertTrue(lookup.contains("RETURN DISTINCT(resource)"), lookup);
     assertTrue(count.contains("RETURN count(DISTINCT resource)"), count);
+  }
+
+  @Test
+  void everyResourceVisibilityQueryRecognizesViewerEditorAndManagerRelationships() {
+    List<String> queries = List.of(
+        CypherQueryBuilderResource.getSharedWithMeLookupQuery(
+            ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, List.of("name")),
+        CypherQueryBuilderResource.getSharedWithMeCountQuery(
+            ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL),
+        CypherQueryBuilderResource.getAllLookupQuery(
+            ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, List.of("name"), true),
+        CypherQueryBuilderResource.getAllCountQuery(
+            ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, true),
+        CypherQueryBuilderResource.getSearchIsBasedOnLookupQuery(List.of("name"), true),
+        CypherQueryBuilderResource.getSearchIsBasedOnCountQuery(true),
+        CypherQueryBuilderResource.getSpecialFoldersLookupQuery(List.of("name"), true),
+        CypherQueryBuilderResource.getSpecialFoldersCountQuery(true),
+        CypherQueryBuilderFilesystemResource.getAllVisibleByGroupQuery());
+
+    for (String query : queries) {
+      assertTrue(query.contains(ALL_RESOURCE_ROLE_RELATIONSHIPS), query);
+    }
   }
 
   @Test
@@ -50,5 +76,20 @@ class CypherResourceQuerySemanticsTest {
     assertThrows(IllegalArgumentException.class,
         () -> CypherQueryBuilderFilesystemResource.getAllResourcesLookupQuery(
             List.of("name DESC MATCH (injected) RETURN injected")));
+  }
+
+  @Test
+  void roleRemovalRecognizesCurrentAndFutureRelationshipNames() {
+    for (ResourceRole role : ResourceRole.values()) {
+      String expectedLabels = switch (role) {
+        case VIEWER -> "CANREAD|VIEWER_ROLE";
+        case EDITOR -> "EDITOR_ROLE";
+        case MANAGER -> "CANWRITE|MANAGER_ROLE";
+      };
+      assertTrue(CypherQueryBuilderFilesystemResourcePermission
+          .removeRoleForFilesystemResourceFromUser(role).contains("relation:" + expectedLabels));
+      assertTrue(CypherQueryBuilderFilesystemResourcePermission
+          .removeRoleForFilesystemResourceFromGroup(role).contains("relation:" + expectedLabels));
+    }
   }
 }

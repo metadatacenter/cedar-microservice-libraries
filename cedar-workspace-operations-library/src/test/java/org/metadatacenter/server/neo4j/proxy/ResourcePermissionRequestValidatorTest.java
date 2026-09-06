@@ -16,7 +16,6 @@ import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarNodePermissionsWithExtract;
-import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.permission.resource.*;
 import org.metadatacenter.server.security.model.user.CedarUserExtract;
 
@@ -26,7 +25,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/** Unit-level decision matrix for ACL request validation; no Neo4j driver is constructed. */
+/** Unit decision matrix for ACL request validation; no Neo4j driver is constructed. */
 class ResourcePermissionRequestValidatorTest {
 
   private static final CedarFilesystemResourceId RESOURCE_ID =
@@ -34,36 +33,24 @@ class ResourcePermissionRequestValidatorTest {
   private static final String OWNER_ID = "https://repo.example/users/owner";
   private static final String USER_ID = "https://repo.example/users/user";
   private static final String GROUP_ID = "https://repo.example/groups/group";
+  private static final String EVERYONE_ID = "https://repo.example/groups/everyone";
 
   @Test
   void missingResourceStopsValidationAtExistence() {
     Fixture f = new Fixture();
     when(f.filesystemResources.findResourceById(RESOURCE_ID)).thenReturn(null);
 
-    ResourcePermissionRequestValidator validator = f.validate(f.validRequest());
+    assertError(f.validate(f.validRequest()), CedarErrorKey.NODE_NOT_FOUND);
 
-    assertError(validator, CedarErrorKey.NODE_NOT_FOUND);
-    verifyNoInteractions(f.permissions);
-    verifyNoInteractions(f.users);
-    verifyNoInteractions(f.groups);
+    verify(f.permissions, never()).userHasCapability(any(), any());
   }
 
   @Test
-  void missingWriteAccessStopsBeforeRequestContentsAreRead() {
+  void managerCapabilityIsRequiredToChangeGrants() {
     Fixture f = new Fixture();
-    when(f.permissions.userHasWriteAccessToResource(RESOURCE_ID)).thenReturn(false);
+    when(f.permissions.userHasCapability(RESOURCE_ID, ResourceCapability.MANAGE_GRANTS)).thenReturn(false);
 
-    ResourcePermissionRequestValidator validator = f.validate(new ResourcePermissionsRequest());
-
-    assertError(validator, CedarErrorKey.NO_WRITE_ACCESS_TO_RESOURCE);
-    verifyNoInteractions(f.users);
-    verifyNoInteractions(f.groups);
-  }
-
-  @Test
-  void ownerIsRequired() {
-    Fixture f = new Fixture();
-    assertError(f.validate(new ResourcePermissionsRequest()), CedarErrorKey.MISSING_PARAMETER);
+    assertError(f.validate(f.validRequest()), CedarErrorKey.NOT_AUTHORIZED);
   }
 
   @Test
@@ -73,34 +60,48 @@ class ResourcePermissionRequestValidatorTest {
   }
 
   @Test
-  void ownerMustResolveToAKnownUser() {
+  void ownerMayBeOmittedAndTheCurrentOwnerIsPreserved() {
     Fixture f = new Fixture();
-    ResourcePermissionsRequest request = f.validRequest();
-    request.setOwner(new ResourcePermissionUser("https://repo.example/users/missing"));
-    assertError(f.validate(request), CedarErrorKey.USER_NOT_FOUND);
+    ResourcePermissionsRequest request = new ResourcePermissionsRequest();
+
+    ResourcePermissionRequestValidator validator = f.validate(request);
+
+    assertTrue(validator.getCallResult().isOk());
+    assertEquals(OWNER_ID, validator.getPermissions().getOwner().getId());
   }
 
-  @ParameterizedTest
-  @NullAndEmptySource
-  @ValueSource(strings = {" ", "\t"})
-  void ownerRequiresANonBlankId(String ownerId) {
+  @Test
+  void repeatingTheCurrentOwnerIsAcceptedForCompatibility() {
+    Fixture f = new Fixture();
+    assertTrue(f.validate(f.validRequest()).getCallResult().isOk());
+  }
+
+  @Test
+  void aclUpdateCannotTransferOwnership() {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
-    request.setOwner(new ResourcePermissionUser(ownerId));
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
+    request.setOwner(new ResourcePermissionUser(USER_ID));
+
+    assertError(f.validate(request), CedarErrorKey.INVALID_DATA);
+  }
+
+  @Test
+  void missingStoredOwnerIsInvalidData() {
+    Fixture f = new Fixture();
+    when(f.permissions.getResourcePermissions(RESOURCE_ID)).thenReturn(new CedarNodePermissionsWithExtract());
+    assertError(f.validate(f.validRequest()), CedarErrorKey.INVALID_DATA);
   }
 
   @Test
   void userEntryRequiresAUser() {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
-    request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(null,
-        FilesystemResourcePermission.READ));
+    request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(null, ResourceRole.VIEWER));
     assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
   }
 
   @Test
-  void userEntryRequiresAPermission() {
+  void userEntryRequiresARole() {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
@@ -113,7 +114,7 @@ class ResourcePermissionRequestValidatorTest {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
-        new ResourcePermissionUser("https://repo.example/users/missing"), FilesystemResourcePermission.READ));
+        new ResourcePermissionUser("https://repo.example/users/missing"), ResourceRole.VIEWER));
     assertError(f.validate(request), CedarErrorKey.USER_NOT_FOUND);
   }
 
@@ -124,7 +125,7 @@ class ResourcePermissionRequestValidatorTest {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
-        new ResourcePermissionUser(userId), FilesystemResourcePermission.READ));
+        new ResourcePermissionUser(userId), ResourceRole.VIEWER));
     assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
   }
 
@@ -132,13 +133,12 @@ class ResourcePermissionRequestValidatorTest {
   void groupEntryRequiresAGroup() {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
-    request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(null,
-        FilesystemResourcePermission.READ));
+    request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(null, ResourceRole.VIEWER));
     assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
   }
 
   @Test
-  void groupEntryRequiresAPermission() {
+  void groupEntryRequiresARole() {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
@@ -151,7 +151,7 @@ class ResourcePermissionRequestValidatorTest {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
-        new ResourcePermissionGroup("https://repo.example/groups/missing"), FilesystemResourcePermission.READ));
+        new ResourcePermissionGroup("https://repo.example/groups/missing"), ResourceRole.VIEWER));
     assertError(f.validate(request), CedarErrorKey.GROUP_NOT_FOUND);
   }
 
@@ -162,45 +162,41 @@ class ResourcePermissionRequestValidatorTest {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
-        new ResourcePermissionGroup(groupId), FilesystemResourcePermission.READ));
+        new ResourcePermissionGroup(groupId), ResourceRole.VIEWER));
     assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
   }
 
   @Test
-  void duplicateUsersAreRejectedEvenWhenTheirPermissionsDiffer() {
+  void duplicateUsersAreRejectedEvenWhenTheirRolesDiffer() {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.setUserPermissions(List.of(
-        new ResourcePermissionUserPermissionPair(new ResourcePermissionUser(USER_ID),
-            FilesystemResourcePermission.READ),
-        new ResourcePermissionUserPermissionPair(new ResourcePermissionUser(USER_ID),
-            FilesystemResourcePermission.WRITE)));
+        new ResourcePermissionUserPermissionPair(new ResourcePermissionUser(USER_ID), ResourceRole.VIEWER),
+        new ResourcePermissionUserPermissionPair(new ResourcePermissionUser(USER_ID), ResourceRole.EDITOR)));
     assertError(f.validate(request), CedarErrorKey.UNIQUE_CONSTRAINT_COLLISION);
   }
 
   @Test
-  void duplicateGroupsAreRejectedEvenWhenTheirPermissionsDiffer() {
+  void duplicateGroupsAreRejectedEvenWhenTheirRolesDiffer() {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.setGroupPermissions(List.of(
-        new ResourcePermissionGroupPermissionPair(new ResourcePermissionGroup(GROUP_ID),
-            FilesystemResourcePermission.READ),
-        new ResourcePermissionGroupPermissionPair(new ResourcePermissionGroup(GROUP_ID),
-            FilesystemResourcePermission.WRITE)));
+        new ResourcePermissionGroupPermissionPair(new ResourcePermissionGroup(GROUP_ID), ResourceRole.VIEWER),
+        new ResourcePermissionGroupPermissionPair(new ResourcePermissionGroup(GROUP_ID), ResourceRole.MANAGER)));
     assertError(f.validate(request), CedarErrorKey.UNIQUE_CONSTRAINT_COLLISION);
   }
 
   @Test
-  void ownerCannotAlsoAppearAsAUserGrantee() {
+  void ownerCannotAlsoReceiveADirectRole() {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
-        new ResourcePermissionUser(OWNER_ID), FilesystemResourcePermission.READ));
+        new ResourcePermissionUser(OWNER_ID), ResourceRole.VIEWER));
     assertError(f.validate(request), CedarErrorKey.INVALID_DATA);
   }
 
   @Test
-  void explicitNullPermissionCollectionsAreTreatedAsNoAdditionalGrants() {
+  void nullPermissionCollectionsMeanNoDirectGrants() {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.setUserPermissions(null);
@@ -214,104 +210,66 @@ class ResourcePermissionRequestValidatorTest {
   }
 
   @Test
-  void nullUserPermissionEntryProducesAValidationError() {
+  void nullGrantEntriesAreRejected() {
     Fixture f = new Fixture();
-    ResourcePermissionsRequest request = f.validRequest();
-    request.setUserPermissions(Collections.singletonList(null));
+    ResourcePermissionsRequest users = f.validRequest();
+    users.setUserPermissions(Collections.singletonList(null));
+    assertError(f.validate(users), CedarErrorKey.MISSING_PARAMETER);
 
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void nullGroupPermissionEntryProducesAValidationError() {
-    Fixture f = new Fixture();
-    ResourcePermissionsRequest request = f.validRequest();
-    request.setGroupPermissions(Collections.singletonList(null));
-
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void retainingTheCurrentOwnerNeedsNoOwnerTransferAuthority() {
-    Fixture f = new Fixture();
-    ResourcePermissionRequestValidator validator = f.validate(f.validRequest());
-
-    assertTrue(validator.getCallResult().isOk());
-    verify(f.permissions, never()).userHasPermission(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE);
-    verify(f.permissions, never()).userIsOwnerOfResource(RESOURCE_ID);
-  }
-
-  @Test
-  void privilegedCallerCanTransferOwnership() {
-    Fixture f = new Fixture();
-    when(f.permissions.userHasPermission(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE)).thenReturn(true);
-
-    ResourcePermissionRequestValidator validator = f.validate(f.requestOwnedBy(USER_ID));
-
-    assertTrue(validator.getCallResult().isOk());
-    verify(f.permissions, never()).userIsOwnerOfResource(RESOURCE_ID);
-  }
-
-  @Test
-  void currentOwnerCanTransferOwnership() {
-    Fixture f = new Fixture();
-    when(f.permissions.userIsOwnerOfResource(RESOURCE_ID)).thenReturn(true);
-    assertTrue(f.validate(f.requestOwnedBy(USER_ID)).getCallResult().isOk());
-  }
-
-  @Test
-  void nonOwnerWithoutOverrideCannotTransferOwnership() {
-    Fixture f = new Fixture();
-    assertError(f.validate(f.requestOwnedBy(USER_ID)), CedarErrorKey.NOT_AUTHORIZED);
+    ResourcePermissionsRequest groups = f.validRequest();
+    groups.setGroupPermissions(Collections.singletonList(null));
+    assertError(f.validate(groups), CedarErrorKey.MISSING_PARAMETER);
   }
 
   @ParameterizedTest
-  @EnumSource(FilesystemResourcePermission.class)
-  void everyDeclaredPermissionCanBeMaterializedForAUser(FilesystemResourcePermission permission) {
+  @EnumSource(ResourceRole.class)
+  void everyRoleCanBeGrantedDirectlyToAUser(ResourceRole role) {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
-        new ResourcePermissionUser(USER_ID), permission));
+        new ResourcePermissionUser(USER_ID), role));
 
     ResourcePermissionRequestValidator validator = f.validate(request);
 
     assertTrue(validator.getCallResult().isOk());
-    assertEquals(permission, validator.getPermissions().getUserPermissions().get(0).getPermission());
+    assertEquals(role, validator.getPermissions().getUserPermissions().get(0).getRole());
   }
 
   @ParameterizedTest
-  @EnumSource(FilesystemResourcePermission.class)
-  void everyDeclaredPermissionCanBeMaterializedForAGroup(FilesystemResourcePermission permission) {
+  @EnumSource(ResourceRole.class)
+  void everyRoleCanBeGrantedDirectlyToAnOrdinaryGroup(ResourceRole role) {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
     request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
-        new ResourcePermissionGroup(GROUP_ID), permission));
+        new ResourcePermissionGroup(GROUP_ID), role));
 
     ResourcePermissionRequestValidator validator = f.validate(request);
 
     assertTrue(validator.getCallResult().isOk());
-    assertEquals(permission, validator.getPermissions().getGroupPermissions().get(0).getPermission());
+    assertEquals(role, validator.getPermissions().getGroupPermissions().get(0).getRole());
   }
 
   @Test
-  void validMixedRequestBuildsCanonicalResolvedPermissions() {
+  void everyoneMayReceiveViewer() {
     Fixture f = new Fixture();
     ResourcePermissionsRequest request = f.validRequest();
-    request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
-        new ResourcePermissionUser(USER_ID), FilesystemResourcePermission.WRITE));
     request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
-        new ResourcePermissionGroup(GROUP_ID), FilesystemResourcePermission.READ));
+        new ResourcePermissionGroup(EVERYONE_ID), ResourceRole.VIEWER));
+    assertTrue(f.validate(request).getCallResult().isOk());
+  }
 
-    ResourcePermissionRequestValidator validator = f.validate(request);
-
-    assertTrue(validator.getCallResult().isOk());
-    assertEquals(OWNER_ID, validator.getPermissions().getOwner().getId());
-    assertEquals(USER_ID, validator.getPermissions().getUserPermissions().get(0).getUser().getId());
-    assertEquals(GROUP_ID, validator.getPermissions().getGroupPermissions().get(0).getGroup().getId());
+  @ParameterizedTest
+  @ValueSource(strings = {"EDITOR", "MANAGER"})
+  void everyoneCannotReceiveEditorOrManager(String roleName) {
+    Fixture f = new Fixture();
+    ResourcePermissionsRequest request = f.validRequest();
+    request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
+        new ResourcePermissionGroup(EVERYONE_ID), ResourceRole.valueOf(roleName)));
+    assertError(f.validate(request), CedarErrorKey.INVALID_DATA);
   }
 
   private static void assertError(ResourcePermissionRequestValidator validator, CedarErrorKey expected) {
-    BackendCallResult result = validator.getCallResult();
+    BackendCallResult<?> result = validator.getCallResult();
     assertFalse(result.isOk());
     assertEquals(expected, result.getFirstError().getErrorPack().getErrorKey());
   }
@@ -330,11 +288,13 @@ class ResourcePermissionRequestValidatorTest {
       when(proxies.user()).thenReturn(users);
       when(proxies.group()).thenReturn(groups);
       when(filesystemResources.findResourceById(RESOURCE_ID)).thenReturn(resource);
-      when(permissions.userHasWriteAccessToResource(RESOURCE_ID)).thenReturn(true);
-      when(permissions.getResourcePermissions(RESOURCE_ID)).thenReturn(currentPermissions(OWNER_ID));
+      when(permissions.userHasCapability(RESOURCE_ID, ResourceCapability.MANAGE_GRANTS)).thenReturn(true);
+      when(permissions.getResourcePermissions(RESOURCE_ID)).thenReturn(currentPermissions());
       addUser(OWNER_ID);
       addUser(USER_ID);
       addGroup(GROUP_ID);
+      FolderServerGroup everyone = addGroup(EVERYONE_ID);
+      when(groups.getEverybodyGroup()).thenReturn(everyone);
     }
 
     private ResourcePermissionRequestValidator validate(ResourcePermissionsRequest request) {
@@ -342,12 +302,8 @@ class ResourcePermissionRequestValidatorTest {
     }
 
     private ResourcePermissionsRequest validRequest() {
-      return requestOwnedBy(OWNER_ID);
-    }
-
-    private ResourcePermissionsRequest requestOwnedBy(String ownerId) {
       ResourcePermissionsRequest request = new ResourcePermissionsRequest();
-      request.setOwner(new ResourcePermissionUser(ownerId));
+      request.setOwner(new ResourcePermissionUser(OWNER_ID));
       return request;
     }
 
@@ -357,16 +313,17 @@ class ResourcePermissionRequestValidatorTest {
       when(users.findUserById(CedarUserId.build(id))).thenReturn(user);
     }
 
-    private void addGroup(String id) {
+    private FolderServerGroup addGroup(String id) {
       FolderServerGroup group = new FolderServerGroup();
       group.setId(id);
       group.setName("group");
       when(groups.findGroupById(CedarGroupId.build(id))).thenReturn(group);
+      return group;
     }
 
-    private static CedarNodePermissionsWithExtract currentPermissions(String ownerId) {
+    private static CedarNodePermissionsWithExtract currentPermissions() {
       CedarNodePermissionsWithExtract current = new CedarNodePermissionsWithExtract();
-      current.setOwner(new CedarUserExtract(ownerId, null, null, null));
+      current.setOwner(new CedarUserExtract(OWNER_ID, null, null, null));
       return current;
     }
   }

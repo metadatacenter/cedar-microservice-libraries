@@ -11,6 +11,7 @@ import org.metadatacenter.model.folderserver.info.FolderServerNodeInfo;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.security.model.FilesystemResourceWithIdAndType;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
+import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,8 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
   protected UsersDataGroup usersData;
   protected UserNamesDataGroup userNamesData;
   protected boolean activeUserCanRead = true;
+
+  protected CurrentUserResourcePermissions currentUserPermissions;
 
   protected NodeSharePermission everybodyPermission;
 
@@ -139,6 +142,14 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
   @JsonProperty(NodeProperty.OnTheFly.ACTIVE_USER_CAN_READ)
   public void setActiveUserCanRead(boolean activeUserCanRead) {
     this.activeUserCanRead = activeUserCanRead;
+  }
+
+  public CurrentUserResourcePermissions getCurrentUserPermissions() {
+    return currentUserPermissions;
+  }
+
+  public void setCurrentUserPermissions(CurrentUserResourcePermissions currentUserPermissions) {
+    this.currentUserPermissions = currentUserPermissions;
   }
 
   @Override

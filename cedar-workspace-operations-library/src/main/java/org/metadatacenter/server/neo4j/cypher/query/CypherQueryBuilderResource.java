@@ -18,7 +18,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})-" +
             "[:<REL.MEMBEROF>*0..1]->" +
             "()-" +
-            "[:<REL.CANREAD>|:<REL.CANWRITE>]->" +
+            "[:" + getResourceRoleRelationLabels() + "]->" +
             "(resource)" +
             " WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
             " AND resource.<PROP.EVERYBODY_PERMISSION> IS NULL" +
@@ -48,7 +48,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})-" +
             "[:<REL.MEMBEROF>*0..1]->" +
             "()-" +
-            "[:<REL.CANREAD>|:<REL.CANWRITE>]->" +
+            "[:" + getResourceRoleRelationLabels() + "]->" +
             "(resource)" +
             " WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
             " AND resource.<PROP.EVERYBODY_PERMISSION> IS NULL" +
@@ -115,7 +115,8 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
 
       sb.append(" UNION");
 
-      sb.append(" MATCH ").append(getUserToResourceRelationThroughGroupWithContains(RelationLabel.CANREAD + "|" + RelationLabel.CANWRITE, "resource"));
+      sb.append(" MATCH ").append(getUserToResourceRelationThroughGroupWithContains(
+          getResourceRoleRelationLabels(), "resource"));
       sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
       sb.append(" AND resource.<PROP.IS_USER_HOME> IS NULL ");
       if (version != null && version != ResourceVersionFilter.ALL) {
@@ -228,7 +229,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
           WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
                   
           OPTIONAL MATCH p1 = (resource)<-[:CONTAINS*0..]-()<-[:OWNS]-(user:User)
-          OPTIONAL MATCH p2 = (resource)<-[:CONTAINS*0..]-()<-[:CANREAD|CANWRITE]-()<-[:MEMBEROF*0..1]-(user:User)
+          OPTIONAL MATCH p2 = (resource)<-[:CONTAINS*0..]-()<-[:%s]-()<-[:MEMBEROF*0..1]-(user:User)
 
           WITH user, resource, p1, p2
           WHERE p1 IS NOT NULL OR p2 IS NOT NULL
@@ -239,7 +240,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
                    resource.<PROP.ID>
           SKIP $offset
           LIMIT $limit
-          """.formatted(getOrderByExpression("resource", sortList));
+          """.formatted(getResourceRoleRelationLabels(), getOrderByExpression("resource", sortList));
     } else {
       return """
           MATCH (resource:<LABEL.RESOURCE>)
@@ -265,13 +266,13 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
           WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
                   
           OPTIONAL MATCH p1 = (resource)<-[:CONTAINS*0..]-()<-[:OWNS]-(user:User)
-          OPTIONAL MATCH p2 = (resource)<-[:CONTAINS*0..]-()<-[:CANREAD|CANWRITE]-()<-[:MEMBEROF*0..1]-(user:User)
+          OPTIONAL MATCH p2 = (resource)<-[:CONTAINS*0..]-()<-[:%s]-()<-[:MEMBEROF*0..1]-(user:User)
 
           WITH user, resource, p1, p2
           WHERE p1 IS NOT NULL OR p2 IS NOT NULL
           RETURN DISTINCT resource
           }
-          """;
+          """.formatted(getResourceRoleRelationLabels());
     } else {
       return """
           RETURN COUNT {

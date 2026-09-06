@@ -5,6 +5,7 @@ import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
+import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.RevisionPrecondition;
@@ -12,12 +13,18 @@ import org.metadatacenter.server.VersionedResourcePermissions;
 import org.metadatacenter.server.neo4j.AbstractNeo4JUserSession;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.*;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAuthority;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAccessContext;
+import org.metadatacenter.server.security.model.permission.resource.ResourceCapability;
+import org.metadatacenter.server.security.model.permission.resource.ResourceCapabilityPolicy;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionsRequest;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collections;
+import java.util.Set;
 
 public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUserSession implements ResourcePermissionServiceSession {
 
@@ -65,32 +72,89 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
   }
 
   @Override
-  public boolean userCanChangeOwnerOfResource(CedarFilesystemResourceId resourceId) {
-    if (cu.has(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE)) {
-      return true;
-    } else {
-      FolderServerUser owner = getFilesystemResourceOwner(resourceId);
-      return owner != null && owner.getId().equals(cu.getId());
+  public BackendCallResult<VersionedResourcePermissions> transferResourceOwnership(
+      CedarFilesystemResourceId resourceId, CedarUserId newOwnerId, RevisionPrecondition precondition) {
+    BackendCallResult<VersionedResourcePermissions> result = new BackendCallResult<>();
+    FileSystemResource resource = proxies.filesystemResource().findResourceById(resourceId);
+    if (resource == null) {
+      result.addError(org.metadatacenter.error.CedarErrorType.NOT_FOUND)
+          .errorKey(org.metadatacenter.error.CedarErrorKey.NODE_NOT_FOUND)
+          .message("Resource not found")
+          .parameter("resourceId", resourceId);
+      return result;
     }
+    if (!userIsOwnerOfResource(resourceId)) {
+      result.addError(org.metadatacenter.error.CedarErrorType.PERMISSION)
+          .errorKey(org.metadatacenter.error.CedarErrorKey.NOT_AUTHORIZED)
+          .message("Only the current owner may transfer ownership")
+          .parameter("resourceId", resourceId);
+      return result;
+    }
+    FolderServerUser newOwner = proxies.user().findUserById(newOwnerId);
+    if (newOwner == null) {
+      result.addError(org.metadatacenter.error.CedarErrorType.NOT_FOUND)
+          .errorKey(org.metadatacenter.error.CedarErrorKey.USER_NOT_FOUND)
+          .message("The new owner could not be found")
+          .parameter("userId", newOwnerId);
+      return result;
+    }
+    if (cu.getId().equals(newOwner.getId())) {
+      result.addError(org.metadatacenter.error.CedarErrorType.INVALID_ARGUMENT)
+          .errorKey(org.metadatacenter.error.CedarErrorKey.INVALID_INPUT)
+          .message("The new owner must be a different user")
+          .parameter("userId", newOwnerId);
+      return result;
+    }
+    VersionedResourcePermissions transferred = proxies.permission().transferOwnership(
+        resourceId, cu.getResourceId(), newOwnerId, precondition);
+    if (transferred == null) {
+      result.addError(org.metadatacenter.error.CedarErrorType.SERVER_ERROR)
+          .message("Ownership could not be transferred")
+          .parameter("resourceId", resourceId);
+      return result;
+    }
+    result.setPayload(transferred);
+    return result;
   }
 
   @Override
-  public boolean userHasReadAccessToResource(CedarFilesystemResourceId resourceId) {
-    if (cu.has(CedarPermission.READ_NOT_READABLE_NODE)) {
-      return true;
-    } else {
-      return proxies.permission().userHasReadAccessToFilesystemResource(cu.getResourceId(), resourceId)
-          || proxies.permission().userHasWriteAccessToFilesystemResource(cu.getResourceId(), resourceId);
+  public ResourceAuthority getResourceAuthority(CedarFilesystemResourceId resourceId) {
+    boolean owner = userIsOwnerOfResource(resourceId);
+    ResourceRole role = null;
+    if (!owner) {
+      if (proxies.permission().userHasRoleOnFilesystemResource(cu.getResourceId(), resourceId, ResourceRole.MANAGER)) {
+        role = ResourceRole.MANAGER;
+      } else if (proxies.permission().userHasRoleOnFilesystemResource(
+          cu.getResourceId(), resourceId, ResourceRole.EDITOR)) {
+        role = ResourceRole.EDITOR;
+      } else if (proxies.permission().userHasRoleOnFilesystemResource(
+          cu.getResourceId(), resourceId, ResourceRole.VIEWER)) {
+        role = ResourceRole.VIEWER;
+      }
     }
+    return new ResourceAuthority(role, owner);
   }
 
   @Override
-  public boolean userHasWriteAccessToResource(CedarFilesystemResourceId resourceId) {
-    if (cu.has(CedarPermission.WRITE_NOT_WRITABLE_NODE)) {
-      return true;
-    } else {
-      return proxies.permission().userHasWriteAccessToFilesystemResource(cu.getResourceId(), resourceId);
+  public boolean userHasRole(CedarFilesystemResourceId resourceId, ResourceRole requiredRole) {
+    return getResourceAuthority(resourceId).satisfies(requiredRole);
+  }
+
+  @Override
+  public Set<ResourceCapability> getResourceCapabilities(CedarFilesystemResourceId resourceId) {
+    FileSystemResource resource = proxies.filesystemResource().findResourceById(resourceId);
+    if (resource == null) {
+      return Collections.emptySet();
     }
+    boolean protectedFolder = resource instanceof FolderServerFolder folder
+        && (folder.isRoot() || folder.isSystem() || folder.isUserHome());
+    ResourceAccessContext accessContext = new ResourceAccessContext(resource.getType(), protectedFolder);
+    return ResourceCapabilityPolicy.evaluate(getResourceAuthority(resourceId), accessContext, cu);
+  }
+
+  @Override
+  public boolean userHasCapability(CedarFilesystemResourceId resourceId, ResourceCapability capability) {
+    return getResourceCapabilities(resourceId).contains(capability);
   }
 
   @Override
@@ -112,64 +176,70 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
         everybodyPermission = NodeSharePermission.NONE;
       }
 
-      List<CedarUserId> readUsers = new ArrayList<>();
-      List<CedarUserId> writeUsers = new ArrayList<>();
-      List<CedarGroupId> readGroups = new ArrayList<>();
-      List<CedarGroupId> writeGroups = new ArrayList<>();
+      List<CedarUserId> viewerUsers = new ArrayList<>();
+      List<CedarUserId> editorUsers = new ArrayList<>();
+      List<CedarUserId> managerUsers = new ArrayList<>();
+      List<CedarGroupId> viewerGroups = new ArrayList<>();
+      List<CedarGroupId> editorGroups = new ArrayList<>();
+      List<CedarGroupId> managerGroups = new ArrayList<>();
 
       if (everybodyPermission == NodeSharePermission.WRITE) {
-        // do not read permissions, since everybody will have full access
+        // A legacy exception. Preserve its current reach until the owner-review migration removes it.
       } else if (everybodyPermission == NodeSharePermission.READ) {
-        // read just write permissions, since everybody can read
-        writeUsers = getUserIdsWithTransitivePermission(resourceId, FilesystemResourcePermission.WRITE);
-        writeGroups = getGroupIdsWithTransitivePermission(resourceId, FilesystemResourcePermission.WRITE);
-      } else {
-        // read all permissions, since there is no everybody permission
-        writeUsers = getUserIdsWithTransitivePermission(resourceId, FilesystemResourcePermission.WRITE);
-        writeGroups = getGroupIdsWithTransitivePermission(resourceId, FilesystemResourcePermission.WRITE);
-        readUsers = getUserIdsWithTransitivePermission(resourceId, FilesystemResourcePermission.READ);
-        readGroups = getGroupIdsWithTransitivePermission(resourceId, FilesystemResourcePermission.READ);
+        // Viewer is supplied by Everyone; retain only more capable named grants in the index.
+      }
+      managerUsers = getUserIdsWithTransitiveRole(resourceId, ResourceRole.MANAGER);
+      managerGroups = getGroupIdsWithTransitiveRole(resourceId, ResourceRole.MANAGER);
+      editorUsers = getUserIdsWithTransitiveRole(resourceId, ResourceRole.EDITOR);
+      editorGroups = getGroupIdsWithTransitiveRole(resourceId, ResourceRole.EDITOR);
+      if (everybodyPermission == NodeSharePermission.NONE) {
+        viewerUsers = getUserIdsWithTransitiveRole(resourceId, ResourceRole.VIEWER);
+        viewerGroups = getGroupIdsWithTransitiveRole(resourceId, ResourceRole.VIEWER);
       }
 
-      return buildMaterializedPermissions(resourceId, readUsers, writeUsers, readGroups, writeGroups, everybodyPermission);
+      return buildMaterializedPermissions(resourceId, viewerUsers, editorUsers, managerUsers,
+          viewerGroups, editorGroups, managerGroups, everybodyPermission);
     } else {
       return null;
     }
   }
 
-  private CedarNodeMaterializedPermissions buildMaterializedPermissions(CedarFilesystemResourceId resourceId, List<CedarUserId> readUsers,
-                                                                        List<CedarUserId> writeUsers, List<CedarGroupId> readGroups,
-                                                                        List<CedarGroupId> writeGroups, NodeSharePermission everybodyPermission) {
+  private CedarNodeMaterializedPermissions buildMaterializedPermissions(CedarFilesystemResourceId resourceId,
+                                                                        List<CedarUserId> viewerUsers,
+                                                                        List<CedarUserId> editorUsers,
+                                                                        List<CedarUserId> managerUsers,
+                                                                        List<CedarGroupId> viewerGroups,
+                                                                        List<CedarGroupId> editorGroups,
+                                                                        List<CedarGroupId> managerGroups,
+                                                                        NodeSharePermission everybodyPermission) {
     CedarNodeMaterializedPermissions permissions = new CedarNodeMaterializedPermissions(resourceId, everybodyPermission);
-    if (readUsers != null) {
-      for (CedarUserId userId : readUsers) {
-        permissions.setUserPermission(userId.getId(), FilesystemResourcePermission.READ);
-      }
-    }
-    if (writeUsers != null) {
-      for (CedarUserId userId : writeUsers) {
-        permissions.setUserPermission(userId.getId(), FilesystemResourcePermission.WRITE);
-      }
-    }
-    if (readGroups != null) {
-      for (CedarGroupId groupId : readGroups) {
-        permissions.setGroupPermission(groupId.getId(), FilesystemResourcePermission.READ);
-      }
-    }
-    if (writeGroups != null) {
-      for (CedarGroupId groupId : writeGroups) {
-        permissions.setGroupPermission(groupId.getId(), FilesystemResourcePermission.WRITE);
-      }
-    }
+    addUserRoles(permissions, viewerUsers, ResourceRole.VIEWER);
+    addUserRoles(permissions, editorUsers, ResourceRole.EDITOR);
+    addUserRoles(permissions, managerUsers, ResourceRole.MANAGER);
+    addGroupRoles(permissions, viewerGroups, ResourceRole.VIEWER);
+    addGroupRoles(permissions, editorGroups, ResourceRole.EDITOR);
+    addGroupRoles(permissions, managerGroups, ResourceRole.MANAGER);
     return permissions;
   }
 
-  private List<CedarUserId> getUserIdsWithTransitivePermission(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    return proxies.permission().getUserIdsWithTransitivePermissionOnResource(resourceId, permission);
+  private void addUserRoles(CedarNodeMaterializedPermissions permissions, List<CedarUserId> users, ResourceRole role) {
+    for (CedarUserId userId : users) {
+      permissions.setUserRole(userId.getId(), ResourceRole.strongest(permissions.getUserRoles().get(userId.getId()), role));
+    }
   }
 
-  private List<CedarGroupId> getGroupIdsWithTransitivePermission(CedarFilesystemResourceId resourceId, FilesystemResourcePermission permission) {
-    return proxies.permission().getGroupIdsWithTransitivePermissionOnResource(resourceId, permission);
+  private void addGroupRoles(CedarNodeMaterializedPermissions permissions, List<CedarGroupId> groups, ResourceRole role) {
+    for (CedarGroupId groupId : groups) {
+      permissions.setGroupRole(groupId.getId(), ResourceRole.strongest(permissions.getGroupRoles().get(groupId.getId()), role));
+    }
+  }
+
+  private List<CedarUserId> getUserIdsWithTransitiveRole(CedarFilesystemResourceId resourceId, ResourceRole role) {
+    return proxies.permission().getUserIdsWithTransitiveRoleOnResource(resourceId, role);
+  }
+
+  private List<CedarGroupId> getGroupIdsWithTransitiveRole(CedarFilesystemResourceId resourceId, ResourceRole role) {
+    return proxies.permission().getGroupIdsWithTransitiveRoleOnResource(resourceId, role);
   }
 
 }

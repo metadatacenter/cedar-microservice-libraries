@@ -1,5 +1,7 @@
 package org.metadatacenter.util.test;
 
+import org.metadatacenter.model.CedarResourceType;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -25,7 +27,8 @@ import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarGroupUserRequest;
 import org.metadatacenter.server.security.model.auth.CedarGroupUsersRequest;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
+import org.metadatacenter.server.security.model.permission.resource.ResourceCapability;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionGroup;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionGroupPermissionPair;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUser;
@@ -96,10 +99,7 @@ public class WorkspacePermissionIntegrationTest {
     return created;
   }
 
-  /**
-   * A permission update request keeping user1 as owner; the validator rejects a request without
-   * an owner, and only an unchanged owner needs no ownership-transfer authority.
-   */
+  /** A permission update request that explicitly restates the unchanged owner. */
   private static ResourcePermissionsRequest requestOwnedByUser1() {
     ResourcePermissionsRequest request = new ResourcePermissionsRequest();
     request.setOwner(new ResourcePermissionUser(user1.getId()));
@@ -116,9 +116,9 @@ public class WorkspacePermissionIntegrationTest {
   @Test
   public void ownerHasReadAndWriteAccessToHomeFolder() {
     ResourcePermissionServiceSession user1Permissions = permissionsOf(user1Context);
-    Assertions.assertTrue(user1Permissions.userHasReadAccessToResource(user1HomeId),
+    Assertions.assertTrue(user1Permissions.userHasRole(user1HomeId, ResourceRole.VIEWER),
         "The owner should have read access to the home folder");
-    Assertions.assertTrue(user1Permissions.userHasWriteAccessToResource(user1HomeId),
+    Assertions.assertTrue(user1Permissions.userHasRole(user1HomeId, ResourceRole.MANAGER),
         "The owner should have write access to the home folder");
     Assertions.assertTrue(user1Permissions.userIsOwnerOfResource(user1HomeId),
         "The home folder should report user1 as its owner");
@@ -127,9 +127,9 @@ public class WorkspacePermissionIntegrationTest {
   @Test
   public void strangerHasNoAccessToHomeFolder() {
     ResourcePermissionServiceSession user2Permissions = permissionsOf(user2Context);
-    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(user1HomeId),
+    Assertions.assertFalse(user2Permissions.userHasRole(user1HomeId, ResourceRole.VIEWER),
         "A stranger should have no read access to another user's home folder");
-    Assertions.assertFalse(user2Permissions.userHasWriteAccessToResource(user1HomeId),
+    Assertions.assertFalse(user2Permissions.userHasRole(user1HomeId, ResourceRole.MANAGER),
         "A stranger should have no write access to another user's home folder");
     Assertions.assertFalse(user2Permissions.userIsOwnerOfResource(user1HomeId),
         "A stranger should not be reported as the owner of another user's home folder");
@@ -140,20 +140,81 @@ public class WorkspacePermissionIntegrationTest {
     FolderServerFolder folder = createFolderUnderUser1Home("Direct Grant Folder");
 
     ResourcePermissionServiceSession user2Permissions = permissionsOf(user2Context);
-    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(folder.getResourceId()),
+    Assertions.assertFalse(user2Permissions.userHasRole(folder.getResourceId(), ResourceRole.VIEWER),
         "Before the grant, user2 should have no read access");
 
     ResourcePermissionsRequest request = requestOwnedByUser1();
     request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
-        new ResourcePermissionUser(user2.getId()), FilesystemResourcePermission.READ));
+        new ResourcePermissionUser(user2.getId()), ResourceRole.VIEWER));
     updatePermissionsAsUser1(folder, request);
 
-    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(folder.getResourceId()),
+    Assertions.assertTrue(user2Permissions.userHasRole(folder.getResourceId(), ResourceRole.VIEWER),
         "After a READ grant, user2 should have read access");
-    Assertions.assertFalse(user2Permissions.userHasWriteAccessToResource(folder.getResourceId()),
+    Assertions.assertFalse(user2Permissions.userHasRole(folder.getResourceId(), ResourceRole.EDITOR),
         "A READ grant should not confer write access");
     Assertions.assertFalse(user2Permissions.userIsOwnerOfResource(folder.getResourceId()),
         "A READ grant should not confer ownership");
+  }
+
+  @Test
+  public void eachDirectRoleProvidesExactlyItsDefinedCapabilities() {
+    for (ResourceRole role : ResourceRole.values()) {
+      FolderServerFolder folder = createFolderUnderUser1Home("Direct Role " + role.getValue());
+      ResourcePermissionsRequest request = requestOwnedByUser1();
+      request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
+          new ResourcePermissionUser(user2.getId()), role));
+      updatePermissionsAsUser1(folder, request);
+
+      ResourcePermissionServiceSession permissions = permissionsOf(user2Context);
+      Assertions.assertEquals(role, permissions.getResourceAuthority(folder.getResourceId()).highestSatisfiedRole());
+      for (ResourceCapability capability : ResourceCapability.values()) {
+        boolean expected = capability != ResourceCapability.TRANSFER_OWNERSHIP
+            && role.provides(CedarResourceType.FOLDER, capability);
+        Assertions.assertEquals(expected,
+            permissions.userHasCapability(folder.getResourceId(), capability),
+            role + " has the wrong result for " + capability);
+      }
+    }
+  }
+
+  @Test
+  public void ownershipProvidesManagerCapabilitiesAndTransfer() {
+    FolderServerFolder ownedFolder = createFolderUnderUser1Home("Owned Capability Folder");
+    ResourcePermissionServiceSession permissions = permissionsOf(user1Context);
+    var authority = permissions.getResourceAuthority(ownedFolder.getResourceId());
+    Assertions.assertTrue(authority.owner());
+    Assertions.assertNull(authority.role(), "ownership must not be reported as a resource role");
+    Assertions.assertEquals(ResourceRole.MANAGER, authority.highestSatisfiedRole());
+    for (ResourceCapability capability : ResourceCapability.values()) {
+      Assertions.assertTrue(permissions.userHasCapability(ownedFolder.getResourceId(), capability),
+          "ownership should provide " + capability);
+    }
+  }
+
+  @Test
+  public void everyoneMayReceiveViewerButNotEditorOrManager() {
+    FolderServerGroup everyone = CedarDataServices.getInstance().getGroupServiceSession(user1Context)
+        .findGroupByName(cedarConfig.getFolderStructureConfig().getEverybodyGroup().getName());
+    Assertions.assertNotNull(everyone);
+
+    for (ResourceRole role : ResourceRole.values()) {
+      FolderServerFolder folder = createFolderUnderUser1Home("Everyone " + role.getValue());
+      ResourcePermissionsRequest request = requestOwnedByUser1();
+      request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
+          new ResourcePermissionGroup(everyone.getId()), role));
+      BackendCallResult result = permissionsOf(user1Context)
+          .updateResourcePermissions(folder.getResourceId(), request);
+
+      if (role == ResourceRole.VIEWER) {
+        Assertions.assertFalse(result.isError(), "Everyone + Viewer should be accepted");
+        Assertions.assertEquals(ResourceRole.VIEWER,
+            permissionsOf(user2Context).getResourceAuthority(folder.getResourceId()).highestSatisfiedRole());
+      } else {
+        Assertions.assertTrue(result.isError(), "Everyone + " + role + " should be rejected");
+        Assertions.assertNull(permissionsOf(user2Context)
+            .getResourceAuthority(folder.getResourceId()).highestSatisfiedRole());
+      }
+    }
   }
 
   @Test
@@ -176,17 +237,17 @@ public class WorkspacePermissionIntegrationTest {
     Assertions.assertFalse(membershipResult.isError(), "The membership update should succeed");
 
     ResourcePermissionServiceSession user2Permissions = permissionsOf(user2Context);
-    Assertions.assertFalse(user2Permissions.userHasReadAccessToResource(folder.getResourceId()),
+    Assertions.assertFalse(user2Permissions.userHasRole(folder.getResourceId(), ResourceRole.VIEWER),
         "Group membership alone should confer nothing before the grant");
 
     ResourcePermissionsRequest request = requestOwnedByUser1();
     request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
-        new ResourcePermissionGroup(group.getId()), FilesystemResourcePermission.WRITE));
+        new ResourcePermissionGroup(group.getId()), ResourceRole.MANAGER));
     updatePermissionsAsUser1(folder, request);
 
-    Assertions.assertTrue(user2Permissions.userHasWriteAccessToResource(folder.getResourceId()),
+    Assertions.assertTrue(user2Permissions.userHasRole(folder.getResourceId(), ResourceRole.MANAGER),
         "A WRITE grant to the group should give the member write access");
-    Assertions.assertTrue(user2Permissions.userHasReadAccessToResource(folder.getResourceId()),
+    Assertions.assertTrue(user2Permissions.userHasRole(folder.getResourceId(), ResourceRole.VIEWER),
         "Write access through the group should imply read access");
     Assertions.assertFalse(user2Permissions.userIsOwnerOfResource(folder.getResourceId()),
         "The group grant should not make the member the owner");
@@ -336,7 +397,7 @@ public class WorkspacePermissionIntegrationTest {
 
     ResourcePermissionsRequest shared = requestOwnedByUser1();
     shared.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
-        new ResourcePermissionUser(user2.getId()), FilesystemResourcePermission.READ));
+        new ResourcePermissionUser(user2.getId()), ResourceRole.VIEWER));
     BackendCallResult<VersionedResourcePermissions> first = permissions.updateResourcePermissions(
         folder.getResourceId(), shared, RevisionPrecondition.exact(initial.revision()));
     Assertions.assertFalse(first.isError(), () -> first.getFirstErrorMessage());

@@ -17,6 +17,7 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.CategoryServiceSession;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
+import org.metadatacenter.server.security.model.permission.resource.ResourceCapability;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -152,7 +153,7 @@ class ArtifactReportUtilTest {
     instance.setIsBasedOn(CedarTemplateId.build("template-1"));
     FolderServerTemplateExtract template = templateExtract("template-1", "Visible template");
     when(folderSession.findResourceExtractById(instance.getIsBasedOn())).thenReturn(template);
-    when(permissionSession.userHasReadAccessToResource(template.getResourceId())).thenReturn(true);
+    when(permissionSession.userHasCapability(template.getResourceId(), ResourceCapability.READ_RESOURCE)).thenReturn(true);
     when(categorySession.getAttachedCategoryPaths(any())).thenReturn(List.of());
 
     FolderServerInstanceReport report = (FolderServerInstanceReport) report(instance);
@@ -166,7 +167,7 @@ class ArtifactReportUtilTest {
     instance.setIsBasedOn(CedarTemplateId.build("template-1"));
     FolderServerTemplateExtract template = templateExtract("template-1", "Secret template");
     when(folderSession.findResourceExtractById(instance.getIsBasedOn())).thenReturn(template);
-    when(permissionSession.userHasReadAccessToResource(template.getResourceId())).thenReturn(false);
+    when(permissionSession.userHasCapability(template.getResourceId(), ResourceCapability.READ_RESOURCE)).thenReturn(false);
     when(categorySession.getAttachedCategoryPaths(any())).thenReturn(List.of());
 
     FolderServerTemplateExtract visible = ((FolderServerInstanceReport) report(instance)).getIsBasedOnExtract();
@@ -185,7 +186,7 @@ class ArtifactReportUtilTest {
 
     assertNull(report.getIsBasedOnExtract());
     verify(folderSession, never()).findResourceExtractById(any(CedarArtifactId.class));
-    verify(permissionSession, never()).userHasReadAccessToResource(any());
+    verify(permissionSession, never()).userHasCapability(any(), any());
   }
 
   @Test
@@ -198,7 +199,7 @@ class ArtifactReportUtilTest {
     FolderServerInstanceReport report = (FolderServerInstanceReport) report(instance);
 
     assertNull(report.getIsBasedOnExtract());
-    verify(permissionSession, never()).userHasReadAccessToResource(any());
+    verify(permissionSession, never()).userHasCapability(any(), any());
   }
 
   @Test
@@ -208,7 +209,7 @@ class ArtifactReportUtilTest {
     FolderServerFieldExtract source = fieldExtract("field-1", "Visible source");
     stubEmptyHistory();
     when(folderSession.findResourceExtractById(artifact.getDerivedFrom())).thenReturn(source);
-    when(permissionSession.userHasReadAccessToResource(source.getResourceId())).thenReturn(true);
+    when(permissionSession.userHasCapability(source.getResourceId(), ResourceCapability.READ_RESOURCE)).thenReturn(true);
     when(categorySession.getAttachedCategoryPaths(any())).thenReturn(List.of());
 
     FolderServerArtifactReport report = report(artifact);
@@ -223,7 +224,7 @@ class ArtifactReportUtilTest {
     FolderServerElementExtract source = elementExtract("element-1", "Secret source");
     stubEmptyHistory();
     when(folderSession.findResourceExtractById(artifact.getDerivedFrom())).thenReturn(source);
-    when(permissionSession.userHasReadAccessToResource(source.getResourceId())).thenReturn(false);
+    when(permissionSession.userHasCapability(source.getResourceId(), ResourceCapability.READ_RESOURCE)).thenReturn(false);
     when(categorySession.getAttachedCategoryPaths(any())).thenReturn(List.of());
 
     FolderServerArtifactExtract visible = report(artifact).getDerivedFromExtract();
@@ -256,7 +257,7 @@ class ArtifactReportUtilTest {
     FolderServerArtifactReport report = report(artifact);
 
     assertNull(report.getDerivedFromExtract());
-    verify(permissionSession, never()).userHasReadAccessToResource(any());
+    verify(permissionSession, never()).userHasCapability(any(), any());
   }
 
   @Test

@@ -65,21 +65,21 @@ public final class Neo4JUserSessionGroupOperations {
   static void addGroupPermissions(Neo4JProxyResourcePermission neo4JProxy, CedarFilesystemResourceId resourceId,
                                   Set<ResourcePermissionGroupPermissionPair> toAddGroupPermissions) {
     for (ResourcePermissionGroupPermissionPair pair : toAddGroupPermissions) {
-      neo4JProxy.addPermissionToGroup(resourceId, pair.getGroup().getResourceId(), pair.getPermission());
+      neo4JProxy.addRoleToGroup(resourceId, pair.getGroup().getResourceId(), pair.getRole());
     }
   }
 
   static void removeGroupPermissions(Neo4JProxyResourcePermission neo4JProxy, CedarFilesystemResourceId resourceId,
                                      Set<ResourcePermissionGroupPermissionPair> toRemoveGroupPermissions) {
     for (ResourcePermissionGroupPermissionPair pair : toRemoveGroupPermissions) {
-      neo4JProxy.removePermissionFromGroup(resourceId, pair.getGroup().getResourceId(), pair.getPermission());
+      neo4JProxy.removeRoleFromGroup(resourceId, pair.getGroup().getResourceId(), pair.getRole());
     }
   }
 
   static void addUserPermissions(Neo4JProxyResourcePermission neo4JProxy, CedarFilesystemResourceId resourceId,
                                  Set<ResourcePermissionUserPermissionPair> toAddUserPermissions) {
     for (ResourcePermissionUserPermissionPair pair : toAddUserPermissions) {
-      neo4JProxy.addPermissionToUser(resourceId, pair.getUser().getResourceIds(), pair.getPermission());
+      neo4JProxy.addRoleToUser(resourceId, pair.getUser().getResourceIds(), pair.getRole());
     }
   }
 

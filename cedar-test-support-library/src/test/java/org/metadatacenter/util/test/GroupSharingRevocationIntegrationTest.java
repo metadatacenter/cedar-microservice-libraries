@@ -18,7 +18,7 @@ import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarGroupUserRequest;
 import org.metadatacenter.server.security.model.auth.CedarGroupUsersRequest;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionGroup;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionGroupPermissionPair;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUser;
@@ -79,18 +79,18 @@ public class GroupSharingRevocationIntegrationTest {
     FolderServerFolder folder = folder("Revocation Folder");
     FolderServerGroup group = group("revocation-test-group");
     setMembers(group, true);   // user1 administers, user2 is a member
-    grantGroup(folder, group, FilesystemResourcePermission.WRITE);
+    grantGroup(folder, group, ResourceRole.MANAGER);
 
-    Assertions.assertTrue(user2Permissions().userHasWriteAccessToResource(folder.getResourceId()),
-        "a member of a group holding WRITE should have write access");
+    Assertions.assertTrue(user2Permissions().userHasRole(folder.getResourceId(), ResourceRole.MANAGER),
+        "a member of a group holding Manager should have the Manager role");
 
     // Only the membership changes. The folder's ACL still grants the group WRITE.
     setMembers(group, false);  // user2 removed; user1 remains administrator
 
-    Assertions.assertFalse(user2Permissions().userHasWriteAccessToResource(folder.getResourceId()),
-        "removing the member should have ended the write access the group conferred");
-    Assertions.assertFalse(user2Permissions().userHasReadAccessToResource(folder.getResourceId()),
-        "removing the member should have ended read access too");
+    Assertions.assertFalse(user2Permissions().userHasRole(folder.getResourceId(), ResourceRole.MANAGER),
+        "removing the member should have ended the Manager role the group conferred");
+    Assertions.assertFalse(user2Permissions().userHasRole(folder.getResourceId(), ResourceRole.VIEWER),
+        "removing the member should have ended Viewer access too");
   }
 
   /**
@@ -103,16 +103,16 @@ public class GroupSharingRevocationIntegrationTest {
     FolderServerFolder folder = folder("Group Deletion Folder");
     FolderServerGroup group = group("deletion-test-group");
     setMembers(group, true);
-    grantGroup(folder, group, FilesystemResourcePermission.WRITE);
+    grantGroup(folder, group, ResourceRole.MANAGER);
 
-    Assertions.assertTrue(user2Permissions().userHasWriteAccessToResource(folder.getResourceId()),
-        "a member of a group holding WRITE should have write access");
+    Assertions.assertTrue(user2Permissions().userHasRole(folder.getResourceId(), ResourceRole.MANAGER),
+        "a member of a group holding Manager should have the Manager role");
 
     boolean deleted = CedarDataServices.getInstance().getGroupServiceSession(user1Context)
         .deleteGroupById(group.getResourceId());
     Assertions.assertTrue(deleted, "the owner should be able to delete their own group");
 
-    Assertions.assertFalse(user2Permissions().userHasWriteAccessToResource(folder.getResourceId()),
+    Assertions.assertFalse(user2Permissions().userHasRole(folder.getResourceId(), ResourceRole.MANAGER),
         "deleting the group should have ended the access it conferred");
 
     // The folder itself must survive, still owned by user 1: deleting a group someone shared a folder
@@ -122,8 +122,8 @@ public class GroupSharingRevocationIntegrationTest {
     Assertions.assertNotNull(after, "deleting the group must not delete the folder shared with it");
     Assertions.assertTrue(user1Permissions().userIsOwnerOfResource(folder.getResourceId()),
         "the folder should still be owned by its owner after the group was deleted");
-    Assertions.assertTrue(user1Permissions().userHasWriteAccessToResource(folder.getResourceId()),
-        "the owner should still have write access after the group was deleted");
+    Assertions.assertTrue(user1Permissions().userHasRole(folder.getResourceId(), ResourceRole.MANAGER),
+        "the owner should still have Manager authority after the group was deleted");
   }
 
   // ── fixtures and helpers ───────────────────────────────────────────────────
@@ -161,13 +161,13 @@ public class GroupSharingRevocationIntegrationTest {
     Assertions.assertFalse(result.isError(), "the membership update should succeed");
   }
 
-  /** Grants the group the given permission on the folder, as the folder's owner. */
+  /** Grants the group the given role on the folder, as the folder's owner. */
   private static void grantGroup(FolderServerFolder folder, FolderServerGroup group,
-                                 FilesystemResourcePermission permission) {
+                                 ResourceRole role) {
     ResourcePermissionsRequest request = new ResourcePermissionsRequest();
     request.setOwner(new ResourcePermissionUser(user1.getId()));
     request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
-        new ResourcePermissionGroup(group.getId()), permission));
+        new ResourcePermissionGroup(group.getId()), role));
     BackendCallResult result = CedarDataServices.getInstance().getResourcePermissionServiceSession(user1Context)
         .updateResourcePermissions(folder.getResourceId(), request);
     Assertions.assertFalse(result.isError(), "the group grant should succeed");
