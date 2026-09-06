@@ -3,8 +3,6 @@ package org.metadatacenter.server.neo4j.proxy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.id.CedarCategoryId;
 import org.metadatacenter.id.CedarGroupId;
@@ -14,17 +12,15 @@ import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.CategoryPermissionServiceSession;
 import org.metadatacenter.server.result.BackendCallResult;
-import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.permission.category.*;
 import org.metadatacenter.server.security.model.user.CedarUserExtract;
 
-import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/** Unit-level decision matrix for category ACL validation; no Neo4j driver is constructed. */
+/** Unit-level decision matrix for category ACL validation. */
 class CategoryPermissionRequestValidatorTest {
 
   private static final CedarCategoryId CATEGORY_ID =
@@ -32,274 +28,140 @@ class CategoryPermissionRequestValidatorTest {
   private static final String OWNER_ID = "https://repo.example/users/owner";
   private static final String USER_ID = "https://repo.example/users/user";
   private static final String GROUP_ID = "https://repo.example/groups/group";
+  private static final String EVERYONE_ID = "https://repo.example/groups/everyone";
 
   @Test
   void missingCategoryStopsValidationAtExistence() {
     Fixture f = new Fixture();
     when(f.categories.getCategoryById(CATEGORY_ID)).thenReturn(null);
 
-    CategoryPermissionRequestValidator validator = f.validate(f.validRequest());
-
-    assertError(validator, CedarErrorKey.CATEGORY_NOT_FOUND);
+    assertError(f.validate(f.validRequest()), CedarErrorKey.CATEGORY_NOT_FOUND);
     verifyNoInteractions(f.permissions);
-    verifyNoInteractions(f.users);
-    verifyNoInteractions(f.groups);
   }
 
   @Test
-  void missingWriteAccessStopsBeforeRequestContentsAreRead() {
+  void manageGrantsCapabilityIsRequired() {
     Fixture f = new Fixture();
-    when(f.permissions.userHasWriteAccessToCategory(CATEGORY_ID)).thenReturn(false);
+    when(f.permissions.userHasCapability(CATEGORY_ID, CategoryCapability.MANAGE_GRANTS)).thenReturn(false);
 
-    CategoryPermissionRequestValidator validator = f.validate(new CategoryPermissionRequest());
-
-    assertError(validator, CedarErrorKey.NO_WRITE_ACCESS_TO_CATEGORY);
-    verifyNoInteractions(f.users);
-    verifyNoInteractions(f.groups);
+    assertError(f.validate(f.validRequest()), CedarErrorKey.NOT_AUTHORIZED);
   }
 
   @Test
-  void ownerIsRequired() {
-    Fixture f = new Fixture();
-    assertError(f.validate(new CategoryPermissionRequest()), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void missingRequestBodyReturnsStructuredMissingParameter() {
+  void missingRequestBodyReturnsStructuredError() {
     Fixture f = new Fixture();
     assertError(f.validate(null), CedarErrorKey.MISSING_PARAMETER);
   }
 
   @Test
-  void ownerMustResolveToAKnownUser() {
+  void ownerMayBeOmittedAndTheCurrentOwnerIsPreserved() {
     Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.setOwner(new CategoryPermissionUser("https://repo.example/users/missing"));
-    assertError(f.validate(request), CedarErrorKey.USER_NOT_FOUND);
-  }
-
-  @ParameterizedTest
-  @NullAndEmptySource
-  @ValueSource(strings = {" ", "\t"})
-  void ownerRequiresANonBlankId(String ownerId) {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.setOwner(new CategoryPermissionUser(ownerId));
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void userEntryRequiresAUser() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(null, CategoryPermission.ATTACH));
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void userEntryRequiresAPermission() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
-        new CategoryPermissionUser(USER_ID), null));
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void userEntryMustResolveToAKnownUser() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
-        new CategoryPermissionUser("https://repo.example/users/missing"), CategoryPermission.ATTACH));
-    assertError(f.validate(request), CedarErrorKey.USER_NOT_FOUND);
-  }
-
-  @ParameterizedTest
-  @NullAndEmptySource
-  @ValueSource(strings = {" ", "\t"})
-  void userEntryRequiresANonBlankId(String userId) {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
-        new CategoryPermissionUser(userId), CategoryPermission.ATTACH));
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void groupEntryRequiresAGroup() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(null, CategoryPermission.ATTACH));
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void groupEntryRequiresAPermission() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
-        new CategoryPermissionGroup(GROUP_ID), null));
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void groupEntryMustResolveToAKnownGroup() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
-        new CategoryPermissionGroup("https://repo.example/groups/missing"), CategoryPermission.ATTACH));
-    assertError(f.validate(request), CedarErrorKey.GROUP_NOT_FOUND);
-  }
-
-  @ParameterizedTest
-  @NullAndEmptySource
-  @ValueSource(strings = {" ", "\t"})
-  void groupEntryRequiresANonBlankId(String groupId) {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
-        new CategoryPermissionGroup(groupId), CategoryPermission.ATTACH));
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void duplicateUsersAreRejectedEvenWhenTheirPermissionsDiffer() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.setUserPermissions(List.of(
-        new CategoryPermissionUserPermissionPair(new CategoryPermissionUser(USER_ID), CategoryPermission.ATTACH),
-        new CategoryPermissionUserPermissionPair(new CategoryPermissionUser(USER_ID), CategoryPermission.WRITE)));
-    assertError(f.validate(request), CedarErrorKey.UNIQUE_CONSTRAINT_COLLISION);
-  }
-
-  @Test
-  void duplicateGroupsAreRejectedEvenWhenTheirPermissionsDiffer() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.setGroupPermissions(List.of(
-        new CategoryPermissionGroupPermissionPair(new CategoryPermissionGroup(GROUP_ID), CategoryPermission.ATTACH),
-        new CategoryPermissionGroupPermissionPair(new CategoryPermissionGroup(GROUP_ID), CategoryPermission.WRITE)));
-    assertError(f.validate(request), CedarErrorKey.UNIQUE_CONSTRAINT_COLLISION);
-  }
-
-  @Test
-  void ownerCannotAlsoAppearAsAUserGrantee() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
-        new CategoryPermissionUser(OWNER_ID), CategoryPermission.ATTACH));
-    assertError(f.validate(request), CedarErrorKey.INVALID_DATA);
-  }
-
-  @Test
-  void explicitNullPermissionCollectionsAreTreatedAsNoAdditionalGrants() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.setUserPermissions(null);
-    request.setGroupPermissions(null);
-
-    CategoryPermissionRequestValidator validator = f.validate(request);
-
-    assertTrue(validator.getCallResult().isOk());
-    assertTrue(validator.getPermissions().getUserPermissions().isEmpty());
-    assertTrue(validator.getPermissions().getGroupPermissions().isEmpty());
-  }
-
-  @Test
-  void nullUserPermissionEntryProducesAValidationError() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.setUserPermissions(Collections.singletonList(null));
-
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void nullGroupPermissionEntryProducesAValidationError() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.setGroupPermissions(Collections.singletonList(null));
-
-    assertError(f.validate(request), CedarErrorKey.MISSING_PARAMETER);
-  }
-
-  @Test
-  void retainingTheCurrentOwnerNeedsNoOwnerTransferAuthority() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequestValidator validator = f.validate(f.validRequest());
-
-    assertTrue(validator.getCallResult().isOk());
-    verify(f.permissions, never()).userHas(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_CATEGORY);
-    verify(f.permissions, never()).userIsOwnerOfCategory(CATEGORY_ID);
-  }
-
-  @Test
-  void privilegedCallerCanTransferOwnership() {
-    Fixture f = new Fixture();
-    when(f.permissions.userHas(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_CATEGORY)).thenReturn(true);
-
-    CategoryPermissionRequestValidator validator = f.validate(f.requestOwnedBy(USER_ID));
-
-    assertTrue(validator.getCallResult().isOk());
-    verify(f.permissions, never()).userIsOwnerOfCategory(CATEGORY_ID);
-  }
-
-  @Test
-  void currentOwnerCanTransferOwnership() {
-    Fixture f = new Fixture();
-    when(f.permissions.userIsOwnerOfCategory(CATEGORY_ID)).thenReturn(true);
-    assertTrue(f.validate(f.requestOwnedBy(USER_ID)).getCallResult().isOk());
-  }
-
-  @Test
-  void nonOwnerWithoutOverrideCannotTransferOwnership() {
-    Fixture f = new Fixture();
-    assertError(f.validate(f.requestOwnedBy(USER_ID)), CedarErrorKey.NOT_AUTHORIZED);
-  }
-
-  @ParameterizedTest
-  @EnumSource(CategoryPermission.class)
-  void everyDeclaredPermissionCanBeMaterializedForAUser(CategoryPermission permission) {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
-        new CategoryPermissionUser(USER_ID), permission));
-
-    CategoryPermissionRequestValidator validator = f.validate(request);
-
-    assertTrue(validator.getCallResult().isOk());
-    assertEquals(permission, validator.getPermissions().getUserPermissions().get(0).getPermission());
-  }
-
-  @ParameterizedTest
-  @EnumSource(CategoryPermission.class)
-  void everyDeclaredPermissionCanBeMaterializedForAGroup(CategoryPermission permission) {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
-        new CategoryPermissionGroup(GROUP_ID), permission));
-
-    CategoryPermissionRequestValidator validator = f.validate(request);
-
-    assertTrue(validator.getCallResult().isOk());
-    assertEquals(permission, validator.getPermissions().getGroupPermissions().get(0).getPermission());
-  }
-
-  @Test
-  void validMixedRequestBuildsCanonicalResolvedPermissions() {
-    Fixture f = new Fixture();
-    CategoryPermissionRequest request = f.validRequest();
-    request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
-        new CategoryPermissionUser(USER_ID), CategoryPermission.WRITE));
-    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
-        new CategoryPermissionGroup(GROUP_ID), CategoryPermission.ATTACH));
+    CategoryPermissionRequest request = new CategoryPermissionRequest();
 
     CategoryPermissionRequestValidator validator = f.validate(request);
 
     assertTrue(validator.getCallResult().isOk());
     assertEquals(OWNER_ID, validator.getPermissions().getOwner().getId());
-    assertEquals(USER_ID, validator.getPermissions().getUserPermissions().get(0).getUser().getId());
-    assertEquals(GROUP_ID, validator.getPermissions().getGroupPermissions().get(0).getGroup().getId());
+  }
+
+  @Test
+  void ownershipCannotChangeThroughAclReplacement() {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.setOwner(new CategoryPermissionUser(USER_ID));
+
+    assertError(f.validate(request), CedarErrorKey.INVALID_DATA);
+    verify(f.users, never()).findUserById(CedarUserId.build(USER_ID));
+  }
+
+  @ParameterizedTest
+  @EnumSource(CategoryRole.class)
+  void everyRoleCanBeMaterializedForAUser(CategoryRole role) {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
+        new CategoryPermissionUser(USER_ID), role));
+
+    CategoryPermissionRequestValidator validator = f.validate(request);
+
+    assertTrue(validator.getCallResult().isOk());
+    assertSame(role, validator.getPermissions().getUserPermissions().get(0).getRole());
+  }
+
+  @ParameterizedTest
+  @EnumSource(CategoryRole.class)
+  void everyRoleCanBeMaterializedForAGroup(CategoryRole role) {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
+        new CategoryPermissionGroup(GROUP_ID), role));
+
+    CategoryPermissionRequestValidator validator = f.validate(request);
+
+    assertTrue(validator.getCallResult().isOk());
+    assertSame(role, validator.getPermissions().getGroupPermissions().get(0).getRole());
+  }
+
+  @Test
+  void duplicateUserRolesAreRejected() {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.setUserPermissions(List.of(
+        new CategoryPermissionUserPermissionPair(new CategoryPermissionUser(USER_ID), CategoryRole.VIEWER),
+        new CategoryPermissionUserPermissionPair(new CategoryPermissionUser(USER_ID), CategoryRole.EDITOR)));
+
+    assertError(f.validate(request), CedarErrorKey.UNIQUE_CONSTRAINT_COLLISION);
+  }
+
+  @Test
+  void ownerCannotAlsoReceiveADirectRole() {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
+        new CategoryPermissionUser(OWNER_ID), CategoryRole.VIEWER));
+
+    assertError(f.validate(request), CedarErrorKey.INVALID_DATA);
+  }
+
+  @Test
+  void everyoneMayReceiveViewer() {
+    Fixture f = new Fixture();
+    f.addGroup(EVERYONE_ID);
+    when(f.groups.getEverybodyGroup()).thenReturn(f.group(EVERYONE_ID));
+    CategoryPermissionRequest request = f.validRequest();
+    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
+        new CategoryPermissionGroup(EVERYONE_ID), CategoryRole.VIEWER));
+
+    assertTrue(f.validate(request).getCallResult().isOk());
+  }
+
+  @Test
+  void rootAclReplacementCannotRemoveEveryoneViewer() {
+    Fixture f = new Fixture();
+    f.asRoot();
+    f.addGroup(EVERYONE_ID);
+    when(f.groups.getEverybodyGroup()).thenReturn(f.group(EVERYONE_ID));
+
+    CategoryPermissionRequestValidator validator = f.validate(f.validRequest());
+
+    assertTrue(validator.getCallResult().isOk());
+    assertEquals(1, validator.getPermissions().getGroupPermissions().size());
+    CategoryGroupPermission grant = validator.getPermissions().getGroupPermissions().get(0);
+    assertEquals(EVERYONE_ID, grant.getGroup().getId());
+    assertEquals(CategoryRole.VIEWER, grant.getRole());
+  }
+
+  @ParameterizedTest
+  @EnumSource(value = CategoryRole.class, names = {"CLASSIFIER", "EDITOR", "MANAGER"})
+  void everyoneCannotReceiveAWriteCapableRole(CategoryRole role) {
+    Fixture f = new Fixture();
+    f.addGroup(EVERYONE_ID);
+    when(f.groups.getEverybodyGroup()).thenReturn(f.group(EVERYONE_ID));
+    CategoryPermissionRequest request = f.validRequest();
+    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
+        new CategoryPermissionGroup(EVERYONE_ID), role));
+
+    assertError(f.validate(request), CedarErrorKey.INVALID_DATA);
   }
 
   private static void assertError(CategoryPermissionRequestValidator validator, CedarErrorKey expected) {
@@ -314,19 +176,24 @@ class CategoryPermissionRequestValidatorTest {
     private final Neo4JProxyCategory categories = mock(Neo4JProxyCategory.class);
     private final Neo4JProxyUser users = mock(Neo4JProxyUser.class);
     private final Neo4JProxyGroup groups = mock(Neo4JProxyGroup.class);
+    private final FolderServerCategory category = new FolderServerCategory();
 
     private Fixture() {
-      FolderServerCategory category = new FolderServerCategory();
       category.setId(CATEGORY_ID.getId());
+      category.setParentCategoryId("https://repo.example/categories/root");
       when(proxies.category()).thenReturn(categories);
       when(proxies.user()).thenReturn(users);
       when(proxies.group()).thenReturn(groups);
       when(categories.getCategoryById(CATEGORY_ID)).thenReturn(category);
-      when(permissions.userHasWriteAccessToCategory(CATEGORY_ID)).thenReturn(true);
-      when(permissions.getCategoryPermissions(CATEGORY_ID)).thenReturn(currentPermissions(OWNER_ID));
-      addUser(OWNER_ID);
+      when(permissions.userHasCapability(CATEGORY_ID, CategoryCapability.MANAGE_GRANTS)).thenReturn(true);
+      when(permissions.getCategoryPermissions(CATEGORY_ID)).thenReturn(currentPermissions());
       addUser(USER_ID);
+      addUser(OWNER_ID);
       addGroup(GROUP_ID);
+    }
+
+    private void asRoot() {
+      category.setParentCategoryId(null);
     }
 
     private CategoryPermissionRequestValidator validate(CategoryPermissionRequest request) {
@@ -334,12 +201,8 @@ class CategoryPermissionRequestValidatorTest {
     }
 
     private CategoryPermissionRequest validRequest() {
-      return requestOwnedBy(OWNER_ID);
-    }
-
-    private CategoryPermissionRequest requestOwnedBy(String ownerId) {
       CategoryPermissionRequest request = new CategoryPermissionRequest();
-      request.setOwner(new CategoryPermissionUser(ownerId));
+      request.setOwner(new CategoryPermissionUser(OWNER_ID));
       return request;
     }
 
@@ -350,15 +213,19 @@ class CategoryPermissionRequestValidatorTest {
     }
 
     private void addGroup(String id) {
+      when(groups.findGroupById(CedarGroupId.build(id))).thenReturn(group(id));
+    }
+
+    private FolderServerGroup group(String id) {
       FolderServerGroup group = new FolderServerGroup();
       group.setId(id);
       group.setName("group");
-      when(groups.findGroupById(CedarGroupId.build(id))).thenReturn(group);
+      return group;
     }
 
-    private static CategoryPermissions currentPermissions(String ownerId) {
+    private CategoryPermissions currentPermissions() {
       CategoryPermissions current = new CategoryPermissions();
-      current.setOwner(new CedarUserExtract(ownerId, null, null, null));
+      current.setOwner(new CedarUserExtract(OWNER_ID, null, null, null));
       return current;
     }
   }

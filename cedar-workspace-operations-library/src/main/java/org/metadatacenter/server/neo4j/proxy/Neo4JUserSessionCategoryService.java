@@ -143,21 +143,6 @@ public class Neo4JUserSessionCategoryService extends AbstractNeo4JUserSession im
   }
 
   @Override
-  public Object getCategoryPermissions(CedarCategoryId categoryId) {
-    return null;
-  }
-
-  @Override
-  public Object updateCategoryPermissions(CedarCategoryId categoryId, Object permissions) {
-    return null;
-  }
-
-  @Override
-  public Object getCategoryDetails(CedarCategoryId categoryId) {
-    return null;
-  }
-
-  @Override
   public boolean attachCategoryToArtifact(CedarCategoryId categoryId, CedarArtifactId artifactId) {
     return proxies.category().attachCategoryToArtifact(categoryId, artifactId);
   }

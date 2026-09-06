@@ -231,38 +231,6 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
   }
 
 
-  public void updateCategoryOwner(CedarCategoryId categoryId, CedarUserId newOwnerId) {
-    boolean userExists = proxies.user().userExists(newOwnerId);
-    if (userExists) {
-      boolean categoryExists = proxies.category().categoryExists(categoryId);
-      if (categoryExists) {
-        proxies.category().updateOwner(categoryId, newOwnerId);
-      }
-    }
-  }
-
-  private boolean setOwner(CedarCategoryId categoryId, CedarUserId userId) {
-    String cypher = CypherQueryBuilderCategory.setCategoryOwner();
-    CypherParameters params = CypherParamBuilderCategory.matchCategoryAndUser(categoryId, userId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "setting owner");
-  }
-
-  private boolean removeOwner(CedarCategoryId categoryId) {
-    String cypher = CypherQueryBuilderCategory.removeCategoryOwner();
-    CypherParameters params = CypherParamBuilderCategory.matchId(categoryId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "removing owner");
-  }
-
-  boolean updateOwner(CedarCategoryId categoryId, CedarUserId userId) {
-    boolean removed = removeOwner(categoryId);
-    if (removed) {
-      return setOwner(categoryId, userId);
-    }
-    return false;
-  }
-
   private boolean categoryExists(CedarCategoryId categoryId) {
     String cypher = CypherQueryBuilderCategory.categoryExists();
     CypherParameters params = CypherParamBuilderCategory.matchId(categoryId);

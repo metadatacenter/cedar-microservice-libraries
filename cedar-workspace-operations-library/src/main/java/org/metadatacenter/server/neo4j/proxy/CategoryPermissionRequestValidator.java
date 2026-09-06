@@ -9,7 +9,6 @@ import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.CategoryPermissionServiceSession;
 import org.metadatacenter.server.result.BackendCallResult;
-import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.permission.category.*;
 
 import java.util.HashSet;
@@ -42,7 +41,7 @@ public class CategoryPermissionRequestValidator {
     validateCategoryExistence();
 
     if (callResult.isOk()) {
-      validateWritePermission();
+      validateGrantManagementAuthority();
     }
     if (callResult.isOk()) {
       validateRequest();
@@ -57,6 +56,9 @@ public class CategoryPermissionRequestValidator {
       validateAndSetGroups();
     }
     if (callResult.isOk()) {
+      ensureRootEveryoneViewer();
+    }
+    if (callResult.isOk()) {
       validateUserUniqueness();
     }
     if (callResult.isOk()) {
@@ -66,7 +68,7 @@ public class CategoryPermissionRequestValidator {
       validateOwnerAndUserCollision();
     }
     if (callResult.isOk()) {
-      validateOwnerSetPermission();
+      validateEveryoneRole();
     }
   }
 
@@ -80,11 +82,11 @@ public class CategoryPermissionRequestValidator {
     }
   }
 
-  private void validateWritePermission() {
-    if (!categoryPermissionService.userHasWriteAccessToCategory(categoryId)) {
+  private void validateGrantManagementAuthority() {
+    if (!categoryPermissionService.userHasCapability(categoryId, CategoryCapability.MANAGE_GRANTS)) {
       callResult.addError(PERMISSION)
-          .errorKey(CedarErrorKey.NO_WRITE_ACCESS_TO_CATEGORY)
-          .message("The current user has no write access to the category")
+          .errorKey(CedarErrorKey.NOT_AUTHORIZED)
+          .message("The current user may not manage grants on the category")
           .parameter("categoryId", categoryId.getId());
     }
   }
@@ -99,28 +101,24 @@ public class CategoryPermissionRequestValidator {
   }
 
   private void validateAndSetOwner() {
-    CategoryPermissionUser owner = request.getOwner();
-    if (owner == null) {
+    CategoryPermissions currentPermissions = categoryPermissionService.getCategoryPermissions(categoryId);
+    if (currentPermissions == null || currentPermissions.getOwner() == null) {
+      callResult.addError(SERVER_ERROR)
+          .errorKey(CedarErrorKey.INVALID_DATA)
+          .message("The category does not have an owner")
+          .parameter("categoryId", categoryId.getId());
+      return;
+    }
+    permissions.setOwner(currentPermissions.getOwner());
+
+    CategoryPermissionUser suppliedOwner = request.getOwner();
+    if (suppliedOwner != null && suppliedOwner.getId() != null
+        && !suppliedOwner.getId().equals(currentPermissions.getOwner().getId())) {
       callResult.addError(INVALID_ARGUMENT)
-          .errorKey(CedarErrorKey.MISSING_PARAMETER)
-          .parameter("paramName", "owner")
-          .message("The owner should be present in the request");
-    } else if (owner.getId() == null || owner.getId().isBlank()) {
-      callResult.addError(INVALID_ARGUMENT)
-          .errorKey(CedarErrorKey.MISSING_PARAMETER)
-          .parameter("paramName", "ownerId")
-          .message("The owner id should be present in the request");
-    } else {
-      CedarUserId userId = CedarUserId.build(owner.getId());
-      FolderServerUser newOwner = proxies.user().findUserById(userId);
-      if (newOwner == null) {
-        callResult.addError(NOT_FOUND)
-            .errorKey(CedarErrorKey.USER_NOT_FOUND)
-            .message("The new owner can not be found")
-            .parameter("userId", userId.getId());
-      } else {
-        permissions.setOwner(newOwner.buildExtract());
-      }
+          .errorKey(CedarErrorKey.INVALID_DATA)
+          .message("Ownership cannot be changed through an ACL update; use ownership transfer")
+          .parameter("currentOwnerId", currentPermissions.getOwner().getId())
+          .parameter("requestedOwnerId", suppliedOwner.getId());
     }
   }
 
@@ -149,12 +147,12 @@ public class CategoryPermissionRequestValidator {
             .parameter("paramName", "userId")
             .message("The user id is missing from the request");
       } else {
-        CategoryPermission permission = pair.getPermission();
-        if (permission == null) {
+        CategoryRole role = pair.getRole();
+        if (role == null) {
           callResult.addError(INVALID_ARGUMENT)
               .errorKey(CedarErrorKey.MISSING_PARAMETER)
-              .parameter("paramName", "permission")
-              .message("The permission is missing from the request");
+              .parameter("paramName", "role")
+              .message("The role is missing from the request");
         } else {
           CedarUserId userId = CedarUserId.build(permissionUser.getId());
           FolderServerUser user = proxies.user().findUserById(userId);
@@ -165,7 +163,7 @@ public class CategoryPermissionRequestValidator {
                 .parameter("userId", userId.getId());
 
           } else {
-            permissions.addUserPermissions(new CategoryUserPermission(user.buildExtract(), permission));
+            permissions.addUserPermissions(new CategoryUserPermission(user.buildExtract(), role));
           }
         }
       }
@@ -197,12 +195,12 @@ public class CategoryPermissionRequestValidator {
             .parameter("paramName", "groupId")
             .message("The group id is missing from the request");
       } else {
-        CategoryPermission permission = pair.getPermission();
-        if (permission == null) {
+        CategoryRole role = pair.getRole();
+        if (role == null) {
           callResult.addError(INVALID_ARGUMENT)
               .errorKey(CedarErrorKey.MISSING_PARAMETER)
-              .parameter("paramName", "permission")
-              .message("The permission is missing from the request");
+              .parameter("paramName", "role")
+              .message("The role is missing from the request");
         } else {
           CedarGroupId groupId = CedarGroupId.build(permissionGroup.getId());
           FolderServerGroup group = proxies.group().findGroupById(groupId);
@@ -212,7 +210,7 @@ public class CategoryPermissionRequestValidator {
                 .message("The group from request can not be found")
                 .parameter("groupId", groupId.getId());
           } else {
-            permissions.addGroupPermissions(new CategoryGroupPermission(group.buildExtract(), permission));
+            permissions.addGroupPermissions(new CategoryGroupPermission(group.buildExtract(), role));
           }
         }
       }
@@ -251,6 +249,41 @@ public class CategoryPermissionRequestValidator {
     }
   }
 
+  private void validateEveryoneRole() {
+    FolderServerGroup everyone = proxies.group().getEverybodyGroup();
+    if (everyone == null) {
+      return;
+    }
+    for (CategoryGroupPermission grant : permissions.getGroupPermissions()) {
+      if (everyone.getId().equals(grant.getGroup().getId()) && grant.getRole() != CategoryRole.VIEWER) {
+        callResult.addError(INVALID_ARGUMENT)
+            .errorKey(CedarErrorKey.INVALID_DATA)
+            .message("The Everyone group may only receive the Viewer role")
+            .parameter("groupId", everyone.getId())
+            .parameter("role", grant.getRole().getValue());
+      }
+    }
+  }
+
+  private void ensureRootEveryoneViewer() {
+    if (category.getParentCategoryId() != null) {
+      return;
+    }
+    FolderServerGroup everyone = proxies.group().getEverybodyGroup();
+    if (everyone == null) {
+      callResult.addError(SERVER_ERROR)
+          .errorKey(CedarErrorKey.INVALID_DATA)
+          .message("The Everyone group is required before root category grants can be changed")
+          .parameter("categoryId", categoryId.getId());
+      return;
+    }
+    boolean present = permissions.getGroupPermissions().stream()
+        .anyMatch(grant -> everyone.getId().equals(grant.getGroup().getId()));
+    if (!present) {
+      permissions.addGroupPermissions(new CategoryGroupPermission(everyone.buildExtract(), CategoryRole.VIEWER));
+    }
+  }
+
   private void validateOwnerAndUserCollision() {
     String ownerId = permissions.getOwner().getId();
     for (CategoryUserPermission up : permissions.getUserPermissions()) {
@@ -259,24 +292,6 @@ public class CategoryPermissionRequestValidator {
             .errorKey(CedarErrorKey.INVALID_DATA)
             .message("The owner should not be listed among the user permissions")
             .parameter("userId", ownerId);
-      }
-    }
-  }
-
-  private void validateOwnerSetPermission() {
-    String newOwnerId = permissions.getOwner().getId();
-    CategoryPermissions currentPermissions = categoryPermissionService.getCategoryPermissions(categoryId);
-    String currentOwnerId = currentPermissions.getOwner().getId();
-    if (!newOwnerId.equals(currentOwnerId)) {
-      // if it has the role, we do not check
-      if (categoryPermissionService.userHas(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_CATEGORY)) {
-        return;
-      }
-      if (!categoryPermissionService.userIsOwnerOfCategory(categoryId)) {
-        callResult.addError(PERMISSION)
-            .errorKey(CedarErrorKey.NOT_AUTHORIZED)
-            .message("Only the owner of a category can change the ownership")
-            .parameter("categoryId", categoryId.getId());
       }
     }
   }

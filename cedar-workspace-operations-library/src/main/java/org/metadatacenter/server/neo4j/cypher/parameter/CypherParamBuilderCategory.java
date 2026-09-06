@@ -81,19 +81,33 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
     return params;
   }
 
-  public static CypherParameters replacePermissions(CedarCategoryId categoryId, CedarUserId ownerId,
-                                                    List<String> userIds, List<String> attachUserIds,
-                                                    List<String> writeUserIds, List<String> groupIds,
-                                                    List<String> attachGroupIds, List<String> writeGroupIds,
+  public static CypherParameters replacePermissions(CedarCategoryId categoryId,
+                                                    List<String> userIds, List<String> viewerUserIds,
+                                                    List<String> classifierUserIds, List<String> editorUserIds,
+                                                    List<String> managerUserIds, List<String> groupIds,
+                                                    List<String> viewerGroupIds, List<String> classifierGroupIds,
+                                                    List<String> editorGroupIds, List<String> managerGroupIds,
                                                     long currentRevision) {
     CypherParameters params = matchCategory(categoryId);
-    params.put(ParameterPlaceholder.OWNER_ID, ownerId);
     params.put(ParameterPlaceholder.USER_ID_LIST, userIds);
-    params.put(ParameterPlaceholder.ATTACH_USER_ID_LIST, attachUserIds);
-    params.put(ParameterPlaceholder.WRITE_USER_ID_LIST, writeUserIds);
+    params.put(ParameterPlaceholder.VIEWER_USER_ID_LIST, viewerUserIds);
+    params.put(ParameterPlaceholder.ATTACH_USER_ID_LIST, classifierUserIds);
+    params.put(ParameterPlaceholder.EDITOR_USER_ID_LIST, editorUserIds);
+    params.put(ParameterPlaceholder.MANAGER_USER_ID_LIST, managerUserIds);
     params.put(ParameterPlaceholder.GROUP_ID_LIST, groupIds);
-    params.put(ParameterPlaceholder.ATTACH_GROUP_ID_LIST, attachGroupIds);
-    params.put(ParameterPlaceholder.WRITE_GROUP_ID_LIST, writeGroupIds);
+    params.put(ParameterPlaceholder.VIEWER_GROUP_ID_LIST, viewerGroupIds);
+    params.put(ParameterPlaceholder.ATTACH_GROUP_ID_LIST, classifierGroupIds);
+    params.put(ParameterPlaceholder.EDITOR_GROUP_ID_LIST, editorGroupIds);
+    params.put(ParameterPlaceholder.MANAGER_GROUP_ID_LIST, managerGroupIds);
+    params.put(ParameterPlaceholder.CURRENT_REVISION, currentRevision);
+    return params;
+  }
+
+  public static CypherParameters transferOwnership(CedarCategoryId categoryId, CedarUserId currentOwnerId,
+                                                    CedarUserId newOwnerId, long currentRevision) {
+    CypherParameters params = matchCategory(categoryId);
+    params.put(ParameterPlaceholder.OWNER_ID, currentOwnerId);
+    params.put(ParameterPlaceholder.USER_ID, newOwnerId);
     params.put(ParameterPlaceholder.CURRENT_REVISION, currentRevision);
     return params;
   }
