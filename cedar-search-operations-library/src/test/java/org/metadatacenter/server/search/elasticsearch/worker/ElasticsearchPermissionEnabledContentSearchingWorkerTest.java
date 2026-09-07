@@ -11,7 +11,7 @@ import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
@@ -87,17 +87,17 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
 
   static Stream<Arguments> accessiblePermissionQueries() {
     return Stream.of(
-        Arguments.of(FilesystemResourcePermission.READ, "user-1|read", true, true),
-        Arguments.of(FilesystemResourcePermission.WRITE, "user-1|write", false, true),
-        Arguments.of(FilesystemResourcePermission.CHANGEOWNER, "user-1|changeowner", false, false));
+        Arguments.of(ResourceRole.VIEWER, "user-1|viewer", true, true),
+        Arguments.of(ResourceRole.EDITOR, "user-1|editor", false, true),
+        Arguments.of(ResourceRole.MANAGER, "user-1|manager", false, true));
   }
 
   @ParameterizedTest
   @MethodSource("accessiblePermissionQueries")
-  void accessibleCountMapsRequestedPermissionWithoutInflatingWriteAccess(
-      FilesystemResourcePermission permission, String userKey, boolean everybodyRead,
+  void accessibleCountMapsEachRequestedRoleWithoutInflatingItsAuthority(
+      ResourceRole role, String userKey, boolean everybodyRead,
       boolean everybodyWrite) throws Exception {
-    long count = worker.searchAccessibleResourceCountByUser(List.of("template", "instance"), permission, user);
+    long count = worker.searchAccessibleResourceCountByUser(List.of("template", "instance"), role, user);
 
     String query = capturedQuery();
     assertEquals(7, count);
@@ -112,7 +112,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
   void administrativeReadOverrideRemovesAllAccessClausesButRetainsTypeFilter() throws Exception {
     user.setPermissions(List.of(CedarPermission.READ_NOT_READABLE_NODE.getPermissionName()));
 
-    worker.searchAccessibleResourceCountByUser(List.of("field"), FilesystemResourcePermission.READ, user);
+    worker.searchAccessibleResourceCountByUser(List.of("field"), ResourceRole.VIEWER, user);
 
     String query = capturedQuery();
     assertFalse(query.contains("users"), query);
@@ -180,7 +180,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
     assertEquals(75, request.source().from());
     assertEquals(25, request.source().size());
     assertTrue(request.source().trackTotalHitsUpTo() > 0);
-    assertTrue(query.contains("user-1|read"), query);
+    assertTrue(query.contains("user-1|viewer"), query);
     assertTrue(query.contains("template"), query);
     assertTrue(query.contains("element"), query);
     assertTrue(query.contains("category-1"), query);
@@ -253,7 +253,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
             ResourcePublicationStatusFilter.ALL, null, null, 10, 0));
     assertThrows(CedarDependencyUnavailableException.class,
         () -> worker.searchAccessibleResourceCountByUser(
-            List.of("template"), FilesystemResourcePermission.READ, user));
+            List.of("template"), ResourceRole.VIEWER, user));
   }
 
   @Test

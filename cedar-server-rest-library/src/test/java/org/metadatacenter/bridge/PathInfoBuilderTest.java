@@ -13,6 +13,9 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceCapability;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAuthority;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.ArrayList;
@@ -22,6 +25,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,6 +48,7 @@ class PathInfoBuilderTest {
     node = new FolderServerFolder();
     node.setId("requested-folder");
     when(context.getCedarUser()).thenReturn(user);
+    when(permissionSession.getResourceAuthority(any())).thenReturn(new ResourceAuthority(null, false));
   }
 
   static Stream<Arguments> opennessPaths() {
@@ -67,7 +72,7 @@ class PathInfoBuilderTest {
       path.add(folder("folder-" + i, explicitOpen.get(i)));
     }
     when(folderSession.findNodePathExtract(node)).thenReturn(path);
-    when(permissionSession.userHasReadAccessToResource(any())).thenReturn(true);
+    when(permissionSession.userHasCapability(any(), eq(ResourceCapability.READ_RESOURCE))).thenReturn(true);
 
     List<FolderServerResourceExtract> result =
         PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, node);
@@ -81,7 +86,7 @@ class PathInfoBuilderTest {
     FolderServerFolderExtract first = folder("first", null);
     FolderServerFolderExtract second = folder("second", false);
     when(folderSession.findNodePathExtract(node)).thenReturn(List.of(first, second));
-    when(permissionSession.userHasReadAccessToResource(any())).thenReturn(true);
+    when(permissionSession.userHasCapability(any(), eq(ResourceCapability.READ_RESOURCE))).thenReturn(true);
 
     PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, node);
 
@@ -100,19 +105,19 @@ class PathInfoBuilderTest {
         PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, node);
 
     assertEquals(List.of(true, true, true), result.stream().map(FolderServerResourceExtract::isActiveUserCanRead).toList());
-    verify(permissionSession, never()).userHasReadAccessToResource(any());
+    verify(permissionSession, never()).userHasCapability(any(), any());
   }
 
   @Test
   void ordinaryUserCannotReadRootEvenIfBackendWouldAllowIt() {
     FolderServerFolderExtract root = folder("root", false); root.setRoot(true);
     when(folderSession.findNodePathExtract(node)).thenReturn(List.of(root));
-    when(permissionSession.userHasReadAccessToResource(root.getResourceId())).thenReturn(true);
+    when(permissionSession.userHasCapability(root.getResourceId(), ResourceCapability.READ_RESOURCE)).thenReturn(true);
 
     PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, node);
 
     assertEquals(false, root.isActiveUserCanRead());
-    verify(permissionSession, never()).userHasReadAccessToResource(any());
+    verify(permissionSession, never()).userHasCapability(any(), any());
   }
 
   @Test
@@ -123,7 +128,7 @@ class PathInfoBuilderTest {
     PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, node);
 
     assertEquals(false, system.isActiveUserCanRead());
-    verify(permissionSession, never()).userHasReadAccessToResource(any());
+    verify(permissionSession, never()).userHasCapability(any(), any());
   }
 
   static Stream<Arguments> ordinaryReadResults() {
@@ -137,12 +142,12 @@ class PathInfoBuilderTest {
   void ordinaryFolderVisibilityMirrorsBackendReadAccess(boolean backendRead, boolean expected) {
     FolderServerFolderExtract folder = folder("ordinary", false);
     when(folderSession.findNodePathExtract(node)).thenReturn(List.of(folder));
-    when(permissionSession.userHasReadAccessToResource(folder.getResourceId())).thenReturn(backendRead);
+    when(permissionSession.userHasCapability(folder.getResourceId(), ResourceCapability.READ_RESOURCE)).thenReturn(backendRead);
 
     PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, node);
 
     assertEquals(expected, folder.isActiveUserCanRead());
-    verify(permissionSession).userHasReadAccessToResource(folder.getResourceId());
+    verify(permissionSession).userHasCapability(folder.getResourceId(), ResourceCapability.READ_RESOURCE);
   }
 
   @ParameterizedTest
@@ -150,24 +155,24 @@ class PathInfoBuilderTest {
   void artifactVisibilityMirrorsBackendReadAccess(boolean backendRead, boolean expected) {
     FolderServerTemplateExtract artifact = template("template");
     when(folderSession.findNodePathExtract(node)).thenReturn(List.of(artifact));
-    when(permissionSession.userHasReadAccessToResource(artifact.getResourceId())).thenReturn(backendRead);
+    when(permissionSession.userHasCapability(artifact.getResourceId(), ResourceCapability.READ_RESOURCE)).thenReturn(backendRead);
 
     PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, node);
 
     assertEquals(expected, artifact.isActiveUserCanRead());
-    verify(permissionSession).userHasReadAccessToResource(artifact.getResourceId());
+    verify(permissionSession).userHasCapability(artifact.getResourceId(), ResourceCapability.READ_RESOURCE);
   }
 
   @Test
   void userHomeFolderUsesBackendPermissionRatherThanSystemFolderRule() {
     FolderServerFolderExtract home = folder("home", false); home.setUserHome(true);
     when(folderSession.findNodePathExtract(node)).thenReturn(List.of(home));
-    when(permissionSession.userHasReadAccessToResource(home.getResourceId())).thenReturn(true);
+    when(permissionSession.userHasCapability(home.getResourceId(), ResourceCapability.READ_RESOURCE)).thenReturn(true);
 
     PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, node);
 
     assertEquals(true, home.isActiveUserCanRead());
-    verify(permissionSession).userHasReadAccessToResource(home.getResourceId());
+    verify(permissionSession).userHasCapability(home.getResourceId(), ResourceCapability.READ_RESOURCE);
   }
 
   @Test
@@ -176,7 +181,40 @@ class PathInfoBuilderTest {
     when(folderSession.findNodePathExtract(node)).thenReturn(empty);
 
     assertSame(empty, PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, node));
-    verify(permissionSession, never()).userHasReadAccessToResource(any());
+    verify(permissionSession, never()).userHasCapability(any(), any());
+  }
+
+  @Test
+  void everyPathEntryCarriesItsResourceRoleOwnershipAndCapabilities() {
+    FolderServerFolderExtract folder = folder("ordinary", false);
+    when(folderSession.findNodePathExtract(node)).thenReturn(List.of(folder));
+    when(permissionSession.getResourceAuthority(folder.getResourceId()))
+        .thenReturn(new ResourceAuthority(ResourceRole.EDITOR, false));
+    when(permissionSession.userHasCapability(folder.getResourceId(), ResourceCapability.READ_RESOURCE))
+        .thenReturn(true);
+
+    PathInfoBuilder.getResourcePathExtract(context, folderSession, permissionSession, node);
+
+    assertEquals(ResourceRole.EDITOR, folder.getCurrentUserPermissions().getRole());
+    assertEquals(false, folder.getCurrentUserPermissions().isOwner());
+    assertEquals(
+        new ResourceAuthority(ResourceRole.EDITOR, false)
+            .capabilitiesFor(org.metadatacenter.model.CedarResourceType.FOLDER),
+        folder.getCurrentUserPermissions().getCapabilities());
+  }
+
+  @Test
+  void oneListedResourceCanBeDecoratedWithoutBuildingAPath() {
+    FolderServerFolderExtract folder = folder("listed", false);
+    ResourceAuthority authority = new ResourceAuthority(null, true);
+    when(permissionSession.getResourceAuthority(folder.getResourceId())).thenReturn(authority);
+
+    PathInfoBuilder.addCurrentUserPermissions(permissionSession, folder);
+
+    assertEquals(null, folder.getCurrentUserPermissions().getRole());
+    assertEquals(true, folder.getCurrentUserPermissions().isOwner());
+    assertEquals(authority.capabilitiesFor(org.metadatacenter.model.CedarResourceType.FOLDER),
+        folder.getCurrentUserPermissions().getCapabilities());
   }
 
   private static FolderServerFolderExtract folder(String id, Boolean open) {

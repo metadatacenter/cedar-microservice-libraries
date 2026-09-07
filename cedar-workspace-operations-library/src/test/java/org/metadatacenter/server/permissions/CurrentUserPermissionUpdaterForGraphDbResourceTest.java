@@ -20,57 +20,89 @@ import org.metadatacenter.server.VersionServiceSession;
 import org.metadatacenter.server.security.model.InstanceArtifactWithIsBasedOn;
 import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
 import org.metadatacenter.server.security.model.auth.FilesystemResourceWithCurrentUserPermissions;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAuthority;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAction;
+import org.metadatacenter.server.security.model.permission.resource.ResourceCapability;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/** Decision matrix for capabilities projected onto artifact reports. */
+/** Matrix for projecting artifact authority into capabilities and context-dependent actions. */
 class CurrentUserPermissionUpdaterForGraphDbResourceTest {
 
   @ParameterizedTest
-  @CsvSource({
-      "true,true,true,true,true,true",
-      "true,false,true,true,true,true",
-      "false,true,true,false,false,false",
-      "false,false,false,false,false,false"
-  })
-  void accessProjectionDistinguishesWriteReadAndNoAccess(boolean write, boolean read,
-      boolean canRead, boolean canWrite, boolean canDelete, boolean canShare) {
+  @MethodSource("authorities")
+  void projectsEveryRoleAndOwnershipCombination(ResourceAuthority authority,
+      ResourceRole effectiveRole, boolean canRead, boolean canEdit, boolean canManage,
+      boolean canTransferOwnership) {
     Fixture f = new Fixture();
     FilesystemResourceWithCurrentUserPermissions resource = f.resource(CedarResourceType.TEMPLATE);
-    when(f.permissionSession.userHasWriteAccessToResource(resource.getResourceId())).thenReturn(write);
-    when(f.permissionSession.userHasReadAccessToResource(resource.getResourceId())).thenReturn(read);
+    when(f.permissionSession.getResourceAuthority(resource.getResourceId())).thenReturn(authority);
 
     CurrentUserResourcePermissions result = f.update(resource);
 
+    assertEquals(effectiveRole, result.getCurrentUserRole());
+    assertEquals(effectiveRole, result.getRole());
+    assertEquals(authority.owner(), result.isOwner());
     assertEquals(canRead, result.isCanRead());
-    assertEquals(canWrite, result.isCanWrite());
-    assertEquals(canDelete, result.isCanDelete());
-    assertEquals(canShare, result.isCanShare());
+    assertEquals(canEdit, result.isCanEdit());
+    assertFalse(result.isCanCreate());
+    assertEquals(canManage, result.isCanWrite());
+    assertEquals(canEdit, result.isCanDelete());
+    assertEquals(canRead, result.isCanCopy());
+    assertEquals(canManage, result.isCanManageGrants());
+    assertEquals(canManage, result.isCanMove());
+    assertEquals(canManage, result.isCanManageOpenView());
+    assertEquals(canTransferOwnership, result.isCanTransferOwnership());
+    assertFalse(result.getCapabilities().contains(ResourceCapability.LIST_FOLDER_CONTENTS));
+    assertFalse(result.getCapabilities().contains(ResourceCapability.CREATE_IN_FOLDER));
+    assertFalse(result.getCapabilities().contains(ResourceCapability.COPY_INTO_FOLDER));
+    assertEquals(artifactCapabilities(canRead, canEdit, canManage, canTransferOwnership),
+        result.getCapabilities());
+    assertEquals(canRead
+            ? Set.of(ResourceAction.COPY_FROM_RESOURCE, ResourceAction.POPULATE)
+            : Set.of(),
+        result.getAvailableActions());
   }
 
-  @Test
-  void writeAccessShortCircuitsTheReadLookup() {
-    Fixture f = new Fixture();
-    FilesystemResourceWithCurrentUserPermissions resource = f.resource(CedarResourceType.TEMPLATE);
-    when(f.permissionSession.userHasWriteAccessToResource(resource.getResourceId())).thenReturn(true);
-
-    f.update(resource);
-
-    verify(f.permissionSession, never()).userHasReadAccessToResource(resource.getResourceId());
+  private static Stream<Arguments> authorities() {
+    return Stream.of(
+        Arguments.of(new ResourceAuthority(null, false), null, false, false, false, false),
+        Arguments.of(new ResourceAuthority(ResourceRole.VIEWER, false), ResourceRole.VIEWER,
+            true, false, false, false),
+        Arguments.of(new ResourceAuthority(ResourceRole.EDITOR, false), ResourceRole.EDITOR,
+            true, true, false, false),
+        Arguments.of(new ResourceAuthority(ResourceRole.MANAGER, false), ResourceRole.MANAGER,
+            true, true, true, false),
+        Arguments.of(new ResourceAuthority(null, true), null,
+            true, true, true, true));
   }
 
-  @ParameterizedTest
-  @ValueSource(booleans = {true, false})
-  void ownerChangeCapabilityIsIndependentOfReadWriteAccess(boolean canChangeOwner) {
-    Fixture f = new Fixture();
-    FilesystemResourceWithCurrentUserPermissions resource = f.resource(CedarResourceType.TEMPLATE);
-    when(f.permissionSession.userCanChangeOwnerOfResource(resource.getResourceId())).thenReturn(canChangeOwner);
-
-    assertEquals(canChangeOwner, f.update(resource).isCanChangeOwner());
+  private static Set<ResourceCapability> artifactCapabilities(
+      boolean canRead, boolean canEdit, boolean canManage, boolean canTransferOwnership) {
+    Set<ResourceCapability> capabilities = new LinkedHashSet<>();
+    if (canRead) {
+      capabilities.add(ResourceCapability.READ_RESOURCE);
+    }
+    if (canEdit) {
+      capabilities.add(ResourceCapability.UPDATE_RESOURCE);
+      capabilities.add(ResourceCapability.DELETE_RESOURCE);
+    }
+    if (canManage) {
+      capabilities.add(ResourceCapability.MANAGE_GRANTS);
+      capabilities.add(ResourceCapability.MOVE_RESOURCE);
+      capabilities.add(ResourceCapability.MANAGE_OPENVIEW);
+    }
+    if (canTransferOwnership) {
+      capabilities.add(ResourceCapability.TRANSFER_OWNERSHIP);
+    }
+    return capabilities;
   }
 
   @Test
@@ -112,6 +144,8 @@ class CurrentUserPermissionUpdaterForGraphDbResourceTest {
   @Test
   void templatesArePopulatable() {
     Fixture f = new Fixture();
+    when(f.permissionSession.getResourceAuthority(any()))
+        .thenReturn(new ResourceAuthority(ResourceRole.VIEWER, false));
     assertTrue(f.update(f.resource(CedarResourceType.TEMPLATE)).isCanPopulate());
   }
 
@@ -156,15 +190,25 @@ class CurrentUserPermissionUpdaterForGraphDbResourceTest {
   }
 
   @Test
-  void everyResourceIsCopyable() {
+  void aReadableResourceMayBeUsedAsACopySource() {
     Fixture f = new Fixture();
+    when(f.permissionSession.getResourceAuthority(any()))
+        .thenReturn(new ResourceAuthority(ResourceRole.VIEWER, false));
     assertTrue(f.update(f.resource(CedarResourceType.FIELD)).isCanCopy());
+  }
+
+  @Test
+  void anUnreadableResourceMayNotBeUsedAsACopySource() {
+    Fixture f = new Fixture();
+    assertFalse(f.update(f.resource(CedarResourceType.FIELD)).isCanCopy());
   }
 
   @ParameterizedTest
   @ValueSource(booleans = {true, false})
   void openResourcesExposeExactlyTheOppositeTransition(boolean open) {
     Fixture f = new Fixture();
+    when(f.permissionSession.getResourceAuthority(any()))
+        .thenReturn(new ResourceAuthority(ResourceRole.MANAGER, false));
     FilesystemResourceWithCurrentUserPermissions resource = f.openResource(open);
 
     CurrentUserResourcePermissions result = f.update(resource);
@@ -195,6 +239,7 @@ class CurrentUserPermissionUpdaterForGraphDbResourceTest {
 
     private Fixture() {
       when(cedarConfig.getSubmissionConfig()).thenReturn(submissionConfig);
+      when(permissionSession.getResourceAuthority(any())).thenReturn(new ResourceAuthority(null, false));
     }
 
     private FilesystemResourceWithCurrentUserPermissions resource(CedarResourceType type, Class<?>... extras) {
@@ -232,6 +277,10 @@ class CurrentUserPermissionUpdaterForGraphDbResourceTest {
     }
 
     private CurrentUserResourcePermissions update(FilesystemResourceWithCurrentUserPermissions resource) {
+      ResourceAuthority authority = permissionSession.getResourceAuthority(resource.getResourceId());
+      Set<ResourceCapability> capabilities = authority.capabilitiesFor(resource.getType());
+      when(permissionSession.getResourceCapabilities(resource.getResourceId()))
+          .thenReturn(capabilities);
       CurrentUserResourcePermissions result = new CurrentUserResourcePermissions();
       CurrentUserPermissionUpdaterForGraphDbResource.get(
           permissionSession, versionSession, cedarConfig, resource).update(result);

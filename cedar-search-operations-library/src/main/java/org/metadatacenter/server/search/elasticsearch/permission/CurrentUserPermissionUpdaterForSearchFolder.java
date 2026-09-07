@@ -5,6 +5,8 @@ import org.metadatacenter.model.folderserver.info.FolderServerNodeInfo;
 import org.metadatacenter.permission.currentuserpermission.CurrentUserPermissionUpdater;
 import org.metadatacenter.search.IndexedDocumentDocument;
 import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAuthority;
+import org.metadatacenter.server.security.model.permission.resource.ResourceActionPolicy;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
 public class CurrentUserPermissionUpdaterForSearchFolder extends AbstractCurrentUserPermissionUpdaterForSearch {
@@ -21,21 +23,12 @@ public class CurrentUserPermissionUpdaterForSearchFolder extends AbstractCurrent
 
   @Override
   public void update(CurrentUserResourcePermissions currentUserResourcePermissions) {
-    if (userCanWrite()) {
-      currentUserResourcePermissions.setCanWrite(true);
-      currentUserResourcePermissions.setCanDelete(true);
-      currentUserResourcePermissions.setCanRead(true);
-
-      FolderServerNodeInfo info = indexedDocument.getInfo();
-      if (!info.getIsRoot() && !info.getIsSystem() && !info.getIsUserHome()) {
-        currentUserResourcePermissions.setCanShare(true);
-      }
-    } else if (userCanRead()) {
-      currentUserResourcePermissions.setCanRead(true);
-    }
-    if (userCanChangeOwnerOfFolder()) {
-      currentUserResourcePermissions.setCanChangeOwner(true);
-    }
+    ResourceAuthority authority = resourceAuthority();
+    FolderServerNodeInfo info = indexedDocument.getInfo();
+    currentUserResourcePermissions.applyAccess(authority, resourceCapabilities(authority));
+    boolean open = Boolean.TRUE.equals(info.getIsOpen());
+    currentUserResourcePermissions.setAvailableActions(ResourceActionPolicy.evaluate(
+        info.getType(), currentUserResourcePermissions.getCapabilities(), open));
   }
 
 }

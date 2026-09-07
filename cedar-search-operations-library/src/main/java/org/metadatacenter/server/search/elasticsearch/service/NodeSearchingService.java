@@ -27,7 +27,7 @@ import org.metadatacenter.server.search.elasticsearch.worker.ElasticsearchPermis
 import org.metadatacenter.server.search.elasticsearch.worker.ElasticsearchSearchingWorker;
 import org.metadatacenter.server.search.elasticsearch.worker.SearchResponseResult;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
@@ -108,13 +108,12 @@ public class NodeSearchingService extends AbstractSearchingService {
     BoolQueryBuilder mainQuery = QueryBuilders.boolQuery();
     BoolQueryBuilder permissionQuery = QueryBuilders.boolQuery();
 
-    QueryBuilder groupReadQuery = QueryBuilders.termsQuery(GROUPS, CedarNodeMaterializedPermissions.getKey(groupId.getId(),
-        FilesystemResourcePermission.READ));
-    QueryBuilder groupWriteQuery = QueryBuilders.termsQuery(GROUPS, CedarNodeMaterializedPermissions.getKey(groupId.getId(),
-        FilesystemResourcePermission.WRITE));
-
-    permissionQuery.should(groupReadQuery);
-    permissionQuery.should(groupWriteQuery);
+    permissionQuery.should(QueryBuilders.termsQuery(GROUPS, List.of(
+        CedarNodeMaterializedPermissions.getKey(groupId.getId(), ResourceRole.VIEWER),
+        CedarNodeMaterializedPermissions.getKey(groupId.getId(), ResourceRole.EDITOR),
+        CedarNodeMaterializedPermissions.getKey(groupId.getId(), ResourceRole.MANAGER),
+        groupId.getId() + "|read",
+        groupId.getId() + "|write")));
     mainQuery.must(permissionQuery);
 
     return searchWorker.findAllValuesForField("cid", mainQuery);
@@ -253,9 +252,9 @@ public class NodeSearchingService extends AbstractSearchingService {
     return response;
   }
 
-  public long searchAccessibleResourceCountByUser(List<String> resourceTypes, FilesystemResourcePermission permission, CedarUser user) throws CedarProcessingException {
+  public long searchAccessibleResourceCountByUser(List<String> resourceTypes, ResourceRole role, CedarUser user) throws CedarProcessingException {
     try {
-      return permissionEnabledSearchWorker.searchAccessibleResourceCountByUser(resourceTypes, permission, user);
+      return permissionEnabledSearchWorker.searchAccessibleResourceCountByUser(resourceTypes, role, user);
     } catch (CedarDependencyUnavailableException e) {
       throw e;
     } catch (Exception e) {

@@ -111,9 +111,7 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE>)" +
         " WHERE" +
         " (" +
-        " (group)-[:<REL.CANREAD>]->()-[:<REL.CONTAINS>*0..]->(resource)" +
-        " OR " +
-        " (group)-[:<REL.CANWRITE>]->()-[:<REL.CONTAINS>*0..]->(resource)" +
+        " (group)-[:" + getResourceRoleRelationLabels() + "]->()-[:<REL.CONTAINS>*0..]->(resource)" +
         " )" +
         " RETURN resource";
   }

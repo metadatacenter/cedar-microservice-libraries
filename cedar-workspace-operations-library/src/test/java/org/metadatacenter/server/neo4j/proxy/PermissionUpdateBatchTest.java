@@ -21,8 +21,9 @@ class PermissionUpdateBatchTest {
   void categoryAclReplacementIsOneVersionedCypherMutation() {
     String query = CypherQueryBuilderCategoryPermission.replacePermissions();
 
-    assertTrue(query.contains("collect(DISTINCT oldOwner) + collect(DISTINCT oldGrant)"));
-    assertTrue(query.contains("FOREACH (relation IN oldRelations | DELETE relation)"));
+    assertTrue(query.contains("collect(DISTINCT oldGrant) AS oldGrants"));
+    assertTrue(query.contains("FOREACH (grant IN oldGrants | DELETE grant)"));
+    assertTrue(query.contains("MATCH (owner:<LABEL.USER>)-[:<REL.OWNSCATEGORY>]->(category)"));
     assertTrue(query.contains("category._cedarAclRevision = {<PH.CURRENT_REVISION>} + 1"));
     assertTrue(query.contains("category._cedarAclRevision AS revision"));
   }

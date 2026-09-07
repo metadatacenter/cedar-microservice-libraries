@@ -173,25 +173,6 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
         " RETURN category.<PROP.ID>";
   }
 
-  public static String setCategoryOwner() {
-    return "" +
-        " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.CATEGORY_ID>}})" +
-        " MERGE (user)-[:<REL.OWNSCATEGORY>]->(category)" +
-        " SET category.<PROP.OWNED_BY> = {<PH.USER_ID>}" +
-        " RETURN category";
-  }
-
-  public static String removeCategoryOwner() {
-    return "" +
-        " MATCH (user:<LABEL.USER>)" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
-        " MATCH (user)-[relation:<REL.OWNSCATEGORY>]->(category)" +
-        " DELETE (relation)" +
-        " SET category.<PROP.OWNED_BY> = null" +
-        " RETURN category";
-  }
-
   public static String categoryExists() {
     return "" +
         " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +

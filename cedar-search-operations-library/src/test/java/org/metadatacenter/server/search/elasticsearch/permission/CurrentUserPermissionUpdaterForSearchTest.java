@@ -17,11 +17,15 @@ import org.metadatacenter.search.IndexedDocumentDocument;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAction;
+import org.metadatacenter.server.security.model.permission.resource.ResourceCapability;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -51,36 +55,96 @@ class CurrentUserPermissionUpdaterForSearchTest {
     when(document.getInfo()).thenReturn(info);
     when(document.getUsers()).thenReturn(List.of());
     when(info.getType()).thenReturn(CedarResourceType.TEMPLATE);
-    when(info.getOwnedBy()).thenReturn("user-1");
+    when(info.getOwnedBy()).thenReturn("user-2");
     when(info.getPublicationStatus()).thenReturn(BiboStatus.DRAFT);
     when(info.isLatestVersion()).thenReturn(true);
   }
 
   static Stream<Arguments> materializedAccess() {
     return Stream.of(
-        Arguments.of(List.of(key(FilesystemResourcePermission.WRITE)), List.<CedarPermission>of(), true, true),
-        Arguments.of(List.of(key(FilesystemResourcePermission.READ)), List.<CedarPermission>of(), true, false),
-        Arguments.of(List.of(), List.<CedarPermission>of(), false, false),
-        Arguments.of(null, List.<CedarPermission>of(), false, false),
-        Arguments.of(Arrays.asList((String) null), List.<CedarPermission>of(), false, false),
-        Arguments.of(List.of(), List.of(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE), true, true),
-        Arguments.of(List.of(), List.of(CedarPermission.READ_NOT_READABLE_NODE), true, false)
+        Arguments.of(List.of(key(ResourceRole.MANAGER)), List.<CedarPermission>of(), ResourceRole.MANAGER),
+        Arguments.of(List.of(key(ResourceRole.EDITOR)), List.<CedarPermission>of(), ResourceRole.EDITOR),
+        Arguments.of(List.of(key(ResourceRole.VIEWER)), List.<CedarPermission>of(), ResourceRole.VIEWER),
+        Arguments.of(List.of("user-1|write"), List.<CedarPermission>of(), ResourceRole.MANAGER),
+        Arguments.of(List.of("user-1|read"), List.<CedarPermission>of(), ResourceRole.VIEWER),
+        Arguments.of(List.of(), List.<CedarPermission>of(), null),
+        Arguments.of(null, List.<CedarPermission>of(), null),
+        Arguments.of(Arrays.asList((String) null), List.<CedarPermission>of(), null)
     );
   }
 
   @ParameterizedTest
   @MethodSource("materializedAccess")
-  void projectsMaterializedAndAdministrativeReadWriteAccess(List<String> users, List<CedarPermission> globalPermissions,
-                                                             boolean canRead, boolean canWrite) {
+  void projectsNewAndLegacyRolesAndAdministrativeOverrides(List<String> users,
+                                                            List<CedarPermission> globalPermissions,
+                                                            ResourceRole expectedRole) {
     when(document.getUsers()).thenReturn(users);
     setGlobalPermissions(globalPermissions);
 
     CurrentUserResourcePermissions output = updateResource();
 
-    assertEquals(canRead, output.isCanRead());
-    assertEquals(canWrite, output.isCanWrite());
-    assertEquals(canWrite, output.isCanDelete());
-    assertEquals(canWrite, output.isCanShare());
+    boolean canView = expectedRole != null;
+    boolean canEdit = expectedRole == ResourceRole.EDITOR || expectedRole == ResourceRole.MANAGER;
+    boolean canManage = expectedRole == ResourceRole.MANAGER;
+    assertEquals(expectedRole, output.getCurrentUserRole());
+    assertEquals(expectedRole, output.getRole());
+    assertEquals(canView, output.isCanView());
+    assertEquals(canEdit, output.isCanEdit());
+    assertEquals(canEdit, output.isCanDelete());
+    assertFalse(output.isCanCreate());
+    assertEquals(canManage, output.isCanWrite());
+    assertEquals(canManage, output.isCanManageGrants());
+    assertEquals(canManage, output.isCanMove());
+    assertFalse(output.isCanTransferOwnership());
+    assertFalse(output.getCapabilities().contains(ResourceCapability.CREATE_IN_FOLDER));
+    assertFalse(output.getCapabilities().contains(ResourceCapability.COPY_INTO_FOLDER));
+    assertEquals(artifactCapabilities(canView, canEdit, canManage, false), output.getCapabilities());
+    Set<ResourceAction> expectedActions = new LinkedHashSet<>();
+    if (canView) {
+      expectedActions.add(ResourceAction.COPY_FROM_RESOURCE);
+      expectedActions.add(ResourceAction.POPULATE);
+    }
+    if (canManage) {
+      expectedActions.add(ResourceAction.ENABLE_OPENVIEW);
+    }
+    assertEquals(expectedActions, output.getAvailableActions());
+  }
+
+  static Stream<Arguments> administrativeOverrides() {
+    return Stream.of(
+        Arguments.of(List.of(CedarPermission.READ_NOT_READABLE_NODE), Set.of(
+            ResourceCapability.READ_RESOURCE)),
+        Arguments.of(List.of(CedarPermission.WRITE_NOT_WRITABLE_NODE), Set.of(
+            ResourceCapability.UPDATE_RESOURCE,
+            ResourceCapability.DELETE_RESOURCE,
+            ResourceCapability.MOVE_RESOURCE,
+            ResourceCapability.MANAGE_OPENVIEW)),
+        Arguments.of(List.of(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE), Set.of(
+            ResourceCapability.MANAGE_GRANTS)),
+        Arguments.of(List.of(
+            CedarPermission.READ_NOT_READABLE_NODE,
+            CedarPermission.WRITE_NOT_WRITABLE_NODE,
+            CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE), Set.of(
+            ResourceCapability.READ_RESOURCE,
+            ResourceCapability.UPDATE_RESOURCE,
+            ResourceCapability.DELETE_RESOURCE,
+            ResourceCapability.MANAGE_GRANTS,
+            ResourceCapability.MOVE_RESOURCE,
+            ResourceCapability.MANAGE_OPENVIEW)));
+  }
+
+  @ParameterizedTest
+  @MethodSource("administrativeOverrides")
+  void administrativeOverridesAddCapabilitiesWithoutInventingARole(
+      List<CedarPermission> globalPermissions, Set<ResourceCapability> expectedCapabilities) {
+    setGlobalPermissions(globalPermissions);
+
+    CurrentUserResourcePermissions output = updateResource();
+
+    assertNull(output.getRole());
+    assertFalse(output.isOwner());
+    assertEquals(expectedCapabilities, output.getCapabilities());
+    assertFalse(output.isCanTransferOwnership());
   }
 
   static Stream<Arguments> ownershipCases() {
@@ -88,17 +152,52 @@ class CurrentUserPermissionUpdaterForSearchTest {
         Arguments.of("user-1", List.<CedarPermission>of(), true),
         Arguments.of("user-2", List.<CedarPermission>of(), false),
         Arguments.of(null, List.<CedarPermission>of(), false),
-        Arguments.of("user-2", List.of(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE), true));
+        Arguments.of("user-2", List.of(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE), false));
+  }
+
+  private static Set<ResourceCapability> artifactCapabilities(
+      boolean canRead, boolean canEdit, boolean canManage, boolean canTransferOwnership) {
+    Set<ResourceCapability> capabilities = new LinkedHashSet<>();
+    if (canRead) {
+      capabilities.add(ResourceCapability.READ_RESOURCE);
+    }
+    if (canEdit) {
+      capabilities.add(ResourceCapability.UPDATE_RESOURCE);
+      capabilities.add(ResourceCapability.DELETE_RESOURCE);
+    }
+    if (canManage) {
+      capabilities.add(ResourceCapability.MANAGE_GRANTS);
+      capabilities.add(ResourceCapability.MOVE_RESOURCE);
+      capabilities.add(ResourceCapability.MANAGE_OPENVIEW);
+    }
+    if (canTransferOwnership) {
+      capabilities.add(ResourceCapability.TRANSFER_OWNERSHIP);
+    }
+    return capabilities;
   }
 
   @ParameterizedTest
   @MethodSource("ownershipCases")
-  void changeOwnerRequiresOwnershipOrAdministrativeOverride(String ownerId, List<CedarPermission> globalPermissions,
-                                                             boolean expected) {
+  void ownershipTransferRequiresOwnership(String ownerId, List<CedarPermission> globalPermissions,
+                                          boolean expected) {
     when(info.getOwnedBy()).thenReturn(ownerId);
     setGlobalPermissions(globalPermissions);
 
-    assertEquals(expected, updateResource().isCanChangeOwner());
+    assertEquals(expected, updateResource().isCanTransferOwnership());
+  }
+
+  @Test
+  void ownershipProvidesManagerCapabilitiesWithoutReportingAManagerRole() {
+    when(info.getOwnedBy()).thenReturn("user-1");
+    // Owners are included in the materialized Manager user set for authorization and search.
+    when(document.getUsers()).thenReturn(List.of(key(ResourceRole.MANAGER)));
+
+    CurrentUserResourcePermissions output = updateResource();
+
+    assertTrue(output.isOwner());
+    assertNull(output.getRole());
+    assertTrue(output.getCapabilities().contains(ResourceCapability.MANAGE_GRANTS));
+    assertTrue(output.getCapabilities().contains(ResourceCapability.TRANSFER_OWNERSHIP));
   }
 
   static Stream<Arguments> resourceTypeCapabilities() {
@@ -107,13 +206,15 @@ class CurrentUserPermissionUpdaterForSearchTest {
         Arguments.of(CedarResourceType.ELEMENT, true, false),
         Arguments.of(CedarResourceType.FIELD, true, false),
         Arguments.of(CedarResourceType.INSTANCE, true, false),
-        Arguments.of(CedarResourceType.FOLDER, true, false));
+        Arguments.of(CedarResourceType.FOLDER, false, false));
   }
 
   @ParameterizedTest
   @MethodSource("resourceTypeCapabilities")
-  void copyIsUniversalWhilePopulateIsTemplateOnly(CedarResourceType type, boolean canCopy, boolean canPopulate) {
+  void copyIsAvailableForReadableArtifactsWhilePopulateIsTemplateOnly(
+      CedarResourceType type, boolean canCopy, boolean canPopulate) {
     when(info.getType()).thenReturn(type);
+    when(document.getUsers()).thenReturn(List.of(key(ResourceRole.VIEWER)));
     CurrentUserResourcePermissions output = updateResource();
     assertEquals(canCopy, output.isCanCopy());
     assertEquals(canPopulate, output.isCanPopulate());
@@ -167,9 +268,9 @@ class CurrentUserPermissionUpdaterForSearchTest {
 
   @ParameterizedTest
   @MethodSource("openTransitions")
-  void openTransitionsRequireWriteAndAreMutuallyExclusive(boolean writable, boolean open,
+  void openTransitionsRequireManagerAndAreMutuallyExclusive(boolean manager, boolean open,
                                                            boolean canMakeOpen, boolean canMakeNotOpen) {
-    when(document.getUsers()).thenReturn(writable ? List.of(key(FilesystemResourcePermission.WRITE)) : List.of());
+    when(document.getUsers()).thenReturn(manager ? List.of(key(ResourceRole.MANAGER)) : List.of());
     when(info.getIsOpen()).thenReturn(open);
 
     CurrentUserResourcePermissions output = updateResource();
@@ -213,9 +314,9 @@ class CurrentUserPermissionUpdaterForSearchTest {
 
   @ParameterizedTest
   @MethodSource("folderSharingStates")
-  void writableFolderSharingExcludesRootSystemAndUserHome(boolean root, boolean system, boolean userHome,
+  void managerFolderSharingExcludesRootSystemAndUserHome(boolean root, boolean system, boolean userHome,
                                                            boolean canShare) {
-    when(document.getUsers()).thenReturn(List.of(key(FilesystemResourcePermission.WRITE)));
+    when(document.getUsers()).thenReturn(List.of(key(ResourceRole.MANAGER)));
     when(info.getIsRoot()).thenReturn(root);
     when(info.getIsSystem()).thenReturn(system);
     when(info.getIsUserHome()).thenReturn(userHome);
@@ -224,13 +325,18 @@ class CurrentUserPermissionUpdaterForSearchTest {
 
     assertTrue(output.isCanRead());
     assertTrue(output.isCanWrite());
-    assertTrue(output.isCanDelete());
+    assertEquals(canShare, output.isCanDelete());
     assertEquals(canShare, output.isCanShare());
+    assertEquals(canShare, output.isCanMove());
+    assertEquals(canShare, output.isCanManageOpenView());
+    assertTrue(output.getCapabilities().contains(ResourceCapability.CREATE_IN_FOLDER));
+    assertTrue(output.getCapabilities().contains(ResourceCapability.COPY_INTO_FOLDER));
+    assertFalse(output.isCanCopy());
   }
 
   @Test
   void readOnlyFolderDoesNotGainWriteDeleteOrShare() {
-    when(document.getUsers()).thenReturn(List.of(key(FilesystemResourcePermission.READ)));
+    when(document.getUsers()).thenReturn(List.of(key(ResourceRole.VIEWER)));
     CurrentUserResourcePermissions output = updateFolder();
     assertTrue(output.isCanRead());
     assertFalse(output.isCanWrite());
@@ -256,6 +362,7 @@ class CurrentUserPermissionUpdaterForSearchTest {
   }
 
   private CurrentUserResourcePermissions updateFolder() {
+    when(info.getType()).thenReturn(CedarResourceType.FOLDER);
     CurrentUserResourcePermissions output = new CurrentUserResourcePermissions();
     CurrentUserPermissionUpdater updater = CurrentUserPermissionUpdaterForSearchFolder.get(document, user, config);
     updater.update(output);
@@ -266,7 +373,7 @@ class CurrentUserPermissionUpdaterForSearchTest {
     user.setPermissions(permissions.stream().map(CedarPermission::getPermissionName).toList());
   }
 
-  private static String key(FilesystemResourcePermission permission) {
-    return CedarNodeMaterializedPermissions.getKey("user-1", permission);
+  private static String key(ResourceRole role) {
+    return CedarNodeMaterializedPermissions.getKey("user-1", role);
   }
 }

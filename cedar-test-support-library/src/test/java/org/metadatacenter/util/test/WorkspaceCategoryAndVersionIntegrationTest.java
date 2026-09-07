@@ -31,12 +31,13 @@ import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.VersionedCategoryPermissions;
 import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.result.BackendCallResult;
-import org.metadatacenter.server.security.model.permission.category.CategoryPermission;
+import org.metadatacenter.server.security.model.permission.category.CategoryCapability;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroup;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroupPermissionPair;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionRequest;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUser;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUserPermissionPair;
+import org.metadatacenter.server.security.model.permission.category.CategoryRole;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.List;
@@ -44,14 +45,8 @@ import java.util.Map;
 
 /**
  * Direct tests of the category graph and of artifact version chains, against an in-process
- * Neo4j. Two semantics pinned here differ from the folder ACL model:
- *
- * Category permissions do not inherit down the category tree. The check Cypher
- * (CypherQueryBuilderCategoryPermission) walks CONTAINS relations before the permission
- * relation, but the category tree is linked with CONTAINSCATEGORY, so only the zero-length
- * step ever matches: a grant (or ownership) is effective on exactly the granted category node.
- * The session layer also applies no gate on createCategory itself; the REST layer authorizes,
- * and the creator becomes the category's owner (OWNSCATEGORY).
+ * Neo4j. Category roles inherit down CONTAINSCATEGORY, while ownership remains separately
+ * reported and supplies Manager authority to descendants.
  *
  * Version chains are plain graph state: a new version carries a previousVersion property and a
  * PREVIOUSVERSION relation to its predecessor, and the latest* flags are maintained explicitly
@@ -65,6 +60,7 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
   private static CedarUser user2;
   private static CedarRequestContext user1Context;
   private static CedarRequestContext user2Context;
+  private static CedarRequestContext adminContext;
   private static CedarFolderId user1HomeId;
   private static CedarCategoryId rootCategoryId;
 
@@ -81,6 +77,7 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
     user2 = TestAuthUtil.getTestUser2(cedarConfig);
     user1Context = CedarRequestContextFactory.fromUser(user1);
     user2Context = CedarRequestContextFactory.fromUser(user2);
+    adminContext = CedarRequestContextFactory.fromUser(TestAuthUtil.getAdminUser(cedarConfig));
 
     user1HomeId = CedarDataServices.getInstance().getFolderServiceSession(user1Context).findHomeFolderOf().getResourceId();
 
@@ -110,14 +107,13 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
   }
 
   /**
-   * Grants user2 the given permission on the category, as user1 (the owner). The request
-   * replaces the full permission sets and must restate the owner.
+   * Grants user2 the given role on the category, as user1 (the owner).
    */
-  private static void grantUser2OnCategory(CedarCategoryId categoryId, CategoryPermission permission) {
+  private static void grantUser2OnCategory(CedarCategoryId categoryId, CategoryRole role) {
     CategoryPermissionRequest request = new CategoryPermissionRequest();
     request.setOwner(new CategoryPermissionUser(user1.getId()));
     request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
-        new CategoryPermissionUser(user2.getId()), permission));
+        new CategoryPermissionUser(user2.getId()), role));
     BackendCallResult result = categoryPermissionsOf(user1Context).updateCategoryPermissions(categoryId, request);
     if (result.isError()) {
       Assertions.fail("The category permission update should succeed: " + result.getFirstErrorMessage());
@@ -210,7 +206,23 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
   }
 
   @Test
-  public void categoryWriteGrantIsPerNodeAndImpliesAttach() {
+  public void rootCategoryKeepsItsStructuralRestrictionsAndEveryoneViewerGrant() {
+    CategoryPermissionServiceSession adminPermissions = categoryPermissionsOf(adminContext);
+    CategoryPermissionServiceSession user2Permissions = categoryPermissionsOf(user2Context);
+
+    Assertions.assertTrue(user2Permissions.userHasCapability(rootCategoryId, CategoryCapability.READ_CATEGORY),
+        "Everyone must receive Viewer on the root category");
+    Assertions.assertFalse(user2Permissions.userHasCapability(rootCategoryId, CategoryCapability.ATTACH_CATEGORY));
+    Assertions.assertTrue(adminPermissions.userHasCapability(rootCategoryId, CategoryCapability.CREATE_CHILD_CATEGORY));
+    Assertions.assertTrue(adminPermissions.userHasCapability(rootCategoryId, CategoryCapability.MANAGE_GRANTS));
+    Assertions.assertFalse(adminPermissions.userHasCapability(rootCategoryId, CategoryCapability.UPDATE_CATEGORY));
+    Assertions.assertFalse(adminPermissions.userHasCapability(rootCategoryId, CategoryCapability.DELETE_CATEGORY));
+    Assertions.assertFalse(adminPermissions.userHasCapability(rootCategoryId, CategoryCapability.MOVE_CATEGORY));
+    Assertions.assertFalse(adminPermissions.userHasCapability(rootCategoryId, CategoryCapability.TRANSFER_OWNERSHIP));
+  }
+
+  @Test
+  public void categoryManagerRoleInheritsAndIncludesClassification() {
     FolderServerCategory parent = createCategoryAsUser1(rootCategoryId, "Perm Parent");
     FolderServerCategory child = createCategoryAsUser1(parent.getResourceId(), "Perm Child");
 
@@ -219,38 +231,39 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
 
     Assertions.assertTrue(user1CategoryPermissions.userIsOwnerOfCategory(parent.getResourceId()),
         "The creator should own the category");
-    Assertions.assertTrue(user1CategoryPermissions.userHasWriteAccessToCategory(parent.getResourceId()),
-        "Ownership should confer write on the owned node");
-    Assertions.assertFalse(user2CategoryPermissions.userHasWriteAccessToCategory(parent.getResourceId()),
-        "A stranger should not write the category before any grant");
-    Assertions.assertFalse(user2CategoryPermissions.userHasAttachAccessToCategory(parent.getResourceId()),
-        "A stranger should not attach to the category before any grant");
+    Assertions.assertTrue(user1CategoryPermissions.userHasCapability(
+        parent.getResourceId(), CategoryCapability.MANAGE_GRANTS),
+        "Ownership should confer Manager capabilities");
+    Assertions.assertFalse(user2CategoryPermissions.userHasCapability(
+        parent.getResourceId(), CategoryCapability.UPDATE_CATEGORY),
+        "A Viewer should not edit the category");
 
-    grantUser2OnCategory(parent.getResourceId(), CategoryPermission.WRITE);
+    grantUser2OnCategory(parent.getResourceId(), CategoryRole.MANAGER);
 
-    Assertions.assertTrue(user2CategoryPermissions.userHasWriteAccessToCategory(parent.getResourceId()),
-        "The WRITE grant should give user2 write on the granted category");
-    Assertions.assertTrue(user2CategoryPermissions.userHasAttachAccessToCategory(parent.getResourceId()),
-        "A WRITE grant should also satisfy the attach check");
-    // Unlike folder ACLs, the grant stops at the granted node: the permission Cypher walks
-    // CONTAINS, but the category tree is linked with CONTAINSCATEGORY, so no inheritance occurs
-    Assertions.assertFalse(user2CategoryPermissions.userHasWriteAccessToCategory(child.getResourceId()),
-        "The WRITE grant on the parent category should not reach its child category");
+    Assertions.assertTrue(user2CategoryPermissions.userHasCapability(
+        parent.getResourceId(), CategoryCapability.MANAGE_GRANTS));
+    Assertions.assertTrue(user2CategoryPermissions.userHasCapability(
+        parent.getResourceId(), CategoryCapability.ATTACH_CATEGORY));
+    Assertions.assertTrue(user2CategoryPermissions.userHasCapability(
+        child.getResourceId(), CategoryCapability.MANAGE_GRANTS),
+        "The Manager role should inherit down the category hierarchy");
     Assertions.assertFalse(user2CategoryPermissions.userIsOwnerOfCategory(parent.getResourceId()),
         "The grant should not make user2 the category owner");
   }
 
   @Test
-  public void categoryAttachGrantDoesNotConferWrite() {
+  public void categoryClassifierRoleDoesNotConferEditing() {
     FolderServerCategory category = createCategoryAsUser1(rootCategoryId, "Attach Only");
 
-    grantUser2OnCategory(category.getResourceId(), CategoryPermission.ATTACH);
+    grantUser2OnCategory(category.getResourceId(), CategoryRole.CLASSIFIER);
 
     CategoryPermissionServiceSession user2CategoryPermissions = categoryPermissionsOf(user2Context);
-    Assertions.assertTrue(user2CategoryPermissions.userHasAttachAccessToCategory(category.getResourceId()),
-        "The ATTACH grant should give user2 attach access");
-    Assertions.assertFalse(user2CategoryPermissions.userHasWriteAccessToCategory(category.getResourceId()),
-        "An ATTACH grant should not confer write access");
+    Assertions.assertTrue(user2CategoryPermissions.userHasCapability(
+        category.getResourceId(), CategoryCapability.ATTACH_CATEGORY));
+    Assertions.assertTrue(user2CategoryPermissions.userHasCapability(
+        category.getResourceId(), CategoryCapability.DETACH_CATEGORY));
+    Assertions.assertFalse(user2CategoryPermissions.userHasCapability(
+        category.getResourceId(), CategoryCapability.UPDATE_CATEGORY));
   }
 
   @Test
@@ -268,16 +281,16 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
     CategoryPermissionRequest firstReplacement = new CategoryPermissionRequest();
     firstReplacement.setOwner(new CategoryPermissionUser(user1.getId()));
     firstReplacement.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
-        new CategoryPermissionUser(user2.getId()), CategoryPermission.WRITE));
+        new CategoryPermissionUser(user2.getId()), CategoryRole.EDITOR));
     firstReplacement.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
-        new CategoryPermissionGroup(group.getId()), CategoryPermission.WRITE));
+        new CategoryPermissionGroup(group.getId()), CategoryRole.MANAGER));
     BackendCallResult<VersionedCategoryPermissions> first = permissions.updateCategoryPermissions(
         category.getResourceId(), firstReplacement, RevisionPrecondition.exact(initial.revision()));
     Assertions.assertFalse(first.isError(), () -> first.getFirstErrorMessage());
     Assertions.assertEquals(2L, first.getPayload().revision());
-    Assertions.assertEquals(CategoryPermission.WRITE,
-        first.getPayload().content().getGroupPermissions().get(0).getPermission(),
-        "A group WRITE grant should round-trip as the category WRITE relation");
+    Assertions.assertEquals(CategoryRole.MANAGER,
+        first.getPayload().content().getGroupPermissions().get(0).getRole(),
+        "A Manager grant should round-trip through the legacy CANWRITECATEGORY relation");
 
     CategoryPermissionRequest staleReplacement = new CategoryPermissionRequest();
     staleReplacement.setOwner(new CategoryPermissionUser(user1.getId()));
@@ -292,6 +305,40 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
     Assertions.assertEquals(user2.getId(), fresh.content().getUserPermissions().get(0).getUser().getId());
     Assertions.assertEquals(1, fresh.content().getGroupPermissions().size());
     Assertions.assertEquals(group.getId(), fresh.content().getGroupPermissions().get(0).getGroup().getId());
+  }
+
+  @Test
+  public void ownershipTransferIsAtomicAndRemovesTheNewOwnersDirectGrant() {
+    FolderServerCategory category = createCategoryAsUser1(rootCategoryId, "Ownership Transfer Category");
+    CategoryPermissionServiceSession permissions = categoryPermissionsOf(user1Context);
+
+    CategoryPermissionRequest grant = new CategoryPermissionRequest();
+    grant.setOwner(new CategoryPermissionUser(user1.getId()));
+    grant.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
+        new CategoryPermissionUser(user2.getId()), CategoryRole.EDITOR));
+    BackendCallResult<VersionedCategoryPermissions> granted = permissions.updateCategoryPermissions(
+        category.getResourceId(), grant, RevisionPrecondition.exact(1));
+    Assertions.assertFalse(granted.isError(), () -> granted.getFirstErrorMessage());
+
+    Assertions.assertThrows(RevisionConflictException.class,
+        () -> permissions.transferCategoryOwnership(category.getResourceId(), user2.getResourceId(),
+            RevisionPrecondition.exact(1)));
+    Assertions.assertEquals(user1.getId(),
+        permissions.getCategoryPermissions(category.getResourceId()).getOwner().getId(),
+        "A stale transfer must leave ownership unchanged");
+
+    BackendCallResult<VersionedCategoryPermissions> transfer = permissions.transferCategoryOwnership(
+        category.getResourceId(), user2.getResourceId(),
+        RevisionPrecondition.exact(granted.getPayload().revision()));
+    Assertions.assertFalse(transfer.isError(), () -> transfer.getFirstErrorMessage());
+    Assertions.assertEquals(3L, transfer.getPayload().revision());
+    Assertions.assertEquals(user2.getId(), transfer.getPayload().content().getOwner().getId());
+    Assertions.assertTrue(transfer.getPayload().content().getUserPermissions().isEmpty(),
+        "The new owner's redundant direct grant must be removed");
+    Assertions.assertEquals(user2.getId(),
+        categoriesOf(user1Context).getCategoryById(category.getResourceId()).getOwnedBy(),
+        "The category's ownedBy property and OWNSCATEGORY relation must change together");
+    Assertions.assertTrue(categoryPermissionsOf(user2Context).userIsOwnerOfCategory(category.getResourceId()));
   }
 
   @Test

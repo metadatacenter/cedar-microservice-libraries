@@ -10,7 +10,7 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
-import org.metadatacenter.server.security.model.permission.resource.FilesystemResourcePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
@@ -157,7 +157,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerIT {
   }
 
   private static String readKey(String userId) {
-    return CedarNodeMaterializedPermissions.getKey(userId, FilesystemResourcePermission.READ);
+    return CedarNodeMaterializedPermissions.getKey(userId, ResourceRole.VIEWER);
   }
 
   private static void index(String id, String name, List<String> users, String everybodyPermission)

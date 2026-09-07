@@ -41,12 +41,6 @@ public interface CategoryServiceSession {
 
   FolderServerCategoryExtractWithChildren getCategoryTree();
 
-  Object getCategoryPermissions(CedarCategoryId categoryId);
-
-  Object updateCategoryPermissions(CedarCategoryId categoryId, Object permissions);
-
-  Object getCategoryDetails(CedarCategoryId categoryId);
-
   boolean attachCategoryToArtifact(CedarCategoryId categoryId, CedarArtifactId artifactId);
 
   boolean attachCategoriesToArtifact(List<CedarCategoryId> categoryIds, CedarArtifactId artifactId);

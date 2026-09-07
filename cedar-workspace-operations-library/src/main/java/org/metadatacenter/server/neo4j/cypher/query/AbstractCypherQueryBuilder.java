@@ -255,15 +255,22 @@ public abstract class AbstractCypherQueryBuilder {
     return "(user)-[:<REL.MEMBEROF>*0..1]->()-[:" + relationLabels + "]->()-[:<REL.CONTAINS>*0..]->(" + nodeAlias + ")";
   }
 
+  protected static String getResourceRoleRelationLabels() {
+    return String.join("|",
+        RelationLabel.CANREAD.toString(),
+        RelationLabel.VIEWER_ROLE.toString(),
+        RelationLabel.EDITOR_ROLE.toString(),
+        RelationLabel.CANWRITE.toString(),
+        RelationLabel.MANAGER_ROLE.toString());
+  }
+
   protected static String getResourcePermissionConditions(String relationPrefix, String nodeAlias) {
     return "" +
         " " + relationPrefix + " " +
         "(" +
         getUserToResourceRelationWithContains(RelationLabel.OWNS, nodeAlias) +
         " OR " +
-        getUserToResourceRelationThroughGroupWithContains(RelationLabel.CANREAD, nodeAlias) +
-        " OR " +
-        getUserToResourceRelationThroughGroupWithContains(RelationLabel.CANWRITE, nodeAlias) +
+        getUserToResourceRelationThroughGroupWithContains(getResourceRoleRelationLabels(), nodeAlias) +
         ")";
   }
 

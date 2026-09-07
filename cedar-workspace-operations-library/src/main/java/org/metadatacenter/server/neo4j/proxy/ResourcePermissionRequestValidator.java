@@ -12,7 +12,6 @@ import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarNodeGroupPermission;
 import org.metadatacenter.server.security.model.auth.CedarNodePermissionsWithExtract;
 import org.metadatacenter.server.security.model.auth.CedarNodeUserPermission;
-import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.permission.resource.*;
 
 import java.util.HashSet;
@@ -30,8 +29,6 @@ public class ResourcePermissionRequestValidator {
   private final CedarNodePermissionsWithExtract permissions;
   private final CedarFilesystemResourceId resourceId;
 
-  private FileSystemResource resource;
-
   public ResourcePermissionRequestValidator(ResourcePermissionServiceSession permissionService, Neo4JProxies proxies,
                                             CedarFilesystemResourceId resourceId, ResourcePermissionsRequest request) {
     this.permissionService = permissionService;
@@ -44,7 +41,7 @@ public class ResourcePermissionRequestValidator {
     validateNodeExistence();
 
     if (callResult.isOk()) {
-      validateWritePermission();
+      validateGrantManagementAuthority();
     }
     if (callResult.isOk()) {
       validateRequest();
@@ -65,16 +62,15 @@ public class ResourcePermissionRequestValidator {
       validateGroupUniqueness();
     }
     if (callResult.isOk()) {
-      validateOwnerAndUserCollision();
+      validateEveryoneRole();
     }
     if (callResult.isOk()) {
-      validateOwnerSetPermission();
+      validateOwnerAndUserCollision();
     }
   }
 
   private void validateNodeExistence() {
     FileSystemResource folder = proxies.filesystemResource().findResourceById(resourceId);
-    resource = folder;
     if (folder == null) {
       callResult.addError(NOT_FOUND)
           .errorKey(CedarErrorKey.NODE_NOT_FOUND)
@@ -83,11 +79,11 @@ public class ResourcePermissionRequestValidator {
     }
   }
 
-  private void validateWritePermission() {
-    if (!permissionService.userHasWriteAccessToResource(resourceId)) {
+  private void validateGrantManagementAuthority() {
+    if (!permissionService.userHasCapability(resourceId, ResourceCapability.MANAGE_GRANTS)) {
       callResult.addError(PERMISSION)
-          .errorKey(CedarErrorKey.NO_WRITE_ACCESS_TO_RESOURCE)
-          .message("The current user has no write access to the resource")
+          .errorKey(CedarErrorKey.NOT_AUTHORIZED)
+          .message("The current user may not manage grants on the resource")
           .parameter("nodeId", resourceId);
     }
   }
@@ -102,28 +98,24 @@ public class ResourcePermissionRequestValidator {
   }
 
   private void validateAndSetOwner() {
-    ResourcePermissionUser owner = request.getOwner();
-    if (owner == null) {
+    CedarNodePermissionsWithExtract currentPermissions = permissionService.getResourcePermissions(resourceId);
+    if (currentPermissions == null || currentPermissions.getOwner() == null) {
+      callResult.addError(SERVER_ERROR)
+          .errorKey(CedarErrorKey.INVALID_DATA)
+          .message("The resource does not have an owner")
+          .parameter("nodeId", resourceId);
+      return;
+    }
+    permissions.setOwner(currentPermissions.getOwner());
+
+    ResourcePermissionUser suppliedOwner = request.getOwner();
+    if (suppliedOwner != null && suppliedOwner.getId() != null
+        && !suppliedOwner.getId().equals(currentPermissions.getOwner().getId())) {
       callResult.addError(INVALID_ARGUMENT)
-          .errorKey(CedarErrorKey.MISSING_PARAMETER)
-          .parameter("paramName", "owner")
-          .message("The owner should be present in the request");
-    } else if (owner.getId() == null || owner.getId().isBlank()) {
-      callResult.addError(INVALID_ARGUMENT)
-          .errorKey(CedarErrorKey.MISSING_PARAMETER)
-          .parameter("paramName", "ownerId")
-          .message("The owner id should be present in the request");
-    } else {
-      CedarUserId newOwnerId = owner.getResourceIds();
-      FolderServerUser newOwner = proxies.user().findUserById(newOwnerId);
-      if (newOwner == null) {
-        callResult.addError(NOT_FOUND)
-            .errorKey(CedarErrorKey.USER_NOT_FOUND)
-            .message("The new owner can not be found")
-            .parameter("userId", newOwnerId);
-      } else {
-        permissions.setOwner(newOwner.buildExtract());
-      }
+          .errorKey(CedarErrorKey.INVALID_DATA)
+          .message("Ownership cannot be changed through an ACL update; use ownership transfer")
+          .parameter("currentOwnerId", currentPermissions.getOwner().getId())
+          .parameter("requestedOwnerId", suppliedOwner.getId());
     }
   }
 
@@ -152,12 +144,12 @@ public class ResourcePermissionRequestValidator {
             .parameter("paramName", "userId")
             .message("The user id is missing from the request");
       } else {
-        FilesystemResourcePermission permission = pair.getPermission();
-        if (permission == null) {
+        ResourceRole role = pair.getRole();
+        if (role == null) {
           callResult.addError(INVALID_ARGUMENT)
               .errorKey(CedarErrorKey.MISSING_PARAMETER)
-              .parameter("paramName", "permission")
-              .message("The permission is missing from the request");
+              .parameter("paramName", "role")
+              .message("The role is missing from the request");
         } else {
           CedarUserId userId = permissionUser.getResourceIds();
           FolderServerUser user = proxies.user().findUserById(userId);
@@ -168,7 +160,7 @@ public class ResourcePermissionRequestValidator {
                 .parameter("userId", userId);
 
           } else {
-            permissions.addUserPermissions(new CedarNodeUserPermission(user.buildExtract(), permission));
+            permissions.addUserPermissions(new CedarNodeUserPermission(user.buildExtract(), role));
           }
         }
       }
@@ -200,12 +192,12 @@ public class ResourcePermissionRequestValidator {
             .parameter("paramName", "groupId")
             .message("The group id is missing from the request");
       } else {
-        FilesystemResourcePermission permission = pair.getPermission();
-        if (permission == null) {
+        ResourceRole role = pair.getRole();
+        if (role == null) {
           callResult.addError(INVALID_ARGUMENT)
               .errorKey(CedarErrorKey.MISSING_PARAMETER)
-              .parameter("paramName", "permission")
-              .message("The permission is missing from the request");
+              .parameter("paramName", "role")
+              .message("The role is missing from the request");
         } else {
           CedarGroupId groupId = permissionGroup.getResourceId();
           FolderServerGroup group = proxies.group().findGroupById(groupId);
@@ -215,7 +207,7 @@ public class ResourcePermissionRequestValidator {
                 .message("The group from request can not be found")
                 .parameter("groupId", groupId);
           } else {
-            permissions.addGroupPermissions(new CedarNodeGroupPermission(group.buildExtract(), permission));
+            permissions.addGroupPermissions(new CedarNodeGroupPermission(group.buildExtract(), role));
           }
         }
       }
@@ -254,6 +246,22 @@ public class ResourcePermissionRequestValidator {
     }
   }
 
+  private void validateEveryoneRole() {
+    FolderServerGroup everyone = proxies.group().getEverybodyGroup();
+    if (everyone == null) {
+      return;
+    }
+    for (CedarNodeGroupPermission grant : permissions.getGroupPermissions()) {
+      if (everyone.getId().equals(grant.getGroup().getId()) && grant.getRole() != ResourceRole.VIEWER) {
+        callResult.addError(INVALID_ARGUMENT)
+            .errorKey(CedarErrorKey.INVALID_DATA)
+            .message("The Everyone group may only receive the Viewer role")
+            .parameter("groupId", everyone.getId())
+            .parameter("role", grant.getRole().getValue());
+      }
+    }
+  }
+
   private void validateOwnerAndUserCollision() {
     String ownerId = permissions.getOwner().getId();
     for (CedarNodeUserPermission up : permissions.getUserPermissions()) {
@@ -262,24 +270,6 @@ public class ResourcePermissionRequestValidator {
             .errorKey(CedarErrorKey.INVALID_DATA)
             .message("The owner should not be listed among the user permissions")
             .parameter("userId", ownerId);
-      }
-    }
-  }
-
-  private void validateOwnerSetPermission() {
-    String newOwnerId = permissions.getOwner().getId();
-    CedarNodePermissionsWithExtract currentPermissions = permissionService.getResourcePermissions(resourceId);
-    String currentOwnerId = currentPermissions.getOwner().getId();
-    if (!newOwnerId.equals(currentOwnerId)) {
-      // if it has the role, we do not check
-      if (permissionService.userHasPermission(CedarPermission.UPDATE_PERMISSION_NOT_WRITABLE_NODE)) {
-        return;
-      }
-      if (!permissionService.userIsOwnerOfResource(resource.getResourceId())) {
-        callResult.addError(PERMISSION)
-            .errorKey(CedarErrorKey.NOT_AUTHORIZED)
-            .message("Only the owner of a resource can change the ownership")
-            .parameter("nodeId", resourceId);
       }
     }
   }

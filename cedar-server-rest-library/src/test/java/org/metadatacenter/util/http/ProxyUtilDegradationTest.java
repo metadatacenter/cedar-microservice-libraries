@@ -6,7 +6,6 @@ import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.rest.context.CedarRequestContext;
 
 import java.io.IOException;
-import java.net.ServerSocket;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -38,7 +37,7 @@ class ProxyUtilDegradationTest {
   }
 
   private void assertServiceUnavailable(ProxyCall call) throws IOException {
-    String url = unusedLocalUrl();
+    String url = unavailableLocalUrl();
 
     CedarDependencyUnavailableException exception =
         assertThrows(CedarDependencyUnavailableException.class, () -> call.execute(url));
@@ -49,14 +48,10 @@ class ProxyUtilDegradationTest {
   }
 
   /**
-   * Reserve an ephemeral port and close it immediately. The subsequent request reaches the local
-   * network stack but has no listener, giving the proxy a deterministic connection refusal without
-   * depending on any CEDAR service or external network.
+   * Port 1 is the backend-test convention for a deliberately unavailable loopback dependency.
    */
-  private String unusedLocalUrl() throws IOException {
-    try (ServerSocket socket = new ServerSocket(0)) {
-      return "http://127.0.0.1:" + socket.getLocalPort() + "/dependency";
-    }
+  private String unavailableLocalUrl() {
+    return "http://127.0.0.1:1/dependency";
   }
 
   @FunctionalInterface

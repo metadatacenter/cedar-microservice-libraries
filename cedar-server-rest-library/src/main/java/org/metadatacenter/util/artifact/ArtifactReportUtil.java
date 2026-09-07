@@ -17,6 +17,7 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.CategoryServiceSession;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
+import org.metadatacenter.server.security.model.permission.resource.ResourceCapability;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -81,7 +82,8 @@ public final class ArtifactReportUtil {
       FolderServerTemplateExtract resourceExtract =
           (FolderServerTemplateExtract) folderSession.findResourceExtractById(instanceReport.getIsBasedOn());
       if (resourceExtract != null) {
-        boolean hasReadAccess = permissionServiceSession.userHasReadAccessToResource(resourceExtract.getResourceId());
+        boolean hasReadAccess = permissionServiceSession.userHasCapability(
+            resourceExtract.getResourceId(), ResourceCapability.READ_RESOURCE);
         if (hasReadAccess) {
           instanceReport.setIsBasedOnExtract(resourceExtract);
         } else {
@@ -96,7 +98,8 @@ public final class ArtifactReportUtil {
     if (artifactReport.getDerivedFrom() != null && artifactReport.getDerivedFrom().getId() != null) {
       FolderServerArtifactExtract resourceExtract = folderSession.findResourceExtractById(artifactReport.getDerivedFrom());
       if (resourceExtract != null) {
-        boolean hasReadAccess = permissionServiceSession.userHasReadAccessToResource(resourceExtract.getResourceId());
+        boolean hasReadAccess = permissionServiceSession.userHasCapability(
+            resourceExtract.getResourceId(), ResourceCapability.READ_RESOURCE);
         if (hasReadAccess) {
           artifactReport.setDerivedFromExtract(resourceExtract);
         } else {

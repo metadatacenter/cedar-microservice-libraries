@@ -5,7 +5,7 @@
   <parent>
     <groupId>org.metadatacenter</groupId>
     <artifactId>cedar-microservice-libraries</artifactId>
-    <version>2.9.8</version>
+    <version>2.9.9</version>
   </parent>
 
   <artifactId>cedar-test-support-library</artifactId>
@@ -93,7 +93,8 @@
         The tests point the configuration at the embedded Neo4j through a CedarEnvironmentSource
         override, so no add-opens flags or reflective environment rewriting are involved, and the
         test classes can share a JVM (reuseForks true): CedarConfig.getInstance rebuilds when the
-        override changes, and the embedded servers and their redirection survive across classes.
+        override changes, and the automatic JUnit extension clears each class's redirection before
+        the next class starts.
       -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

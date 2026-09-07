@@ -16,7 +16,7 @@ import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.UserServiceSession;
 import org.metadatacenter.server.neo4j.*;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
-import org.metadatacenter.server.security.model.permission.category.CategoryPermission;
+import org.metadatacenter.server.security.model.permission.category.CategoryRole;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -132,6 +132,8 @@ public class Neo4JUserSessionAdminService extends AbstractNeo4JUserSession imple
     } else {
       log.info("Root Category found");
     }
+    proxies.categoryPermission().ensureViewerRoleForGroup(
+        rootCategory.getResourceId(), everybody.getResourceId());
   }
 
   @Override
@@ -173,6 +175,8 @@ public class Neo4JUserSessionAdminService extends AbstractNeo4JUserSession imple
     } else {
       log.info("Root Category found");
     }
+    proxies.categoryPermission().ensureViewerRoleForGroup(
+        rootCategory.getResourceId(), everybody.getResourceId());
 
     FolderStructureConfig config = cedarConfig.getFolderStructureConfig();
     FolderServerCategory caDSRRootCategory = proxies.category().getCategoryByIdentifier(config.getCaDSRRootCategory().getIdentifier());
@@ -189,7 +193,8 @@ public class Neo4JUserSessionAdminService extends AbstractNeo4JUserSession imple
       log.info("caDSR root Category found");
     }
 
-    proxies.categoryPermission().addCategoryPermissionToUser(caDSRRootCategory.getResourceId(), caDSRAdmin.getResourceId(), CategoryPermission.WRITE);
+    proxies.categoryPermission().addCategoryRoleToUser(
+        caDSRRootCategory.getResourceId(), caDSRAdmin.getResourceId(), CategoryRole.MANAGER);
 
   }
 

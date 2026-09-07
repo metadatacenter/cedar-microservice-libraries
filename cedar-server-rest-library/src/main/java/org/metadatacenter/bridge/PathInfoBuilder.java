@@ -7,6 +7,8 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
+import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
+import org.metadatacenter.server.security.model.permission.resource.ResourceCapability;
 
 import java.util.List;
 
@@ -26,9 +28,18 @@ public final class PathInfoBuilder {
         isOpenImplicitly = true;
       }
       extract.setIsOpenImplicitly(isOpenImplicitly);
+      addCurrentUserPermissions(permissionSession, extract);
       extract.setActiveUserCanRead(activeUserCanRead(context, permissionSession, extract));
     }
     return pathInfo;
+  }
+
+  /** Adds the canonical role, ownership and capability projection to one resource extract. */
+  public static void addCurrentUserPermissions(ResourcePermissionServiceSession permissionSession,
+                                               FolderServerResourceExtract extract) {
+    CurrentUserResourcePermissions permissions = new CurrentUserResourcePermissions();
+    permissions.applyAuthority(permissionSession.getResourceAuthority(extract.getResourceId()), extract.getType());
+    extract.setCurrentUserPermissions(permissions);
   }
 
   private static boolean activeUserCanRead(CedarRequestContext context, ResourcePermissionServiceSession permissionSession,
@@ -41,6 +52,6 @@ public final class PathInfoBuilder {
         return false;
       }
     }
-    return permissionSession.userHasReadAccessToResource(nodeExtract.getResourceId());
+    return permissionSession.userHasCapability(nodeExtract.getResourceId(), ResourceCapability.READ_RESOURCE);
   }
 }
