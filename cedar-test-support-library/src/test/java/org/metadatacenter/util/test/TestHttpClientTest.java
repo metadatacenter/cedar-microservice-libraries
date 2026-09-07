@@ -74,7 +74,8 @@ public class TestHttpClientTest {
     private final AtomicInteger connections = new AtomicInteger();
 
     StubServer(List<Behavior> script) throws IOException {
-      serverSocket = new ServerSocket(0, script.size(), InetAddress.getLoopbackAddress());
+      serverSocket = new ServerSocket(
+          0, script.size(), InetAddress.getByName("127.0.0.1"));
       Thread thread = new Thread(() -> serve(script), "test-http-client-stub");
       thread.setDaemon(true);
       thread.start();

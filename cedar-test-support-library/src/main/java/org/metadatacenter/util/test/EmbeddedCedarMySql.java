@@ -34,6 +34,7 @@ public final class EmbeddedCedarMySql {
     if (db == null) {
       try {
         DBConfigurationBuilder configuration = DBConfigurationBuilder.newBuilder();
+        configuration.addArg("--bind-address=127.0.0.1");
         configuration.setPort(0); // 0 picks a free port
         db = DB.newEmbeddedDB(configuration.build());
         db.start();
@@ -48,6 +49,19 @@ public final class EmbeddedCedarMySql {
     environment.put(envPrefix + "_PASSWORD", "");
     environment.putAll(extraEnvironment);
     CedarEnvironmentSource.setOverride(environment);
+  }
+
+  static synchronized void stop() {
+    if (db == null) {
+      return;
+    }
+    try {
+      db.stop();
+    } catch (Exception e) {
+      throw new IllegalStateException("Could not stop the embedded MariaDB", e);
+    } finally {
+      db = null;
+    }
   }
 
 }

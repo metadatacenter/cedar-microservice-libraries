@@ -70,9 +70,8 @@ public final class EmbeddedCedarMongo {
   }
 
   /**
-   * Stops the child process synchronously. Package-private so the lifecycle regression test can
-   * prove that closing the reached state releases the listening port; normal consumers rely on the
-   * JVM shutdown hook registered when the process starts.
+   * Stops the child process synchronously. The JUnit launcher-session listener calls this after the
+   * suite; the JVM shutdown hook is the fallback outside a launcher session.
    */
   static synchronized void stop() {
     if (running == null) {
