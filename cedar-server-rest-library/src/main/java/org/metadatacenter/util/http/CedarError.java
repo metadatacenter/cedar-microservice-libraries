@@ -55,6 +55,7 @@ public final class CedarError {
           "invalidArtifactType", "readOtherProfileForbidden", "updateOtherProfileForbidden",
           "folderCanNotBeDeleted", "folderCanNotBeChanged", "groupAlreadyPresent",
           "groupCanBeModifiedOnlyByGroupAdmin", "groupCanBeDeletedOnlyByGroupAdmin",
+          "groupMembersCanBeReadOnlyByGroupAdmin",
           "groupRequiresAdministrator", "groupUsersNotUpdated",
           "specialGroupCanNotBeDeleted", "folderPermissionsCanNotBeChanged", "unknownInstanceOutputFormat",
           "folderCopyNotAllowed", "methodNotImplemented", "upstreamServerError", "nothingToDo",
