@@ -10,6 +10,7 @@ import org.metadatacenter.server.logging.model.AppLogParam;
 import org.metadatacenter.server.logging.model.AppLogSubType;
 import org.metadatacenter.server.logging.model.AppLogType;
 import org.metadatacenter.util.http.CedarResponse;
+import org.metadatacenter.util.http.CedarError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,6 +19,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
+import java.util.UUID;
 
 @Provider
 public class CedarExceptionMapper extends AbstractExceptionMapper implements ExceptionMapper<Exception> {
@@ -46,8 +48,9 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
       return clientResponse;
     }
 
+    String errorId = UUID.randomUUID().toString();
     logMappedException(log, ":CEM:", exception,
-        CedarResponseStatus.INTERNAL_SERVER_ERROR.getStatusCode(), true);
+        CedarResponseStatus.INTERNAL_SERVER_ERROR.getStatusCode(), true, errorId);
 
     LoggingContext loggingContext = ThreadLocalRequestIdHolder.getLoggingContext();
     String globalRequestId = null;
@@ -65,7 +68,7 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
         .enqueue();
 
     return Response.status(CedarResponseStatus.INTERNAL_SERVER_ERROR.getStatusCode())
-        .entity(clientSafeCopy(errorPack))
+        .entity(CedarError.from(errorPack, errorId))
         .type(MediaType.APPLICATION_JSON)
         .build();
   }
@@ -95,7 +98,14 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
       // limit=abc, which Jersey classifies as 400. Honor the status Jersey chose; the fallthrough
       // below would otherwise report every one of these as a 500.
       int status = webApplicationException.getResponse().getStatus();
-      return Response.status(status).build();
+      CedarResponseStatus cedarStatus = CedarResponseStatus.fromStatusCode(status);
+      if (cedarStatus != null) {
+        return CedarResponse.status(cedarStatus).build();
+      }
+      return Response.status(status)
+          .entity(CedarError.fromStatus(status))
+          .type(MediaType.APPLICATION_JSON)
+          .build();
     }
     return null;
   }

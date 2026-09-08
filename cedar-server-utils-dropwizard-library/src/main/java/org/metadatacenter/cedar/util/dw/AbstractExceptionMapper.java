@@ -27,12 +27,18 @@ public abstract class AbstractExceptionMapper {
    */
   protected void logMappedException(Logger logger, String marker, Throwable exception, int statusCode,
                                     boolean includeClientStackTrace) {
+    logMappedException(logger, marker, exception, statusCode, includeClientStackTrace, null);
+  }
+
+  protected void logMappedException(Logger logger, String marker, Throwable exception, int statusCode,
+                                    boolean includeClientStackTrace, String errorId) {
+    String correlatedMarker = errorId == null ? marker : marker + " errorId=" + errorId + " ";
     if (isServerErrorStatus(statusCode)) {
-      logger.error(marker + "full:", exception);
+      logger.error(correlatedMarker + "full:", exception);
     } else if (includeClientStackTrace) {
-      logger.debug(marker + "full:", exception);
+      logger.debug(correlatedMarker + "full:", exception);
     } else {
-      logger.debug(marker + "msg :{}", exception.getMessage());
+      logger.debug(correlatedMarker + "msg :{}", exception.getMessage());
     }
   }
 

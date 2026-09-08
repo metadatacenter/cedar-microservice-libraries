@@ -12,12 +12,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.metadatacenter.constant.HttpConstants;
+import org.metadatacenter.util.http.CedarError;
 
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
+import java.util.UUID;
 
 @Provider
 public class CedarCedarExceptionMapper extends AbstractExceptionMapper implements ExceptionMapper<CedarException> {
@@ -48,9 +50,10 @@ public class CedarCedarExceptionMapper extends AbstractExceptionMapper implement
       log.warn(":CCEM: {} reached the mapper with no decided status, answering {} by default; thrown at {}",
           exception.getClass().getSimpleName(), statusCode, throwSite(exception));
     }
-    logMappedException(log, ":CCEM:", exception, statusCode, exception.isShowFullStackTrace());
+    String errorId = UUID.randomUUID().toString();
+    logMappedException(log, ":CCEM:", exception, statusCode, exception.isShowFullStackTrace(), errorId);
     Response.ResponseBuilder responseBuilder = Response.status(statusCode)
-        .entity(clientSafeCopy(errorPack))
+        .entity(CedarError.from(errorPack, errorId))
         .type(MediaType.APPLICATION_JSON);
     if (statusCode == Response.Status.UNAUTHORIZED.getStatusCode()) {
       // This mapper builds its own response rather than going through CedarResponse, and it is the
