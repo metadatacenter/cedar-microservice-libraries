@@ -56,9 +56,12 @@ import java.util.Map;
  *       {@code resourceCanBeDrafted} do not, so a caller must combine them — the REST layer does.</li>
  *   <li>Deleting a published artifact is <em>allowed</em>. The PUBLISHED_ARTIFACT_CAN_NOT_BE_DELETED
  *       guard in the resource server is commented out deliberately, by commit 3f26ee7 (2021-02-08)
- *       "Allow users to delete published resources", which leaves that error key vestigial. Only
- *       PUBLISHED_ARTIFACT_CAN_NOT_BE_CHANGED is still enforced. No row asserts delete here because
- *       it is an HTTP-layer concern, but the asymmetry is worth knowing when reading the keys.</li>
+ *       "Allow users to delete published resources", which leaves that error key vestigial.
+ *       PUBLISHED_ARTIFACT_CAN_NOT_BE_CHANGED is still enforced against ordinary editing, but a
+ *       verbatim write goes through it: that write states the whole document rather than editing it,
+ *       and it is how a defect in the stored representation of a published artifact is corrected. No
+ *       row asserts either here because both are HTTP-layer concerns, but the asymmetry is worth
+ *       knowing when reading the keys.</li>
  * </ul>
  */
 public class ArtifactLifecycleMatrixTest {
