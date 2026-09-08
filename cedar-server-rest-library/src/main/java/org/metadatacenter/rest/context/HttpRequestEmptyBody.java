@@ -2,6 +2,7 @@ package org.metadatacenter.rest.context;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.assertion.noun.CedarParameter;
@@ -39,6 +40,8 @@ public class HttpRequestEmptyBody implements CedarRequestBody {
     if (type == HttpRequestEmptyBody.class) {
       return (T) (new HttpRequestEmptyBody());
     }
-    throw new CedarAssertionException("An empty body can not be converted into " + type);
+    throw new CedarAssertionException("The request has no body to read as " + type.getSimpleName())
+        .errorKey(CedarErrorKey.MISSING_DATA)
+        .parameter("type", type.getSimpleName());
   }
 }

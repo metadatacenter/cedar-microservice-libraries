@@ -41,6 +41,13 @@ public class CedarCedarExceptionMapper extends AbstractExceptionMapper implement
         .enqueue();
 
     int statusCode = errorPack.getStatus().getStatusCode();
+    if (!errorPack.hasResolvedStatus()) {
+      // The pack's 500 is a fallthrough, not a decision: nothing between the throw and here chose a
+      // status or an error type. Every CedarException subclass declares one now, so this names a
+      // pack built bare, and the frame it names is the site to fix.
+      log.warn(":CCEM: {} reached the mapper with no decided status, answering {} by default; thrown at {}",
+          exception.getClass().getSimpleName(), statusCode, throwSite(exception));
+    }
     logMappedException(log, ":CCEM:", exception, statusCode, exception.isShowFullStackTrace());
     Response.ResponseBuilder responseBuilder = Response.status(statusCode)
         .entity(clientSafeCopy(errorPack))
@@ -52,6 +59,11 @@ public class CedarCedarExceptionMapper extends AbstractExceptionMapper implement
       responseBuilder.header(HttpHeaders.WWW_AUTHENTICATE, HttpConstants.HTTP_AUTH_CHALLENGE);
     }
     return responseBuilder.build();
+  }
+
+  private static String throwSite(CedarException exception) {
+    StackTraceElement[] trace = exception.getStackTrace();
+    return trace.length == 0 ? "an unknown site" : trace[0].toString();
   }
 
 }
