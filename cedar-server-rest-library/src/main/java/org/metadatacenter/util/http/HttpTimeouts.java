@@ -113,6 +113,9 @@ public final class HttpTimeouts {
             .build())
         .useSystemProperties()
         .setRetryStrategy(ANSWERLESS_CONNECTION)
+        // Every executor is process-wide. Retaining an upstream cookie here would let one
+        // request leave state that an unrelated later request sends back to the same host.
+        .disableCookieManagement()
         .evictExpiredConnections()
         .evictIdleConnections(TimeValue.ofMinutes(1))
         .build());
