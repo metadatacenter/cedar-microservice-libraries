@@ -1,7 +1,6 @@
 package org.metadatacenter.model.folderserver.extract;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.metadatacenter.id.CedarSchemaArtifactId;
 import org.metadatacenter.model.BiboStatus;
 import org.metadatacenter.model.CedarResourceType;
@@ -10,7 +9,6 @@ import org.metadatacenter.model.folderserver.datagroup.ResourceWithVersionData;
 import org.metadatacenter.model.folderserver.datagroup.VersionDataGroup;
 import org.metadatacenter.server.security.model.NodeWithPublicationStatus;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerSchemaArtifactExtract extends FolderServerArtifactExtract implements NodeWithPublicationStatus, ResourceWithVersionData {
 
   protected VersionDataGroup versionData;

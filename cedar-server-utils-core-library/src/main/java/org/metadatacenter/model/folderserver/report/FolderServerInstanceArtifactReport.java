@@ -29,7 +29,7 @@ public abstract class FolderServerInstanceArtifactReport extends FolderServerArt
   public static FolderServerInstanceArtifactReport fromResource(FolderServerArtifact resource) {
     try {
       String s = JsonMapper.MAPPER.writeValueAsString(resource);
-      return JsonMapper.MAPPER.readValue(s, FolderServerInstanceArtifactReport.class);
+      return JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerInstanceArtifactReport.class);
     } catch (IOException e) {
       log.error("Error while converting the artifact to an instance artifact report", e);
     }

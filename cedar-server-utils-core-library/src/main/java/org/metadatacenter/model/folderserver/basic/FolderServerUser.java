@@ -1,7 +1,6 @@
 package org.metadatacenter.model.folderserver.basic;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.AbstractCedarResourceWithDates;
@@ -14,7 +13,6 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerUser extends AbstractCedarResourceWithDates implements CedarUserRepresentation {
 
   private String firstName;

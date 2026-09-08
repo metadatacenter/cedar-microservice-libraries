@@ -1,7 +1,6 @@
 package org.metadatacenter.model.folderserver.extract;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.metadatacenter.id.CedarFolderId;
 import org.metadatacenter.model.CedarResourceType;
@@ -15,7 +14,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerFolderExtract extends FolderServerResourceExtract implements FilesystemResourceWithIdAndType {
 
   private static final Logger log = LoggerFactory.getLogger(FolderServerFolderExtract.class);
@@ -29,7 +27,8 @@ public class FolderServerFolderExtract extends FolderServerResourceExtract imple
 
   public static FolderServerFolderExtract fromFolder(FolderServerFolder folder) {
     try {
-      return JsonMapper.MAPPER.readValue(JsonMapper.MAPPER.writeValueAsString(folder), FolderServerFolderExtract.class);
+      return JsonMapper.TOLERANT_MAPPER.readValue(
+          JsonMapper.MAPPER.writeValueAsString(folder), FolderServerFolderExtract.class);
     } catch (IOException e) {
       log.error("Error while converting the folder to a folder extract", e);
     }

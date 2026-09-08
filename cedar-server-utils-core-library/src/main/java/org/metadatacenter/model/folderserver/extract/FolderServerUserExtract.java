@@ -1,7 +1,6 @@
 package org.metadatacenter.model.folderserver.extract;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.AbstractCedarResourceWithDates;
@@ -14,7 +13,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerUserExtract extends AbstractCedarResourceWithDates implements CedarUserRepresentation {
 
   private static final Logger log = LoggerFactory.getLogger(FolderServerUserExtract.class);
@@ -29,7 +27,7 @@ public class FolderServerUserExtract extends AbstractCedarResourceWithDates impl
   public static FolderServerUserExtract fromFolderServerUser(FolderServerUser user) {
     try {
       String s = JsonMapper.MAPPER.writeValueAsString(user);
-      FolderServerUserExtract extract = JsonMapper.MAPPER.readValue(s, FolderServerUserExtract.class);
+      FolderServerUserExtract extract = JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerUserExtract.class);
       return extract;
     } catch (IOException e) {
       log.error("Error while converting the user to a user extract", e);

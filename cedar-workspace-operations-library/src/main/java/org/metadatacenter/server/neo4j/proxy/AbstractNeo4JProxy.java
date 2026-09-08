@@ -653,7 +653,7 @@ public abstract class AbstractNeo4JProxy {
     if (node != null && !node.isMissingNode()) {
       try {
         JsonNode unescaped = Neo4JUtil.unescapeTopLevelPropertyNames(node);
-        cn = JsonMapper.MAPPER.treeToValue(unescaped, type);
+        cn = JsonMapper.TOLERANT_MAPPER.treeToValue(unescaped, type);
       } catch (JsonProcessingException e) {
         log.error("Error deserializing resource into " + type.getSimpleName(), e);
       }
@@ -671,7 +671,7 @@ public abstract class AbstractNeo4JProxy {
     if (node != null && !node.isMissingNode()) {
       try {
         JsonNode unescaped = Neo4JUtil.unescapeTopLevelPropertyNames(node);
-        cn = JsonMapper.MAPPER.treeToValue(unescaped, type);
+        cn = JsonMapper.TOLERANT_MAPPER.treeToValue(unescaped, type);
       } catch (JsonProcessingException e) {
         log.error("Error deserializing touple into " + type.getSimpleName(), e);
       }

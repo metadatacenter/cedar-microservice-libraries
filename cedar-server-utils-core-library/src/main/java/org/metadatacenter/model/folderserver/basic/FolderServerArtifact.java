@@ -1,6 +1,5 @@
 package org.metadatacenter.model.folderserver.basic;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import org.metadatacenter.id.CedarUntypedArtifactId;
@@ -26,7 +25,6 @@ import java.io.IOException;
     @JsonSubTypes.Type(value = FolderServerTemplate.class, name = CedarResourceType.Types.TEMPLATE),
     @JsonSubTypes.Type(value = FolderServerInstance.class, name = CedarResourceType.Types.INSTANCE)
 })
-@JsonIgnoreProperties(ignoreUnknown = true)
 public abstract class FolderServerArtifact extends FileSystemResource implements ResourceWithDerivedFromData, ResourceWithDOIData {
 
   private static final Logger log = LoggerFactory.getLogger(FolderServerArtifact.class);
@@ -43,7 +41,7 @@ public abstract class FolderServerArtifact extends FileSystemResource implements
   public static FolderServerArtifact fromFolderServerResourceCurrentUserReport(FolderServerArtifactCurrentUserReport cur) {
     try {
       String s = JsonMapper.MAPPER.writeValueAsString(cur);
-      FolderServerArtifact folderServerArtifact = JsonMapper.MAPPER.readValue(s, FolderServerArtifact.class);
+      FolderServerArtifact folderServerArtifact = JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerArtifact.class);
       return folderServerArtifact;
     } catch (IOException e) {
       log.error("Error while converting the current-user report to a FolderServerArtifact", e);

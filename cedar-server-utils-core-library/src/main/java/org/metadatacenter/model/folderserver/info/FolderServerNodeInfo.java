@@ -1,7 +1,6 @@
 package org.metadatacenter.model.folderserver.info;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.metadatacenter.id.*;
 import org.metadatacenter.model.BiboStatus;
@@ -18,7 +17,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerNodeInfo implements ResourceWithVersionData, ResourceWithUsersData {
 
   private static final Logger log = LoggerFactory.getLogger(FolderServerNodeInfo.class);
@@ -49,7 +47,8 @@ public class FolderServerNodeInfo implements ResourceWithVersionData, ResourceWi
 
   public static FolderServerNodeInfo fromNode(FileSystemResource node) {
     try {
-      FolderServerNodeInfo info = JsonMapper.MAPPER.readValue(JsonMapper.MAPPER.writeValueAsString(node), FolderServerNodeInfo.class);
+      FolderServerNodeInfo info = JsonMapper.TOLERANT_MAPPER.readValue(
+          JsonMapper.MAPPER.writeValueAsString(node), FolderServerNodeInfo.class);
       info.setType(node.getType());
       if (node.getPathInfo() != null && node.getPathInfo().size() > 1) {
         info.setParentFolderId(node.getPathInfo().get(node.getPathInfo().size()-2).getId());

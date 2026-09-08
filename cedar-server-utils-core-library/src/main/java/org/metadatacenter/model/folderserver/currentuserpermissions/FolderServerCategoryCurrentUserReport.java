@@ -1,6 +1,5 @@
 package org.metadatacenter.model.folderserver.currentuserpermissions;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.metadatacenter.model.folderserver.basic.FolderServerCategory;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
@@ -12,7 +11,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerCategoryCurrentUserReport extends FolderServerCategory implements CategoryWithCurrentUserPermissions {
 
   private CurrentUserCategoryPermissions currentUserPermissions = new CurrentUserCategoryPermissions();
@@ -28,7 +26,7 @@ public class FolderServerCategoryCurrentUserReport extends FolderServerCategory 
     try {
       String s = JsonMapper.MAPPER.writeValueAsString(category);
       FolderServerCategoryCurrentUserReport report =
-          JsonMapper.MAPPER.readValue(s, FolderServerCategoryCurrentUserReport.class);
+          JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerCategoryCurrentUserReport.class);
       report.setRoot(category.getParentCategoryId() == null);
       return report;
     } catch (IOException e) {
