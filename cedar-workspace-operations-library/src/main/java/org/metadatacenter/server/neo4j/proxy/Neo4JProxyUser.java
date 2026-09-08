@@ -25,7 +25,7 @@ import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
 import org.metadatacenter.server.user.UserServiceUtil;
 import org.metadatacenter.util.json.JsonMapper;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -206,7 +206,7 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
    * key count does not change, so this always applies.
    */
   public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyId, String newKeyValue,
-                                                       LocalDateTime newCreationDate) {
+                                                       OffsetDateTime newCreationDate) {
     return changeApiKeys(userId, "regenerating an API key", keys -> {
       CedarUserApiKey target = findById(keys, keyId);
       if (target == null) {
