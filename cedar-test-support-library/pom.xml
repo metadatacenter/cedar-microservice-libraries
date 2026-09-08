@@ -28,6 +28,13 @@
       <artifactId>cedar-logging-operations-library</artifactId>
     </dependency>
 
+    <!-- CedarUserUtil, so the fixture users take their roles from the same blueprint accessor a
+         server calls when it provisions a real one. -->
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-auth-operations-library</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.neo4j.test</groupId>
       <artifactId>neo4j-harness</artifactId>
