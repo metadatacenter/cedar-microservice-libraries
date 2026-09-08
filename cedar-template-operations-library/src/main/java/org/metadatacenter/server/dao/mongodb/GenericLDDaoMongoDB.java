@@ -1,6 +1,8 @@
 package org.metadatacenter.server.dao.mongodb;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.mongodb.ErrorCategory;
+import com.mongodb.MongoWriteException;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
@@ -45,12 +47,17 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
   /* CRUD operations */
 
   /**
-   * Create an element that contains a Linked Data identifier field (@id in JSON-LD). It is necessary to check that
-   * there are not other elements into the DB with the same @id.
+   * Create an element that contains a Linked Data identifier field (@id in JSON-LD). No two documents in a
+   * collection may share that identifier. The unique index on it, which the admin tool's
+   * {@code artifactServer-initDB} task provisions, enforces this at the store; a read that found the
+   * identifier absent followed by an insert is therefore safe against a concurrent writer, whose insert the
+   * index rejects. That rejection surfaces as an {@link ArtifactRevisionConflictException}, the same signal a
+   * revision-qualified update or delete gives when the store moved on after the read.
    *
    * @param element An element
    * @return The created element
-   * @throws IOException If an occurs during creation
+   * @throws ArtifactRevisionConflictException If a document with the same @id already exists
+   * @throws IOException                       If an error occurs during creation
    */
   @Override
   public JsonNode create(JsonNode element) throws IOException {
@@ -59,7 +66,14 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     Map<String, Object> elementMap = JsonMapper.MAPPER.convertValue(fixedElement, Map.class);
     Document elementDoc = new Document(elementMap);
     elementDoc.put(INTERNAL_REVISION_FIELD, 1L);
-    entityCollection.insertOne(elementDoc);
+    try {
+      entityCollection.insertOne(elementDoc);
+    } catch (MongoWriteException e) {
+      if (e.getError().getCategory() == ErrorCategory.DUPLICATE_KEY) {
+        throw new ArtifactRevisionConflictException(String.valueOf(elementDoc.get("@id")));
+      }
+      throw e;
+    }
     // Returns the document created (all keys adapted for MongoDB are restored)
     return toPublicJson(elementDoc);
   }
