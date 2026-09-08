@@ -14,7 +14,7 @@ import org.metadatacenter.server.security.model.user.SortDirection;
 import org.metadatacenter.server.security.model.user.ViewMode;
 import org.metadatacenter.server.security.util.CedarUserUtil;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -150,7 +150,7 @@ public final class TestAuthUtil {
     apiKeyObject.setKey(apiKey);
     apiKeyObject.setServiceName("CEDAR");
     apiKeyObject.setDescription("apiKey for the integration test user");
-    apiKeyObject.setCreationDate(LocalDateTime.now());
+    apiKeyObject.setCreationDate(OffsetDateTime.now());
     apiKeyObject.setEnabled(true);
     user.getApiKeys().add(apiKeyObject);
 
