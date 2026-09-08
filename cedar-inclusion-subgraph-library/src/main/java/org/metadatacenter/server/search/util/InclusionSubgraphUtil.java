@@ -2,6 +2,10 @@ package org.metadatacenter.server.search.util;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.HttpStatus;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.constant.JsonSchemaConstants;
 import org.metadatacenter.constant.LinkedData;
@@ -13,17 +17,15 @@ import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.model.request.InclusionSubgraphNodeOperation;
 import org.metadatacenter.model.request.inclusionsubgraph.*;
-import org.metadatacenter.proxy.ArtifactProxy;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.InclusionSubgraphServiceSession;
 import org.metadatacenter.util.ModelUtil;
+import org.metadatacenter.util.http.ProxyUtil;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import jakarta.ws.rs.core.Response;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.*;
 
 import static org.metadatacenter.model.ModelNodeNames.*;
@@ -35,28 +37,44 @@ public class InclusionSubgraphUtil {
   private InclusionSubgraphUtil() {
   }
 
-  public static void updateResourceInclusionInfo(CedarRequestContext context, CedarConfig cedarConfig,
-                                                 FolderServerResourceExtract resource,
-                                                 InclusionSubgraphServiceSession inclusionSubgraphSession)
+  /**
+   * Reads the artifact from the artifact server and rewrites its inclusion arcs from what it reads.
+   *
+   * <p>Returns {@code false}, and leaves the arcs as they are, when the artifact server answered
+   * with anything but 200. An error body is well-formed JSON with no {@code properties} member, so
+   * parsing it would yield an empty included-id list, and an empty list means "this artifact
+   * includes nothing", which deletes every arc the artifact has. Only a document the server
+   * actually served may say that. A transport failure, where no answer arrived at all, propagates
+   * as a {@link CedarProcessingException}.
+   */
+  public static boolean updateResourceInclusionInfo(CedarRequestContext context, CedarConfig cedarConfig,
+                                                    FolderServerResourceExtract resource,
+                                                    InclusionSubgraphServiceSession inclusionSubgraphSession)
       throws CedarProcessingException {
-    Response responseFromArtifact = null;
-    try {
-      responseFromArtifact =
-          ArtifactProxy.executeResourceGetByProxyFromArtifactServer(cedarConfig.getMicroserviceUrlUtil(), null,
-              resource.getType(), resource.getId(), Optional.empty(),
-              context);
-      InputStream is = (InputStream) responseFromArtifact.getEntity();
-      JsonNode entityJsonNode = JsonMapper.MAPPER.readTree(is);
+    String url = cedarConfig.getMicroserviceUrlUtil().getArtifact().getArtifactTypeWithId(resource.getType(),
+        resource.getId(), Optional.empty());
+    ClassicHttpResponse artifactResponse = ProxyUtil.proxyGet(url, context);
+    return updateResourceInclusionInfo(resource, inclusionSubgraphSession, artifactResponse);
+  }
+
+  static boolean updateResourceInclusionInfo(FolderServerResourceExtract resource,
+                                             InclusionSubgraphServiceSession inclusionSubgraphSession,
+                                             ClassicHttpResponse artifactResponse) throws CedarProcessingException {
+    try (artifactResponse) {
+      int status = artifactResponse.getCode();
+      HttpEntity entity = artifactResponse.getEntity();
+      if (status != HttpStatus.SC_OK || entity == null) {
+        log.warn("Leaving the inclusion arcs of {} as they are because the artifact server answered {}",
+            resource.getId(), status);
+        EntityUtils.consume(entity);
+        return false;
+      }
+      JsonNode entityJsonNode = JsonMapper.MAPPER.readTree(entity.getContent());
       updateResourceInclusionInfo(resource, inclusionSubgraphSession, entityJsonNode);
-    } catch (CedarProcessingException e) {
-      log.error("Error while retrieving artifact from artifact server", e);
-      throw e;
+      return true;
     } catch (IOException e) {
-      log.error("Error while processing artifact response from artifact server", e);
-      throw new CedarProcessingException("Error while processing artifact response from artifact server", e);
-    } catch (RuntimeException e) {
-      log.error("Error while processing artifact response from artifact server", e);
-      throw e;
+      throw new CedarProcessingException("Error while reading artifact " + resource.getId()
+          + " from the artifact server", e);
     }
   }
 

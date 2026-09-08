@@ -3,7 +3,12 @@ package org.metadatacenter.server.search.util;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.http.message.BasicClassicHttpResponse;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -35,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class InclusionSubgraphUtilTest {
@@ -52,6 +58,43 @@ class InclusionSubgraphUtilTest {
         () -> InclusionSubgraphUtil.updateResourceInclusionInfo(resource, session, artifact()));
 
     assertEquals("Failed to update inclusion arcs for template-1", failure.getMessage());
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {404, 500, 503})
+  void anAnsweredErrorFromTheArtifactServerLeavesTheArcsUntouched(int status) throws Exception {
+    FolderServerResourceExtract resource = FolderServerResourceExtract.forType(CedarResourceType.ELEMENT);
+    resource.setId("element-1");
+    InclusionSubgraphServiceSession session = mock(InclusionSubgraphServiceSession.class);
+    // A CedarErrorPack: well-formed JSON, and like every error body it has no "properties" member,
+    // so parsed as an artifact it would say "this element includes nothing".
+    ClassicHttpResponse errorPack = new BasicClassicHttpResponse(status);
+    errorPack.setEntity(new StringEntity(
+        "{\"statusCode\":" + status + ",\"status\":\"ERROR\",\"message\":\"not served\"}",
+        ContentType.APPLICATION_JSON));
+
+    assertFalse(InclusionSubgraphUtil.updateResourceInclusionInfo(resource, session, errorPack));
+
+    verifyNoInteractions(session);
+  }
+
+  @Test
+  void aServedArtifactRewritesTheArcsFromItsBody() throws Exception {
+    FolderServerResourceExtract resource = FolderServerResourceExtract.forType(CedarResourceType.TEMPLATE);
+    resource.setId("template-1");
+    InclusionSubgraphServiceSession session = mock(InclusionSubgraphServiceSession.class);
+    when(session.updateInclusionArcs(any(), any())).thenReturn(true);
+    ObjectNode artifact = artifact();
+    artifact.withObject("properties").set("field", component("field-1", CedarConstants.TEMPLATE_FIELD_TYPE_URI));
+    ClassicHttpResponse served = new BasicClassicHttpResponse(200);
+    served.setEntity(new StringEntity(artifact.toString(), ContentType.APPLICATION_JSON));
+
+    assertTrue(InclusionSubgraphUtil.updateResourceInclusionInfo(resource, session, served));
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
+    verify(session).updateInclusionArcs(any(), captor.capture());
+    assertEquals(List.of("field-1"), captor.getValue());
   }
 
   @Test
