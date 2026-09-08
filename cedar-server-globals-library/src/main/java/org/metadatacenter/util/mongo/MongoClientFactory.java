@@ -9,6 +9,7 @@ import org.metadatacenter.config.CedarTestRuntime;
 import org.metadatacenter.config.MongoConnection;
 
 import java.util.Collections;
+import java.util.OptionalLong;
 import java.util.concurrent.TimeUnit;
 
 public class MongoClientFactory {
@@ -22,6 +23,10 @@ public class MongoClientFactory {
   }
 
   public void buildClient() {
+    this.mongoClient = MongoClients.create(buildSettings());
+  }
+
+  MongoClientSettings buildSettings() {
     ServerAddress address = new ServerAddress(mongoConnection.getHost(), mongoConnection.getPort());
     MongoCredential credential = MongoCredential.createScramSha1Credential(
         mongoConnection.getUser(),
@@ -29,18 +34,24 @@ public class MongoClientFactory {
         mongoConnection.getPassword().toCharArray()
     );
 
-    MongoClientSettings.Builder settingsBuilder = MongoClientSettings.builder()
+    OptionalLong testTimeout = CedarTestRuntime.dependencyTimeoutMillis();
+    long serverSelectionTimeout = testTimeout.orElse(mongoConnection.getServerSelectionTimeoutMillis());
+    long connectTimeout = testTimeout.orElse(mongoConnection.getConnectTimeoutMillis());
+    long readTimeout = testTimeout.orElse(mongoConnection.getReadTimeoutMillis());
+    long poolWaitTimeout = testTimeout.orElse(mongoConnection.getPoolWaitTimeoutMillis());
+
+    return MongoClientSettings.builder()
         .applyToClusterSettings(builder -> builder.hosts(Collections.singletonList(address)))
-        .credential(credential);
-
-    CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> {
-      settingsBuilder.applyToClusterSettings(
-          builder -> builder.serverSelectionTimeout(timeout, TimeUnit.MILLISECONDS));
-      settingsBuilder.applyToSocketSettings(
-          builder -> builder.connectTimeout(timeout, TimeUnit.MILLISECONDS));
-    });
-
-    this.mongoClient = MongoClients.create(settingsBuilder.build());
+        .applyToClusterSettings(
+            builder -> builder.serverSelectionTimeout(serverSelectionTimeout, TimeUnit.MILLISECONDS))
+        .applyToSocketSettings(builder -> builder
+            .connectTimeout(connectTimeout, TimeUnit.MILLISECONDS)
+            .readTimeout(readTimeout, TimeUnit.MILLISECONDS))
+        .applyToConnectionPoolSettings(builder -> builder
+            .maxWaitTime(poolWaitTimeout, TimeUnit.MILLISECONDS)
+            .maxSize(mongoConnection.getMaxPoolSize()))
+        .credential(credential)
+        .build();
   }
 
   public MongoClient getClient() {
