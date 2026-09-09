@@ -24,7 +24,7 @@ public class FolderServerCategoryCurrentUserReport extends FolderServerCategory 
 
   public static FolderServerCategoryCurrentUserReport fromCategory(FolderServerCategory category) {
     try {
-      String s = JsonMapper.MAPPER.writeValueAsString(category);
+      String s = JsonMapper.STRICT_MAPPER.writeValueAsString(category);
       FolderServerCategoryCurrentUserReport report =
           JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerCategoryCurrentUserReport.class);
       report.setRoot(category.getParentCategoryId() == null);

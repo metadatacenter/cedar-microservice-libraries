@@ -45,7 +45,7 @@ class GenericLDDaoMongoDBTest {
         .append(GenericLDDaoMongoDB.INTERNAL_REVISION_FIELD, 3L));
 
     GenericLDDaoMongoDB dao = new GenericLDDaoMongoDB(client, "test-db", "artifacts");
-    JsonNode submitted = JsonMapper.MAPPER.readTree("""
+    JsonNode submitted = JsonMapper.STRICT_MAPPER.readTree("""
         {"@id":"artifact-id","schema:name":"first writer"}
         """);
 
@@ -90,7 +90,7 @@ class GenericLDDaoMongoDBTest {
             new BsonDocument()), new ServerAddress()));
 
     GenericLDDaoMongoDB dao = new GenericLDDaoMongoDB(client, "test-db", "artifacts");
-    JsonNode submitted = JsonMapper.MAPPER.readTree("""
+    JsonNode submitted = JsonMapper.STRICT_MAPPER.readTree("""
         {"@id":"artifact-id","schema:name":"second writer"}
         """);
 
@@ -111,7 +111,7 @@ class GenericLDDaoMongoDBTest {
         new WriteError(121, "Document failed validation", new BsonDocument()), new ServerAddress()));
 
     GenericLDDaoMongoDB dao = new GenericLDDaoMongoDB(client, "test-db", "artifacts");
-    JsonNode submitted = JsonMapper.MAPPER.readTree("""
+    JsonNode submitted = JsonMapper.STRICT_MAPPER.readTree("""
         {"@id":"artifact-id","schema:name":"writer"}
         """);
 

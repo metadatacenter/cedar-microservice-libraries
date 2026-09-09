@@ -35,7 +35,7 @@ public class ArtifactYamlTranscoderConversionTest {
 
     String json = ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.TEMPLATE);
 
-    JsonNode node = JsonMapper.MAPPER.readTree(json);
+    JsonNode node = JsonMapper.STRICT_MAPPER.readTree(json);
     assertEquals("https://repo.metadatacenter.org/templates/7b8977ed-c4d7-4c29-b202-53e38a41c723",
         node.get("@id").asText());
     assertEquals("Simple Template", node.get("schema:name").asText());
@@ -45,7 +45,7 @@ public class ArtifactYamlTranscoderConversionTest {
 
   @Test
   public void templateJsonConvertsToYaml() throws IOException {
-    JsonNode template = JsonMapper.MAPPER.readTree(readFixture("SimpleTemplate.json"));
+    JsonNode template = JsonMapper.STRICT_MAPPER.readTree(readFixture("SimpleTemplate.json"));
 
     String yaml = ArtifactYamlTranscoder.jsonToYaml(template, CedarResourceType.TEMPLATE, false);
 
@@ -55,11 +55,11 @@ public class ArtifactYamlTranscoderConversionTest {
 
   @Test
   public void templateJsonSurvivesYamlRoundTrip() throws IOException {
-    JsonNode original = JsonMapper.MAPPER.readTree(readFixture("SimpleTemplate.json"));
+    JsonNode original = JsonMapper.STRICT_MAPPER.readTree(readFixture("SimpleTemplate.json"));
 
     String yaml = ArtifactYamlTranscoder.jsonToYaml(original, CedarResourceType.TEMPLATE, false);
     JsonNode roundTripped =
-        JsonMapper.MAPPER.readTree(ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.TEMPLATE));
+        JsonMapper.STRICT_MAPPER.readTree(ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.TEMPLATE));
 
     assertEquals(original.get("@id"), roundTripped.get("@id"));
     assertEquals(original.get("schema:name"), roundTripped.get("schema:name"));
@@ -69,11 +69,11 @@ public class ArtifactYamlTranscoderConversionTest {
 
   @Test
   public void elementJsonSurvivesYamlRoundTrip() throws IOException {
-    JsonNode original = JsonMapper.MAPPER.readTree(readFixture("element-001.json"));
+    JsonNode original = JsonMapper.STRICT_MAPPER.readTree(readFixture("element-001.json"));
 
     String yaml = ArtifactYamlTranscoder.jsonToYaml(original, CedarResourceType.ELEMENT, false);
     JsonNode roundTripped =
-        JsonMapper.MAPPER.readTree(ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.ELEMENT));
+        JsonMapper.STRICT_MAPPER.readTree(ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.ELEMENT));
 
     assertEquals(original.get("@id"), roundTripped.get("@id"));
     assertEquals(original.get("schema:name"), roundTripped.get("schema:name"));
@@ -81,11 +81,11 @@ public class ArtifactYamlTranscoderConversionTest {
 
   @Test
   public void fieldJsonSurvivesYamlRoundTrip() throws IOException {
-    JsonNode original = JsonMapper.MAPPER.readTree(readFixture("StandaloneField.json"));
+    JsonNode original = JsonMapper.STRICT_MAPPER.readTree(readFixture("StandaloneField.json"));
 
     String yaml = ArtifactYamlTranscoder.jsonToYaml(original, CedarResourceType.FIELD, false);
     JsonNode roundTripped =
-        JsonMapper.MAPPER.readTree(ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.FIELD));
+        JsonMapper.STRICT_MAPPER.readTree(ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.FIELD));
 
     assertEquals(original.get("@id"), roundTripped.get("@id"));
     assertEquals(original.get("schema:name"), roundTripped.get("schema:name"));
@@ -93,11 +93,11 @@ public class ArtifactYamlTranscoderConversionTest {
 
   @Test
   public void instanceJsonSurvivesYamlRoundTrip() throws IOException {
-    JsonNode original = JsonMapper.MAPPER.readTree(readFixture("SimpleInstance.json"));
+    JsonNode original = JsonMapper.STRICT_MAPPER.readTree(readFixture("SimpleInstance.json"));
 
     String yaml = ArtifactYamlTranscoder.jsonToYaml(original, CedarResourceType.INSTANCE, false);
     JsonNode roundTripped =
-        JsonMapper.MAPPER.readTree(ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.INSTANCE));
+        JsonMapper.STRICT_MAPPER.readTree(ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.INSTANCE));
 
     assertEquals(original.get("@id"), roundTripped.get("@id"));
     assertEquals(original.get("schema:isBasedOn"), roundTripped.get("schema:isBasedOn"));
@@ -105,7 +105,7 @@ public class ArtifactYamlTranscoderConversionTest {
 
   @Test
   public void compactYamlIsShorterThanFullYaml() throws IOException {
-    JsonNode template = JsonMapper.MAPPER.readTree(readFixture("SimpleTemplate.json"));
+    JsonNode template = JsonMapper.STRICT_MAPPER.readTree(readFixture("SimpleTemplate.json"));
 
     String full = ArtifactYamlTranscoder.jsonToYaml(template, CedarResourceType.TEMPLATE, false);
     String compact = ArtifactYamlTranscoder.jsonToYaml(template, CedarResourceType.TEMPLATE, true);
@@ -131,7 +131,7 @@ public class ArtifactYamlTranscoderConversionTest {
 
     String json = ArtifactYamlTranscoder.yamlToJsonString(minimal, CedarResourceType.TEMPLATE);
 
-    JsonNode node = JsonMapper.MAPPER.readTree(json);
+    JsonNode node = JsonMapper.STRICT_MAPPER.readTree(json);
     assertEquals("Minimal Study", node.get("schema:name").asText());
   }
 
@@ -139,7 +139,7 @@ public class ArtifactYamlTranscoderConversionTest {
   public void compactYamlIsRejected() throws IOException {
     // The compact form keeps the id but strips the system-recorded keys; storing it would
     // silently regenerate that content.
-    JsonNode template = JsonMapper.MAPPER.readTree(readFixture("SimpleTemplate.json"));
+    JsonNode template = JsonMapper.STRICT_MAPPER.readTree(readFixture("SimpleTemplate.json"));
     String compact = ArtifactYamlTranscoder.jsonToYaml(template, CedarResourceType.TEMPLATE, true);
 
     try {

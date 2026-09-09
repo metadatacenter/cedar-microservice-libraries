@@ -156,7 +156,7 @@ public class NodeIndexingService extends AbstractIndexingService {
     log.debug("Indexing resource (id = " + resource.getId() + ")");
     IndexingDocumentDocument ir = createIndexDocument(resource, permissions, categories, requestContext,
         isIndexRegenerationTask);
-    JsonNode jsonResource = JsonMapper.MAPPER.convertValue(ir, JsonNode.class);
+    JsonNode jsonResource = JsonMapper.STRICT_MAPPER.convertValue(ir, JsonNode.class);
     // Index under the CEDAR id, so re-indexing replaces the resource's document in place
     return indexWorker.addToIndex(jsonResource, resource.getId());
   }

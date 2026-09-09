@@ -55,7 +55,7 @@ public class ExtractionUtils {
     if (statusCode == HttpConstants.OK && entity != null) {
       try {
         String artifactString = EntityUtils.toString(entity, StandardCharsets.UTF_8);
-        return Optional.of(JsonMapper.MAPPER.readTree(artifactString));
+        return Optional.of(JsonMapper.STRICT_MAPPER.readTree(artifactString));
       } catch (IOException | ParseException e) {
         throw new CedarProcessingException("Error when reading artifact as Json: " + artifactId);
       }

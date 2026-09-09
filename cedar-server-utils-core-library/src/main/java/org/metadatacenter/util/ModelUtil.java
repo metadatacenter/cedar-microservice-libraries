@@ -328,7 +328,7 @@ public class ModelUtil {
   public static String extractDOIFromResourceContent(String content, CedarResourceType resourceType) throws CedarProcessingException {
     String doiInRequest = null;
     try {
-      JsonNode folderServerNodeRequest = JsonMapper.MAPPER.readTree(content);
+      JsonNode folderServerNodeRequest = JsonMapper.STRICT_MAPPER.readTree(content);
       if (resourceType.supportsDOI()) {
         JsonPointerValuePair doiPair = ModelUtil.extractDOIFromResource(folderServerNodeRequest);
         doiInRequest = doiPair.getValue();

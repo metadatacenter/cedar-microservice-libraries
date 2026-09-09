@@ -28,7 +28,7 @@ class RequestBodyConversionTest {
   @Test
   @DisplayName("A JSON body of the wrong shape is a 400 that names the type")
   void wrongShapeIsABadRequest() throws Exception {
-    JsonNode body = JsonMapper.MAPPER.readTree("{\"groupId\": \"g1\", \"unexpected\": true}");
+    JsonNode body = JsonMapper.STRICT_MAPPER.readTree("{\"groupId\": \"g1\", \"unexpected\": true}");
     CedarException e = assertThrows(CedarAssertionException.class,
         () -> new HttpRequestJsonBody(body).convert(GroupUsers.class));
     assertEquals(CedarResponseStatus.BAD_REQUEST, e.getErrorPack().getStatus());
@@ -40,7 +40,7 @@ class RequestBodyConversionTest {
   @Test
   @DisplayName("A body of the right shape converts")
   void rightShapeConverts() throws Exception {
-    JsonNode body = JsonMapper.MAPPER.readTree("{\"groupId\": \"g1\"}");
+    JsonNode body = JsonMapper.STRICT_MAPPER.readTree("{\"groupId\": \"g1\"}");
     assertEquals("g1", new HttpRequestJsonBody(body).convert(GroupUsers.class).groupId);
   }
 

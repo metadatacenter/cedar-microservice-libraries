@@ -52,7 +52,7 @@ public abstract class FileSystemResource extends AbstractCedarResourceWithDates 
   public static FileSystemResource fromNodeExtract(FolderServerResourceExtract node) {
     try {
       return JsonMapper.TOLERANT_MAPPER.readValue(
-          JsonMapper.MAPPER.writeValueAsString(node), FileSystemResource.class);
+          JsonMapper.STRICT_MAPPER.writeValueAsString(node), FileSystemResource.class);
     } catch (IOException e) {
       log.error("Error while converting the resource extract to a FileSystemResource", e);
     }

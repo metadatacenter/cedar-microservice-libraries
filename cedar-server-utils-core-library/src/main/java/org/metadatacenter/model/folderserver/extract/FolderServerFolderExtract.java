@@ -28,7 +28,7 @@ public class FolderServerFolderExtract extends FolderServerResourceExtract imple
   public static FolderServerFolderExtract fromFolder(FolderServerFolder folder) {
     try {
       return JsonMapper.TOLERANT_MAPPER.readValue(
-          JsonMapper.MAPPER.writeValueAsString(folder), FolderServerFolderExtract.class);
+          JsonMapper.STRICT_MAPPER.writeValueAsString(folder), FolderServerFolderExtract.class);
     } catch (IOException e) {
       log.error("Error while converting the folder to a folder extract", e);
     }

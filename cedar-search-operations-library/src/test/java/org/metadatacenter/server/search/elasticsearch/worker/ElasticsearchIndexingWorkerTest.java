@@ -107,7 +107,7 @@ class ElasticsearchIndexingWorkerTest {
   void indexingAResourceAddressesItsOwnDocumentSoAReindexReplacesInPlace() throws Exception {
     stubIndexResponse(RestStatus.CREATED, "resource-1");
 
-    worker.addToIndex(JsonMapper.MAPPER.createObjectNode(), "resource-1");
+    worker.addToIndex(JsonMapper.STRICT_MAPPER.createObjectNode(), "resource-1");
 
     ArgumentCaptor<IndexRequest> request = ArgumentCaptor.forClass(IndexRequest.class);
     verify(client).index(request.capture(), any(RequestOptions.class));
@@ -122,7 +122,7 @@ class ElasticsearchIndexingWorkerTest {
   void replacingAnExistingDocumentIsSuccessNotFailure() throws Exception {
     stubIndexResponse(RestStatus.OK, "resource-1");
 
-    assertDoesNotThrow(() -> worker.addToIndex(JsonMapper.MAPPER.createObjectNode(), "resource-1"));
+    assertDoesNotThrow(() -> worker.addToIndex(JsonMapper.STRICT_MAPPER.createObjectNode(), "resource-1"));
   }
 
   /**
@@ -133,7 +133,7 @@ class ElasticsearchIndexingWorkerTest {
   void indexingWithoutACedarIdLeavesTheIdToTheBackend() throws Exception {
     stubIndexResponse(RestStatus.CREATED, "generated-id");
 
-    worker.addToIndex(JsonMapper.MAPPER.createObjectNode());
+    worker.addToIndex(JsonMapper.STRICT_MAPPER.createObjectNode());
 
     ArgumentCaptor<IndexRequest> request = ArgumentCaptor.forClass(IndexRequest.class);
     verify(client).index(request.capture(), any(RequestOptions.class));

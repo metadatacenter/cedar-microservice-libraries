@@ -29,8 +29,8 @@ public class InclusionSubgraphElement extends InclusionSubgraphNode {
 
   public static InclusionSubgraphElement fromFolderServerElement(FolderServerElement element) {
     try {
-      String s = JsonMapper.MAPPER.writeValueAsString(element);
-      InclusionSubgraphElement inclusionSubgraphElement = JsonMapper.MAPPER.readValue(s, InclusionSubgraphElement.class);
+      String s = JsonMapper.STRICT_MAPPER.writeValueAsString(element);
+      InclusionSubgraphElement inclusionSubgraphElement = JsonMapper.STRICT_MAPPER.readValue(s, InclusionSubgraphElement.class);
       return inclusionSubgraphElement;
     } catch (IOException e) {
       log.error("Error while converting the element to an inclusion subgraph element", e);

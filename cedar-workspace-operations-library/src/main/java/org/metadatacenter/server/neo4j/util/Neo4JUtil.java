@@ -24,7 +24,7 @@ public class Neo4JUtil {
   }
 
   public static JsonNode unescapeTopLevelPropertyNames(JsonNode node) {
-    ObjectNode r = JsonMapper.MAPPER.createObjectNode();
+    ObjectNode r = JsonMapper.STRICT_MAPPER.createObjectNode();
     Iterator<Map.Entry<String, JsonNode>> nodes = node.fields();
     while (nodes.hasNext()) {
       Map.Entry<String, JsonNode> entry = nodes.next();

@@ -178,7 +178,7 @@ public final class ArtifactYamlTranscoder {
           completed(reader.readTemplateInstanceArtifact(yamlMap), templateResolver));
       default -> throw new IllegalArgumentException("YAML is not supported for resource type: " + resourceType);
     };
-    return JsonMapper.MAPPER.writeValueAsString(rendered);
+    return JsonMapper.STRICT_MAPPER.writeValueAsString(rendered);
   }
 
   private static TemplateInstanceArtifact completed(TemplateInstanceArtifact instance,

@@ -43,7 +43,7 @@ public class HttpRequestJsonBody implements CedarRequestBody {
   @Override
   public String asJsonString() throws CedarProcessingException {
     try {
-      return JsonMapper.MAPPER.writeValueAsString(bodyNode);
+      return JsonMapper.STRICT_MAPPER.writeValueAsString(bodyNode);
     } catch (JsonProcessingException e) {
       throw new CedarProcessingException(e);
     }
@@ -52,7 +52,7 @@ public class HttpRequestJsonBody implements CedarRequestBody {
   @Override
   public <T> T convert(Class<T> type) throws CedarException {
     try {
-      return JsonMapper.MAPPER.treeToValue(bodyNode, type);
+      return JsonMapper.STRICT_MAPPER.treeToValue(bodyNode, type);
     } catch (JsonProcessingException e) {
       // The body parsed as JSON, so this is a shape the endpoint does not accept: an unknown key, a
       // value of the wrong type. That is the caller's to fix, and Jackson's message says which.

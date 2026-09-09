@@ -29,7 +29,7 @@ public final class OpenApiErrorContract {
    */
   public static void assertDocumented(InputStream input, String... intentionalExceptions) throws IOException {
     Assertions.assertNotNull(input, "generated OpenAPI document");
-    JsonNode spec = JsonMapper.MAPPER.readTree(input);
+    JsonNode spec = JsonMapper.STRICT_MAPPER.readTree(input);
     Assertions.assertTrue(spec.at("/components/schemas/CedarError").isObject(), "CedarError schema");
     Set<String> exceptions = new LinkedHashSet<>(Set.of(intentionalExceptions));
 

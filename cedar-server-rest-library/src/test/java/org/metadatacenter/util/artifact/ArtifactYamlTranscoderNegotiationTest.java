@@ -145,7 +145,7 @@ public class ArtifactYamlTranscoderNegotiationTest {
 
   @Test
   public void anErrorKeepsItsJsonAndItsStatus() {
-    Response built = Response.status(404).entity(JsonMapper.MAPPER.createObjectNode()
+    Response built = Response.status(404).entity(JsonMapper.STRICT_MAPPER.createObjectNode()
         .put("errorKey", "artifactNotFound")).build();
 
     Response negotiated = ArtifactYamlTranscoder.negotiatedArtifactResponse(
@@ -157,7 +157,7 @@ public class ArtifactYamlTranscoderNegotiationTest {
 
   @Test
   public void anArtifactTheModelCanNotReadFallsBackToJson() {
-    Response built = Response.ok().entity(JsonMapper.MAPPER.createObjectNode().put("not", "an artifact")).build();
+    Response built = Response.ok().entity(JsonMapper.STRICT_MAPPER.createObjectNode().put("not", "an artifact")).build();
 
     Response negotiated = ArtifactYamlTranscoder.negotiatedArtifactResponse(
         built, CedarResourceType.TEMPLATE, Optional.of(YAML));

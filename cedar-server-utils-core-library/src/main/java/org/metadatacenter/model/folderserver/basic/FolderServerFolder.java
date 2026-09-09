@@ -34,7 +34,7 @@ public class FolderServerFolder extends FileSystemResource implements ResourceWi
 
   public static FolderServerFolder fromFolderServerFolderCurrentUserReport(FolderServerFolderCurrentUserReport folder) {
     try {
-      String s = JsonMapper.MAPPER.writeValueAsString(folder);
+      String s = JsonMapper.STRICT_MAPPER.writeValueAsString(folder);
       return JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerFolder.class);
     } catch (IOException e) {
       log.error("Error while converting the current-user report to a FolderServerFolder", e);

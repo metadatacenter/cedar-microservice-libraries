@@ -69,7 +69,7 @@ public class InclusionSubgraphUtil {
         EntityUtils.consume(entity);
         return false;
       }
-      JsonNode entityJsonNode = JsonMapper.MAPPER.readTree(entity.getContent());
+      JsonNode entityJsonNode = JsonMapper.STRICT_MAPPER.readTree(entity.getContent());
       updateResourceInclusionInfo(resource, inclusionSubgraphSession, entityJsonNode);
       return true;
     } catch (IOException e) {

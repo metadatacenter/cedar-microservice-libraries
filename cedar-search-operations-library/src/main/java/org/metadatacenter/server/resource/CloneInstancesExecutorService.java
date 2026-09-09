@@ -213,7 +213,7 @@ public class CloneInstancesExecutorService {
       int statusCode = proxyResponse.getCode();
       if (entity != null) {
         originalDocument = EntityUtils.toString(entity, StandardCharsets.UTF_8);
-        JsonNode jsonNode = JsonMapper.MAPPER.readTree(originalDocument);
+        JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(originalDocument);
         ((ObjectNode) jsonNode).remove("@id");
         ((ObjectNode) jsonNode).put(SCHEMA_IS_BASED_ON, newTemplateId.getId());
         if (jsonNode.get(SCHEMA_ORG_IDENTIFIER) != null) {
@@ -241,7 +241,7 @@ public class CloneInstancesExecutorService {
         HttpEntity entity = templateProxyResponse.getEntity();
         Header locationHeader = templateProxyResponse.getFirstHeader(HttpHeaders.LOCATION);
         String entityContent = EntityUtils.toString(entity, StandardCharsets.UTF_8);
-        JsonNode jsonNode = JsonMapper.MAPPER.readTree(entityContent);
+        JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(entityContent);
         String createdId = jsonNode.get("@id").asText();
         CedarArtifactId newInstanceId = CedarArtifactId.build(createdId, resourceType);
 

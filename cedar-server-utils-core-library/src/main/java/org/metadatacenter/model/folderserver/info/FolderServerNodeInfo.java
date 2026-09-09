@@ -48,7 +48,7 @@ public class FolderServerNodeInfo implements ResourceWithVersionData, ResourceWi
   public static FolderServerNodeInfo fromNode(FileSystemResource node) {
     try {
       FolderServerNodeInfo info = JsonMapper.TOLERANT_MAPPER.readValue(
-          JsonMapper.MAPPER.writeValueAsString(node), FolderServerNodeInfo.class);
+          JsonMapper.STRICT_MAPPER.writeValueAsString(node), FolderServerNodeInfo.class);
       info.setType(node.getType());
       if (node.getPathInfo() != null && node.getPathInfo().size() > 1) {
         info.setParentFolderId(node.getPathInfo().get(node.getPathInfo().size()-2).getId());

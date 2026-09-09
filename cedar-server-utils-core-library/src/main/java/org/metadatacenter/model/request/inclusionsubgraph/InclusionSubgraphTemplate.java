@@ -24,8 +24,8 @@ public class InclusionSubgraphTemplate extends InclusionSubgraphNode {
 
   public static InclusionSubgraphTemplate fromFolderServerTemplate(FolderServerTemplate template) {
     try {
-      String s = JsonMapper.MAPPER.writeValueAsString(template);
-      InclusionSubgraphTemplate inclusionSubgraphTemplate = JsonMapper.MAPPER.readValue(s, InclusionSubgraphTemplate.class);
+      String s = JsonMapper.STRICT_MAPPER.writeValueAsString(template);
+      InclusionSubgraphTemplate inclusionSubgraphTemplate = JsonMapper.STRICT_MAPPER.readValue(s, InclusionSubgraphTemplate.class);
       return inclusionSubgraphTemplate;
     } catch (IOException e) {
       log.error("Error while converting the template to an inclusion subgraph template", e);

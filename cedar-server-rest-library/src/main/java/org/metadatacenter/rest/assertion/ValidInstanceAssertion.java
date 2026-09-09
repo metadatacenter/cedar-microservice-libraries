@@ -52,8 +52,8 @@ public class ValidInstanceAssertion implements CedarAssertion {
 
   private ValidationReport validateInstancePayload(String payload) throws CedarProcessingException {
     try {
-      JsonNode metadata = JsonMapper.MAPPER.readTree(payload);
-      JsonNode template = JsonMapper.MAPPER.readTree(templateString);
+      JsonNode metadata = JsonMapper.STRICT_MAPPER.readTree(payload);
+      JsonNode template = JsonMapper.STRICT_MAPPER.readTree(templateString);
       return new CedarValidator().validateTemplateInstance(metadata, template);
     } catch (IOException e) {
       throw new CedarProcessingException(e);

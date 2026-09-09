@@ -197,7 +197,7 @@ public class ProxyUtil {
     HttpEntity proxyEntity = proxyResponse.getEntity();
     try {
       String proxyString = EntityUtils.toString(proxyEntity, CharEncoding.UTF_8);
-      return JsonMapper.MAPPER.readTree(proxyString);
+      return JsonMapper.STRICT_MAPPER.readTree(proxyString);
     } catch (IOException | ParseException e) {
       throw new CedarProcessingException(e);
     }

@@ -57,7 +57,7 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
       keyMap.put(key.getKey(), key);
     }
     try {
-      params.put(NodeProperty.API_KEY_MAP, JsonMapper.MAPPER.writeValueAsString(keyMap));
+      params.put(NodeProperty.API_KEY_MAP, JsonMapper.STRICT_MAPPER.writeValueAsString(keyMap));
     } catch (JsonProcessingException e) {
       throw new CedarProcessingException(e);
     }
@@ -71,7 +71,7 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
     params.put(NodeProperty.PERMISSIONS, user.getPermissions());
 
     try {
-      params.put(NodeProperty.UI_PREFERENCES, JsonMapper.MAPPER.writeValueAsString(user.getUiPreferences()));
+      params.put(NodeProperty.UI_PREFERENCES, JsonMapper.STRICT_MAPPER.writeValueAsString(user.getUiPreferences()));
     } catch (JsonProcessingException e) {
       throw new CedarProcessingException(e);
     }
@@ -102,7 +102,7 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
       throws CedarProcessingException {
     CypherParameters params = touchUser(userId);
     try {
-      params.put(NodeProperty.UI_PREFERENCES, JsonMapper.MAPPER.writeValueAsString(uiPreferences));
+      params.put(NodeProperty.UI_PREFERENCES, JsonMapper.STRICT_MAPPER.writeValueAsString(uiPreferences));
     } catch (JsonProcessingException e) {
       throw new CedarProcessingException(e);
     }
@@ -147,7 +147,7 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
     }
     params.put(NodeProperty.API_KEYS, justKeys);
     try {
-      params.put(NodeProperty.API_KEY_MAP, JsonMapper.MAPPER.writeValueAsString(keyMap));
+      params.put(NodeProperty.API_KEY_MAP, JsonMapper.STRICT_MAPPER.writeValueAsString(keyMap));
     } catch (JsonProcessingException e) {
       throw new CedarProcessingException(e);
     }

@@ -72,7 +72,7 @@ class ModelUtilTest {
   @ParameterizedTest
   @MethodSource("metadataExtractors")
   void extractsAndTrimsTextMetadata(String property, Function<JsonNode, JsonPointerValuePair> extractor) throws Exception {
-    JsonNode resource = JsonMapper.MAPPER.readTree("{\"" + property + "\":\"  expected value  \"}");
+    JsonNode resource = JsonMapper.STRICT_MAPPER.readTree("{\"" + property + "\":\"  expected value  \"}");
 
     JsonPointerValuePair pair = extractor.apply(resource);
 
@@ -84,7 +84,7 @@ class ModelUtilTest {
   @MethodSource("metadataExtractors")
   void missingMetadataReturnsThePointerWithoutInventingAValue(String ignoredProperty,
                                                                Function<JsonNode, JsonPointerValuePair> extractor) throws Exception {
-    JsonPointerValuePair pair = extractor.apply(JsonMapper.MAPPER.readTree("{}"));
+    JsonPointerValuePair pair = extractor.apply(JsonMapper.STRICT_MAPPER.readTree("{}"));
 
     assertNull(pair.getValue());
     assertTrue(pair.getPointer().startsWith("/"));
@@ -95,14 +95,14 @@ class ModelUtilTest {
   void nullObjectAndNumericMetadataAreSafelyIgnored(String property,
                                                      Function<JsonNode, JsonPointerValuePair> extractor) throws Exception {
     for (String value : new String[]{"null", "{}", "42"}) {
-      JsonNode resource = JsonMapper.MAPPER.readTree("{\"" + property + "\":" + value + "}");
+      JsonNode resource = JsonMapper.STRICT_MAPPER.readTree("{\"" + property + "\":" + value + "}");
       assertNull(extractor.apply(resource).getValue());
     }
   }
 
   @Test
   void extractsDoiFromTheAnnotationPath() throws Exception {
-    JsonNode resource = JsonMapper.MAPPER.readTree("""
+    JsonNode resource = JsonMapper.STRICT_MAPPER.readTree("""
         {"_annotations":{"https://datacite.com/doi":{"@id":"  https://doi.org/10.123/example  "}}}
         """);
 
@@ -204,7 +204,7 @@ class ModelUtilTest {
   @Test
   void aChildWithNoStoredCounterpartGetsAFullCreationRecord() throws Exception {
     JsonNode stored = schemaWithProperty("field", STORED_CHILD);
-    JsonNode request = JsonMapper.MAPPER.readTree("{\"properties\":{\"field\":" + STORED_CHILD + ",\"added\":"
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree("{\"properties\":{\"field\":" + STORED_CHILD + ",\"added\":"
         + "{\"type\":\"object\",\"@id\":\"https://repo.example/fields/2\"}}}");
 
     ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
@@ -215,9 +215,9 @@ class ModelUtilTest {
   @Test
   void aSiblingIsNotStampedBecauseAnotherChildChanged() throws Exception {
     String other = STORED_CHILD.replace("fields/1", "fields/2").replace("Original", "Untouched");
-    JsonNode stored = JsonMapper.MAPPER.readTree(
+    JsonNode stored = JsonMapper.STRICT_MAPPER.readTree(
         "{\"properties\":{\"field\":" + STORED_CHILD + ",\"other\":" + other + "}}");
-    JsonNode request = JsonMapper.MAPPER.readTree(
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree(
         "{\"properties\":{\"field\":" + STORED_CHILD.replace("Original", "Renamed") + ",\"other\":" + other + "}}");
 
     ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
@@ -456,7 +456,7 @@ class ModelUtilTest {
       "https://schema.metadatacenter.org/core/TemplateField",
       "https://schema.metadatacenter.org/core/StaticTemplateField"})
   void recognizesEveryChildArtifactTypeTheMetaSchemasAllow(String atType) throws Exception {
-    JsonNode child = JsonMapper.MAPPER.readTree("{\"type\":\"object\",\"@type\":\"" + atType + "\"}");
+    JsonNode child = JsonMapper.STRICT_MAPPER.readTree("{\"type\":\"object\",\"@type\":\"" + atType + "\"}");
 
     assertTrue(ModelUtil.hasRecognisedChildType(child));
   }
@@ -477,7 +477,7 @@ class ModelUtilTest {
       "{\"type\":\"object\",\"@type\":17}",
       "{\"type\":\"object\",\"@type\":\"https://schema.metadatacenter.org/core/Template\"}"})
   void refusesToRecognizeAChildWithoutAUsableType(String candidate) throws Exception {
-    JsonNode child = JsonMapper.MAPPER.readTree(candidate);
+    JsonNode child = JsonMapper.STRICT_MAPPER.readTree(candidate);
 
     assertFalse(ModelUtil.hasRecognisedChildType(child));
   }
@@ -486,7 +486,7 @@ class ModelUtilTest {
   @ValueSource(strings = {"https://repo.metadatacenter.org/template-fields/1",
       "https://other.example/template-fields/1", "urn:uuid:0d1b0b0a-0000-4000-8000-000000000000"})
   void treatsAnAbsoluteIriAsAUsableChildIdentifier(String id) throws Exception {
-    JsonNode child = JsonMapper.MAPPER.readTree("{\"@id\":\"" + id + "\"}");
+    JsonNode child = JsonMapper.STRICT_MAPPER.readTree("{\"@id\":\"" + id + "\"}");
 
     assertTrue(ModelUtil.hasUsableChildId(child));
   }
@@ -495,8 +495,8 @@ class ModelUtilTest {
   @ValueSource(strings = {"tmp-1754932461238-4127", "TMP-123", " tmp-123", "", "   ",
       "foo", "/template-fields/1", "not a uri at all"})
   void treatsAnythingThatIsNotAnAbsoluteIriAsUnusable(String id) throws Exception {
-    JsonNode child = JsonMapper.MAPPER.readTree(JsonMapper.MAPPER.writeValueAsString(
-        JsonMapper.MAPPER.createObjectNode().put("@id", id)));
+    JsonNode child = JsonMapper.STRICT_MAPPER.readTree(JsonMapper.STRICT_MAPPER.writeValueAsString(
+        JsonMapper.STRICT_MAPPER.createObjectNode().put("@id", id)));
 
     assertFalse(ModelUtil.hasUsableChildId(child));
   }
@@ -504,7 +504,7 @@ class ModelUtilTest {
   @ParameterizedTest
   @ValueSource(strings = {"{}", "{\"@id\":null}", "{\"@id\":17}", "{\"@id\":{}}", "{\"@id\":[]}"})
   void treatsAnAbsentOrNonStringIdentifierAsUnusable(String candidate) throws Exception {
-    assertFalse(ModelUtil.hasUsableChildId(JsonMapper.MAPPER.readTree(candidate)));
+    assertFalse(ModelUtil.hasUsableChildId(JsonMapper.STRICT_MAPPER.readTree(candidate)));
   }
 
   @Test
@@ -559,7 +559,7 @@ class ModelUtilTest {
 
   @Test
   void doesNothingWhenPropertiesAreAbsent() throws Exception {
-    JsonNode schema = JsonMapper.MAPPER.readTree("{\"type\":\"object\"}");
+    JsonNode schema = JsonMapper.STRICT_MAPPER.readTree("{\"type\":\"object\"}");
 
     ModelUtil.ensureFieldIdsRecursively(schema, provenance, new ProvenanceUtil(), linkedDataUtil);
 
@@ -567,7 +567,7 @@ class ModelUtilTest {
   }
 
   private static JsonNode schemaWithProperty(String name, String candidate) throws Exception {
-    return JsonMapper.MAPPER.readTree("{\"properties\":{\"" + name + "\":" + candidate + "}}");
+    return JsonMapper.STRICT_MAPPER.readTree("{\"properties\":{\"" + name + "\":" + candidate + "}}");
   }
 
   private void assertCreationProvenance(JsonNode field) {

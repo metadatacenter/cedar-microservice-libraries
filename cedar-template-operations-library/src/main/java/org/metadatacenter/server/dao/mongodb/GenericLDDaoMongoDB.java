@@ -63,7 +63,7 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
   public JsonNode create(JsonNode element) throws IOException {
     // Adapts all keys not accepted by MongoDB
     JsonNode fixedElement = jsonUtils.fixMongoDB(element, FixMongoDirection.WRITE_TO_MONGO);
-    Map<String, Object> elementMap = JsonMapper.MAPPER.convertValue(fixedElement, Map.class);
+    Map<String, Object> elementMap = JsonMapper.STRICT_MAPPER.convertValue(fixedElement, Map.class);
     Document elementDoc = new Document(elementMap);
     elementDoc.put(INTERNAL_REVISION_FIELD, 1L);
     try {
@@ -184,7 +184,7 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     }
     // Adapts all keys not accepted by MongoDB
     content = jsonUtils.fixMongoDB(content, FixMongoDirection.WRITE_TO_MONGO);
-    Map<String, Object> contentMap = JsonMapper.MAPPER.convertValue(content, Map.class);
+    Map<String, Object> contentMap = JsonMapper.STRICT_MAPPER.convertValue(content, Map.class);
     Document contentDocument = new Document(contentMap);
     contentDocument.put(INTERNAL_REVISION_FIELD, Math.addExact(expectedRevision, 1L));
     Bson revisionFilter = expectedRevision == 0L
@@ -204,7 +204,7 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
   private JsonNode toPublicJson(Document storedDocument) throws IOException {
     Document publicDocument = new Document(storedDocument);
     publicDocument.remove(INTERNAL_REVISION_FIELD);
-    return jsonUtils.fixMongoDB(JsonMapper.MAPPER.readTree(publicDocument.toJson()),
+    return jsonUtils.fixMongoDB(JsonMapper.STRICT_MAPPER.readTree(publicDocument.toJson()),
         FixMongoDirection.READ_FROM_MONGO);
   }
 

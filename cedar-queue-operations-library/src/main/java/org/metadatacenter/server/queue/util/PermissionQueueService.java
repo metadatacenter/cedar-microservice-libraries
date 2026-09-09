@@ -21,7 +21,7 @@ public class PermissionQueueService extends QueueServiceWithBlockingQueue {
     // SearchPermissionEnqueueService uses the result to retain or remove its durable outbox entry.
     String json;
     try {
-      json = JsonMapper.MAPPER.writeValueAsString(event);
+      json = JsonMapper.STRICT_MAPPER.writeValueAsString(event);
     } catch (JsonProcessingException e) {
       log.error("The permission event could not be serialized. Dropping it.", e);
       return false;

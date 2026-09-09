@@ -67,7 +67,7 @@ public class ElasticsearchIndexingWorker {
       while (again) {
         try {
           IndexRequest indexRequest = new IndexRequest(indexName)
-              .source(JsonMapper.MAPPER.writeValueAsString(json), XContentType.JSON);
+              .source(JsonMapper.STRICT_MAPPER.writeValueAsString(json), XContentType.JSON);
           if (documentId != null) {
             indexRequest.id(documentId);
           }
@@ -188,10 +188,10 @@ public class ElasticsearchIndexingWorker {
     BulkRequest bulkRequest = new BulkRequest();
 
     for (IndexingDocumentDocument ir : currentBatch) {
-      JsonNode jsonResource = JsonMapper.MAPPER.convertValue(ir, JsonNode.class);
+      JsonNode jsonResource = JsonMapper.STRICT_MAPPER.convertValue(ir, JsonNode.class);
       try {
         IndexRequest indexRequest = new IndexRequest(indexName)
-            .source(JsonMapper.MAPPER.writeValueAsString(jsonResource), XContentType.JSON);
+            .source(JsonMapper.STRICT_MAPPER.writeValueAsString(jsonResource), XContentType.JSON);
         // Index under the CEDAR id, so a resource that appears twice in a regeneration run
         // ends up as one document rather than two
         if (ir.getCid() != null) {

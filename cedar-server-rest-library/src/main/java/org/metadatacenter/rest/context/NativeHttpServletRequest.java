@@ -36,7 +36,7 @@ public class NativeHttpServletRequest extends CedarRequestNoun {
           return new HttpRequestEmptyBody();
         }
         pushbackInputStream.unread(b);
-        jsonBodyNode = JsonMapper.MAPPER.readTree(
+        jsonBodyNode = JsonMapper.STRICT_MAPPER.readTree(
             new InputStreamReader(pushbackInputStream, StandardCharsets.UTF_8));
       } catch (Exception e) {
         throw new CedarBadRequestException("There was an error deserializing the request body", e);

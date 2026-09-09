@@ -56,7 +56,7 @@ class FolderServerJsonCompatibilityTest {
   void responseEnvelopeToleranceComesFromTheSelectedMapper() throws Exception {
     FolderServerCategoryListResponse response = new FolderServerCategoryListResponse();
     response.setTotalCount(3);
-    ObjectNode json = (ObjectNode) JsonMapper.MAPPER.valueToTree(response);
+    ObjectNode json = (ObjectNode) JsonMapper.STRICT_MAPPER.valueToTree(response);
     json.put("futurePageProperty", true);
 
     FolderServerCategoryListResponse read = JsonMapper.TOLERANT_MAPPER.treeToValue(
@@ -72,11 +72,11 @@ class FolderServerJsonCompatibilityTest {
     FolderServerTemplate template = new FolderServerTemplate();
     template.setId("https://repo.example/templates/one");
     template.setName("Example template");
-    ObjectNode json = (ObjectNode) JsonMapper.MAPPER.valueToTree(template);
+    ObjectNode json = (ObjectNode) JsonMapper.STRICT_MAPPER.valueToTree(template);
     json.put("futureStoredProperty", true);
 
     FolderServerArtifact read = GraphDbObjectBuilder.artifact(new ByteArrayInputStream(
-        JsonMapper.MAPPER.writeValueAsString(json).getBytes(StandardCharsets.UTF_8)));
+        JsonMapper.STRICT_MAPPER.writeValueAsString(json).getBytes(StandardCharsets.UTF_8)));
 
     assertInstanceOf(FolderServerTemplate.class, read);
     assertEquals("Example template", read.getName());
@@ -87,6 +87,6 @@ class FolderServerJsonCompatibilityTest {
     folder.setId("https://repo.example/folders/one");
     folder.setName("Examples");
     folder.setDescription("Example folder");
-    return (ObjectNode) JsonMapper.MAPPER.valueToTree(folder);
+    return (ObjectNode) JsonMapper.STRICT_MAPPER.valueToTree(folder);
   }
 }

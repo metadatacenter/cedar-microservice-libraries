@@ -127,7 +127,7 @@ public class ElasticsearchManagementService {
     // Put mappings
     if (indexMappings.getDoc() != null) {
       try {
-        String mappingsJson = JsonMapper.MAPPER.writeValueAsString(indexMappings.getDoc());
+        String mappingsJson = JsonMapper.STRICT_MAPPER.writeValueAsString(indexMappings.getDoc());
         createIndexRequest.mapping(mappingsJson, XContentType.JSON);
       } catch (IOException e) {
         throw new CedarProcessingException("Error converting mappings to JSON", e);
