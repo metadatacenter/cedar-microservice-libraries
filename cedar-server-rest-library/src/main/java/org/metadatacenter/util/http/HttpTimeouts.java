@@ -35,20 +35,6 @@ import java.io.IOException;
  */
 public final class HttpTimeouts {
 
-  /** A call a user is waiting on: one CEDAR service reaching the next, or a nearby dependency. */
-  public static final HttpTimeouts INTERACTIVE = new HttpTimeouts(
-      HttpConnectionConstants.CONNECTION_TIMEOUT,
-      HttpConnectionConstants.CONNECTION_LEASE_TIMEOUT,
-      HttpConnectionConstants.SOCKET_TIMEOUT,
-      100, 200);
-
-  /** A call from a job with nobody waiting on it: an import, a reindex, a bulk clone. */
-  public static final HttpTimeouts BATCH = new HttpTimeouts(
-      HttpConnectionConstants.BATCH_CONNECTION_TIMEOUT,
-      HttpConnectionConstants.BATCH_CONNECTION_LEASE_TIMEOUT,
-      HttpConnectionConstants.BATCH_SOCKET_TIMEOUT,
-      10, 20);
-
   /**
    * The only outbound failure worth repeating: a pooled connection the dependency had already
    * closed, which produces no response at all.
@@ -86,6 +72,21 @@ public final class HttpTimeouts {
       return TimeValue.ZERO_MILLISECONDS;
     }
   };
+
+  // Construct shared clients only after ANSWERLESS_CONNECTION has been initialized.
+  /** A call a user is waiting on: one CEDAR service reaching the next, or a nearby dependency. */
+  public static final HttpTimeouts INTERACTIVE = new HttpTimeouts(
+      HttpConnectionConstants.CONNECTION_TIMEOUT,
+      HttpConnectionConstants.CONNECTION_LEASE_TIMEOUT,
+      HttpConnectionConstants.SOCKET_TIMEOUT,
+      100, 200);
+
+  /** A call from a job with nobody waiting on it: an import, a reindex, a bulk clone. */
+  public static final HttpTimeouts BATCH = new HttpTimeouts(
+      HttpConnectionConstants.BATCH_CONNECTION_TIMEOUT,
+      HttpConnectionConstants.BATCH_CONNECTION_LEASE_TIMEOUT,
+      HttpConnectionConstants.BATCH_SOCKET_TIMEOUT,
+      10, 20);
 
   private final Timeout connectTimeout;
   private final Timeout responseTimeout;
