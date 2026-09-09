@@ -101,6 +101,9 @@ public final class HttpTimeouts {
       HttpConnectionConstants.CONNECTION_TIMEOUT, HttpConnectionConstants.CONNECTION_LEASE_TIMEOUT,
       HttpConnectionConstants.SOCKET_TIMEOUT, 100, 200, false);
 
+  /** Credential-preserving internal reads must not follow a downstream redirect. */
+  public static final HttpTimeouts NO_REDIRECT_INTERACTIVE = ANONYMOUS_INTERACTIVE;
+
   private final Timeout connectTimeout;
   private final Timeout responseTimeout;
   private final Executor executor;
