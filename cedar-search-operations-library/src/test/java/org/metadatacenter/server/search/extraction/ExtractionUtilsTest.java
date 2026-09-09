@@ -3,15 +3,13 @@ package org.metadatacenter.server.search.extraction;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.io.entity.StringEntity;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.rest.context.CedarRequestContext;
-import org.metadatacenter.util.http.ProxyUtil;
-import org.mockito.MockedStatic;
+import org.metadatacenter.util.http.ArtifactServiceClient;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
@@ -23,7 +21,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
 /**
@@ -40,29 +37,26 @@ class ExtractionUtilsTest {
 
   private ExtractionUtils extractionUtils;
   private CedarRequestContext requestContext;
-  private MockedStatic<ProxyUtil> proxy;
+  private ArtifactServiceClient proxy;
 
   @BeforeEach
   void setUp() {
     CedarConfig cedarConfig = mock(CedarConfig.class, RETURNS_DEEP_STUBS);
     when(cedarConfig.getMicroserviceUrlUtil().getArtifact().getResourceType(any()))
         .thenReturn("http://artifact/templates");
-    extractionUtils = new ExtractionUtils(cedarConfig);
+    proxy = mock(ArtifactServiceClient.class);
+    extractionUtils = new ExtractionUtils(cedarConfig, proxy);
     requestContext = mock(CedarRequestContext.class);
-    proxy = mockStatic(ProxyUtil.class);
+
   }
 
-  @AfterEach
-  void tearDown() {
-    proxy.close();
-  }
 
   private void stubResponse(int code, String body) throws Exception {
     ClassicHttpResponse response = mock(ClassicHttpResponse.class);
     when(response.getCode()).thenReturn(code);
     when(response.getEntity())
         .thenReturn(body == null ? null : new StringEntity(body, StandardCharsets.UTF_8));
-    proxy.when(() -> ProxyUtil.proxyGet(anyString(), any(CedarRequestContext.class))).thenReturn(response);
+    when(proxy.get(anyString(), any(CedarRequestContext.class))).thenReturn(response);
   }
 
   private Optional<JsonNode> get() throws CedarProcessingException {

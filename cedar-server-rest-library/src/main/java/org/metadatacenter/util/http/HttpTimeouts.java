@@ -88,6 +88,14 @@ public final class HttpTimeouts {
       HttpConnectionConstants.BATCH_SOCKET_TIMEOUT,
       10, 20);
 
+  // Service credentials must never follow a redirect, including one to another path on the host.
+  static final HttpTimeouts ARTIFACT_INTERACTIVE = new HttpTimeouts(
+      HttpConnectionConstants.CONNECTION_TIMEOUT, HttpConnectionConstants.CONNECTION_LEASE_TIMEOUT,
+      HttpConnectionConstants.SOCKET_TIMEOUT, 100, 200, false);
+  static final HttpTimeouts ARTIFACT_BATCH = new HttpTimeouts(
+      HttpConnectionConstants.BATCH_CONNECTION_TIMEOUT, HttpConnectionConstants.BATCH_CONNECTION_LEASE_TIMEOUT,
+      HttpConnectionConstants.BATCH_SOCKET_TIMEOUT, 10, 20, false);
+
   private final Timeout connectTimeout;
   private final Timeout responseTimeout;
   private final Executor executor;
@@ -98,6 +106,11 @@ public final class HttpTimeouts {
    * reason to name its own values.
    */
   HttpTimeouts(int connectMillis, int leaseMillis, int responseMillis, int maxPerRoute, int maxTotal) {
+    this(connectMillis, leaseMillis, responseMillis, maxPerRoute, maxTotal, true);
+  }
+
+  private HttpTimeouts(int connectMillis, int leaseMillis, int responseMillis, int maxPerRoute, int maxTotal,
+                       boolean redirects) {
     this.connectTimeout = Timeout.ofMilliseconds(connectMillis);
     this.responseTimeout = Timeout.ofMilliseconds(responseMillis);
     this.executor = Executor.newInstance(HttpClientBuilder.create()
@@ -110,6 +123,7 @@ public final class HttpTimeouts {
                 .build())
             .build())
         .setDefaultRequestConfig(RequestConfig.custom()
+            .setRedirectsEnabled(redirects)
             .setConnectionRequestTimeout(Timeout.ofMilliseconds(leaseMillis))
             .build())
         .useSystemProperties()

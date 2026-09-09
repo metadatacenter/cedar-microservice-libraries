@@ -114,6 +114,10 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     Map<String, String> environmentSandbox = CedarEnvironmentVariableProvider.getFor(systemComponent);
     // Initialize config
     cedarConfig = CedarConfig.getInstance(environmentSandbox);
+    if (getServerName() == ServerName.ARTIFACT || getServerName() == ServerName.RESOURCE
+        || getServerName() == ServerName.WORKER) {
+      cedarConfig.getArtifactService().requireApiKey();
+    }
 
     initializeWithBootstrap(bootstrap, cedarConfig);
   }

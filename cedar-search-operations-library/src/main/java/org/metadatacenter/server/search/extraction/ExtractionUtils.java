@@ -11,7 +11,7 @@ import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.util.http.CedarUrlUtil;
-import org.metadatacenter.util.http.ProxyUtil;
+import org.metadatacenter.util.http.ArtifactServiceClient;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,9 +28,15 @@ public class ExtractionUtils {
   private static final Logger log = LoggerFactory.getLogger(ExtractionUtils.class);
 
   private final CedarConfig cedarConfig;
+  private final ArtifactServiceClient artifactClient;
 
   public ExtractionUtils(CedarConfig cedarConfig) {
+    this(cedarConfig, new ArtifactServiceClient(cedarConfig));
+  }
+
+  ExtractionUtils(CedarConfig cedarConfig, ArtifactServiceClient artifactClient) {
     this.cedarConfig = cedarConfig;
+    this.artifactClient = artifactClient;
   }
 
   /**
@@ -49,7 +55,7 @@ public class ExtractionUtils {
     String url =
         cedarConfig.getMicroserviceUrlUtil().getArtifact().getResourceType(nodeType) + "/"
             + CedarUrlUtil.urlEncode(artifactId);
-    ClassicHttpResponse proxyResponse = ProxyUtil.proxyGet(url, requestContext);
+    ClassicHttpResponse proxyResponse = artifactClient.get(url, requestContext);
     HttpEntity entity = proxyResponse.getEntity();
     int statusCode = proxyResponse.getCode();
     if (statusCode == HttpConstants.OK && entity != null) {

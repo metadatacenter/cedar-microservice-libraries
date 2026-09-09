@@ -1,5 +1,7 @@
 package org.metadatacenter.server.resource;
 
+import org.metadatacenter.util.http.ArtifactServiceClient;
+
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarFolderId;
@@ -107,7 +109,7 @@ class CloneInstancesExecutorServiceTest {
     when(linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class)).thenReturn(targetFolderId);
     AtomicInteger attempts = new AtomicInteger();
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil) {
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class)) {
       @Override
       protected Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId oldInstanceId,
                                                              CedarTemplateId ignoredNewTemplateId,
@@ -156,7 +158,7 @@ class CloneInstancesExecutorServiceTest {
         .thenReturn(CedarFolderId.build("target-folder"));
 
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil);
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class));
 
     CedarProcessingException error = assertThrows(CedarProcessingException.class,
         () -> service.handleEvent(new CloneInstancesQueueEvent(oldTemplateId, newTemplateId, null)));
@@ -195,7 +197,7 @@ class CloneInstancesExecutorServiceTest {
         .thenReturn(CedarFolderId.build("target-folder"));
 
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil) {
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class)) {
       @Override
       protected Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId ignoredOldInstanceId,
                                                              CedarTemplateId ignoredNewTemplateId,
@@ -221,7 +223,7 @@ class CloneInstancesExecutorServiceTest {
     when(repository.searchIsBasedOn(any(), any(), anyInt(), anyInt(), any())).thenReturn(List.of(ownerless));
 
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), mock(LinkedDataUtil.class));
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), mock(LinkedDataUtil.class), mock(ArtifactServiceClient.class));
 
     // Deterministic per-instance failures: a retry reproduces them, so the job dead-letters once.
     CloneInstancesNotRetryableException error = assertThrows(CloneInstancesNotRetryableException.class,

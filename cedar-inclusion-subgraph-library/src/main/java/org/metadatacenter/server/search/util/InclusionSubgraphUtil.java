@@ -20,7 +20,7 @@ import org.metadatacenter.model.request.inclusionsubgraph.*;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.InclusionSubgraphServiceSession;
 import org.metadatacenter.util.ModelUtil;
-import org.metadatacenter.util.http.ProxyUtil;
+import org.metadatacenter.util.http.ArtifactServiceClient;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +53,7 @@ public class InclusionSubgraphUtil {
       throws CedarProcessingException {
     String url = cedarConfig.getMicroserviceUrlUtil().getArtifact().getArtifactTypeWithId(resource.getType(),
         resource.getId(), Optional.empty());
-    ClassicHttpResponse artifactResponse = ProxyUtil.proxyGet(url, context);
+    ClassicHttpResponse artifactResponse = new ArtifactServiceClient(cedarConfig).get(url, context);
     return updateResourceInclusionInfo(resource, inclusionSubgraphSession, artifactResponse);
   }
 

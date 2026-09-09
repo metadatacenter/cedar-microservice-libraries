@@ -5,7 +5,8 @@ import org.apache.hc.core5.http.HttpEntity;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.rest.context.CedarRequestContext;
-import org.metadatacenter.server.url.MicroserviceUrlUtil;
+import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.util.http.ArtifactServiceClient;
 import org.metadatacenter.util.http.ProxyUtil;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -14,12 +15,12 @@ import java.util.Optional;
 
 public class ArtifactProxy {
 
-  public static Response executeResourceGetByProxyFromArtifactServer(MicroserviceUrlUtil microserviceUrlUtil, HttpServletResponse response, CedarResourceType resourceType, String id,
+  public static Response executeResourceGetByProxyFromArtifactServer(CedarConfig cedarConfig, HttpServletResponse response, CedarResourceType resourceType, String id,
                                                                  Optional<String> format, CedarRequestContext context) throws CedarProcessingException {
     try {
-      String url = microserviceUrlUtil.getArtifact().getArtifactTypeWithId(resourceType, id, format);
+      String url = cedarConfig.getMicroserviceUrlUtil().getArtifact().getArtifactTypeWithId(resourceType, id, format);
       // parameter
-      ClassicHttpResponse proxyResponse = ProxyUtil.proxyGet(url, context);
+      ClassicHttpResponse proxyResponse = new ArtifactServiceClient(cedarConfig).get(url, context);
       if (response != null) {
         ProxyUtil.proxyResponseHeaders(proxyResponse, response);
       }
