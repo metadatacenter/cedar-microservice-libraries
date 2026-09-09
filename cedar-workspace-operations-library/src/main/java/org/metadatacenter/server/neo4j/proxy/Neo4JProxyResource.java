@@ -31,7 +31,7 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
   }
 
   long findFolderContentsCount(CedarFolderId folderId, List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
-                               ResourcePublicationStatusFilter publicationStatus, CedarUserId ownerId) {
+                               ResourcePublicationStatusFilter publicationStatus) {
     String cypher = CypherQueryBuilderFolderContent.getFolderContentsFilteredCountQuery(version, publicationStatus);
     CypherParameters params = CypherParamBuilderFolderContent.getFolderContentsFilteredCountParameters(folderId, resourceTypeList, publicationStatus);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
@@ -72,7 +72,7 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
 
   List<FolderServerResourceExtract> findFolderContentsExtract(CedarFolderId folderId, Collection<CedarResourceType> resourceTypes,
                                                               ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
-                                                              long limit, long offset, List<String> sortList, CedarUserId ownerId) {
+                                                              long limit, long offset, List<String> sortList) {
     String cypher = CypherQueryBuilderFolderContent.getFolderContentsFilteredLookupQuery(sortList, version, publicationStatus);
     CypherParameters params = CypherParamBuilderFolderContent.getFolderContentsFilteredLookupParameters(folderId, resourceTypes, publicationStatus,
         limit, offset);

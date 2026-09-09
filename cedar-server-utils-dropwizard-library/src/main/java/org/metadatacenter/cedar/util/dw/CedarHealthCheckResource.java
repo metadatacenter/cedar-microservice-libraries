@@ -5,11 +5,19 @@ import com.codahale.metrics.health.HealthCheck;
 import com.codahale.metrics.health.HealthCheckRegistry;
 import com.codahale.metrics.json.HealthCheckModule;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
+import org.metadatacenter.util.http.CedarError;
 
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -41,6 +49,8 @@ import static org.metadatacenter.rest.assertion.GenericAssertions.LoggedIn;
  */
 @Path("/healthcheck")
 @Produces(MediaType.APPLICATION_JSON)
+@Tag(name = "Service diagnostics")
+@SecurityRequirement(name = "api_key")
 public class CedarHealthCheckResource extends CedarMicroserviceResource {
 
   private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new HealthCheckModule());
@@ -54,6 +64,17 @@ public class CedarHealthCheckResource extends CedarMicroserviceResource {
 
   @GET
   @Timed
+  @Operation(summary = "Run this service's health checks")
+  @ApiResponses({
+      @ApiResponse(responseCode = "200", description = "Every health check passed",
+          content = @Content(schema = @Schema(type = "object"))),
+      @ApiResponse(responseCode = "401", description = "Unauthorized",
+          content = @Content(schema = @Schema(implementation = CedarError.class))),
+      @ApiResponse(responseCode = "403", description = "Forbidden",
+          content = @Content(schema = @Schema(implementation = CedarError.class))),
+      @ApiResponse(responseCode = "500", description = "At least one health check failed",
+          content = @Content(schema = @Schema(type = "object")))
+  })
   public Response healthCheck() throws CedarException {
     CedarRequestContext c = buildRequestContext();
     c.must(c.user()).be(LoggedIn);

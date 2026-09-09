@@ -1,10 +1,18 @@
 package org.metadatacenter.cedar.util.dw;
 
 import com.codahale.metrics.annotation.Timed;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
+import org.metadatacenter.util.http.CedarError;
 
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -30,6 +38,16 @@ import static org.metadatacenter.rest.assertion.GenericAssertions.LoggedIn;
  */
 @Path("/insight")
 @Produces(MediaType.APPLICATION_JSON)
+@Tag(name = "Service diagnostics")
+@SecurityRequirement(name = "api_key")
+@ApiResponses({
+    @ApiResponse(responseCode = "200", description = "The requested JVM diagnostic report",
+        content = @Content(schema = @Schema(type = "object"))),
+    @ApiResponse(responseCode = "401", description = "Unauthorized",
+        content = @Content(schema = @Schema(implementation = CedarError.class))),
+    @ApiResponse(responseCode = "403", description = "Forbidden",
+        content = @Content(schema = @Schema(implementation = CedarError.class)))
+})
 public class CedarServerInsightReportResource extends CedarMicroserviceResource {
 
   public CedarServerInsightReportResource(CedarConfig cedarConfig) {
@@ -139,6 +157,7 @@ public class CedarServerInsightReportResource extends CedarMicroserviceResource 
   @GET
   @Timed
   @Path("/memory")
+  @Operation(summary = "Report JVM memory use")
   public Response memory() throws CedarException {
     mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();
@@ -149,6 +168,7 @@ public class CedarServerInsightReportResource extends CedarMicroserviceResource 
   @GET
   @Timed
   @Path("/system")
+  @Operation(summary = "Report operating-system information")
   public Response system() throws CedarException {
     mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();
@@ -159,6 +179,7 @@ public class CedarServerInsightReportResource extends CedarMicroserviceResource 
   @GET
   @Timed
   @Path("/threads")
+  @Operation(summary = "Report JVM thread counts")
   public Response threads() throws CedarException {
     mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();
@@ -169,6 +190,7 @@ public class CedarServerInsightReportResource extends CedarMicroserviceResource 
   @GET
   @Timed
   @Path("/gc")
+  @Operation(summary = "Report JVM garbage-collection counts")
   public Response gc() throws CedarException {
     mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();
@@ -179,6 +201,7 @@ public class CedarServerInsightReportResource extends CedarMicroserviceResource 
   @GET
   @Timed
   @Path("/thread-details")
+  @Operation(summary = "Report details and stack traces for every JVM thread")
   public Response threadDetails() throws CedarException {
     mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();
@@ -189,6 +212,7 @@ public class CedarServerInsightReportResource extends CedarMicroserviceResource 
   @GET
   @Timed
   @Path("/full")
+  @Operation(summary = "Report all JVM diagnostics except per-thread stack traces")
   public Response full() throws CedarException {
     mustBeAllowedToReadTheServer();
     Map<String, Object> r = new LinkedHashMap<>();

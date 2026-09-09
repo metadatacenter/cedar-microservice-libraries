@@ -1,6 +1,5 @@
 package org.metadatacenter.model.folderserver.basic;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import org.metadatacenter.id.CedarFilesystemResourceId;
@@ -29,7 +28,6 @@ import java.util.List;
     @JsonSubTypes.Type(value = FolderServerTemplate.class, name = CedarResourceType.Types.TEMPLATE),
     @JsonSubTypes.Type(value = FolderServerInstance.class, name = CedarResourceType.Types.INSTANCE)
 })
-@JsonIgnoreProperties(ignoreUnknown = true)
 public abstract class FileSystemResource extends AbstractCedarResourceWithDates implements ResourceWithOpenFlag,
     FilesystemResourceWithIdAndType, ResourceWithUsersAndUserNamesData, ResourceWithEverybodyPermission, ResourceWithParentPathInfoData {
 
@@ -53,7 +51,8 @@ public abstract class FileSystemResource extends AbstractCedarResourceWithDates 
 
   public static FileSystemResource fromNodeExtract(FolderServerResourceExtract node) {
     try {
-      return JsonMapper.MAPPER.readValue(JsonMapper.MAPPER.writeValueAsString(node), FileSystemResource.class);
+      return JsonMapper.TOLERANT_MAPPER.readValue(
+          JsonMapper.MAPPER.writeValueAsString(node), FileSystemResource.class);
     } catch (IOException e) {
       log.error("Error while converting the resource extract to a FileSystemResource", e);
     }

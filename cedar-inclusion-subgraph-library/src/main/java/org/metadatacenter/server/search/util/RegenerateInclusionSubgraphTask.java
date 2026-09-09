@@ -30,7 +30,17 @@ public class RegenerateInclusionSubgraphTask {
     this.cedarConfig = cedarConfig;
   }
 
-  public void regenerateInclusionSubgraph(CedarRequestContext cedarAdminRequestContext) throws CedarProcessingException {
+  /**
+   * What a completed regeneration did: how many artifacts had their arcs rewritten, and which ones
+   * were left as they were because the artifact server would not serve them.
+   */
+  public record Outcome(long updated, List<String> unreadableArtifacts) {
+    public Outcome {
+      unreadableArtifacts = List.copyOf(unreadableArtifacts);
+    }
+  }
+
+  public Outcome regenerateInclusionSubgraph(CedarRequestContext cedarAdminRequestContext) throws CedarProcessingException {
 
     FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(cedarAdminRequestContext);
     InclusionSubgraphServiceSession inclusionSubgraphSession = CedarDataServices.getInstance().getInclusionSubgraphServiceSession(cedarAdminRequestContext);
@@ -45,16 +55,26 @@ public class RegenerateInclusionSubgraphTask {
     int limit = BATCH_SIZE;
     int offset = 0;
     int retrievedCount = 0;
+    long updated = 0;
+    List<String> unreadable = new ArrayList<>();
     do {
       List<FolderServerResourceExtract> folderServerResourceExtracts = folderSession.viewAll(resourceTypeList, version, publicationStatus, limit, offset, sortList);
       for (FolderServerResourceExtract resource : folderServerResourceExtracts) {
-        InclusionSubgraphUtil.updateResourceInclusionInfo(cedarAdminRequestContext, cedarConfig, resource, inclusionSubgraphSession);
+        if (InclusionSubgraphUtil.updateResourceInclusionInfo(cedarAdminRequestContext, cedarConfig, resource, inclusionSubgraphSession)) {
+          updated++;
+        } else {
+          unreadable.add(resource.getId());
+        }
       }
       offset += limit;
       retrievedCount = folderServerResourceExtracts.size();
       log.warn("INCLUSION-SUBGRAPH Offset:" + offset + ", retrieved count:" + retrievedCount);
-      System.out.println();
     } while (retrievedCount > 0);
+    if (!unreadable.isEmpty()) {
+      log.warn("INCLUSION-SUBGRAPH {} artifacts could not be read and keep their previous arcs: {}", unreadable.size(),
+          unreadable);
+    }
+    return new Outcome(updated, unreadable);
   }
 
 }

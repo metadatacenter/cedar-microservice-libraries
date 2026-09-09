@@ -12,7 +12,7 @@ import org.metadatacenter.server.service.UserService;
 import org.metadatacenter.server.user.UserServiceUtil;
 import org.metadatacenter.util.json.JsonMapper;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -125,7 +125,7 @@ public class InMemoryUserService implements UserService {
 
   @Override
   public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyId, String newKeyValue,
-                                                       LocalDateTime newCreationDate) {
+                                                       OffsetDateTime newCreationDate) {
     return changeApiKeys(userId, keys -> {
       CedarUserApiKey target = findById(keys, keyId);
       if (target == null) {

@@ -8,7 +8,7 @@ import org.metadatacenter.server.security.CedarUserRolePermissionUtil;
 import org.metadatacenter.server.security.model.user.*;
 
 import java.security.SecureRandom;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +32,7 @@ public class CedarUserUtil {
     user.setLastName(ur.getLastName());
     user.setEmail(ur.getEmail());
 
-    LocalDateTime now = LocalDateTime.now();
+    OffsetDateTime now = OffsetDateTime.now();
     // create a default API Key
     CedarUserApiKey apiKeyObject = new CedarUserApiKey();
     apiKeyObject.setId(UUID.randomUUID().toString());

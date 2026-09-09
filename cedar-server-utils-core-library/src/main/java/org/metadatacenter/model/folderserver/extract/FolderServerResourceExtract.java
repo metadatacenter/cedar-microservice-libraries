@@ -58,7 +58,8 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
 
   public static FolderServerResourceExtract fromNode(FileSystemResource node) {
     try {
-      return JsonMapper.MAPPER.readValue(JsonMapper.MAPPER.writeValueAsString(node), FolderServerResourceExtract.class);
+      return JsonMapper.TOLERANT_MAPPER.readValue(
+          JsonMapper.MAPPER.writeValueAsString(node), FolderServerResourceExtract.class);
     } catch (IOException e) {
       log.error("Error while converting the file system resource to a resource extract", e);
     }
@@ -67,7 +68,8 @@ public abstract class FolderServerResourceExtract extends AbstractCedarResourceE
 
   public static FolderServerResourceExtract fromNodeInfo(FolderServerNodeInfo info) {
     try {
-      return JsonMapper.MAPPER.readValue(JsonMapper.MAPPER.writeValueAsString(info), FolderServerResourceExtract.class);
+      return JsonMapper.TOLERANT_MAPPER.readValue(
+          JsonMapper.MAPPER.writeValueAsString(info), FolderServerResourceExtract.class);
     } catch (IOException e) {
       log.error("Error while converting the node info to a resource extract", e);
     }

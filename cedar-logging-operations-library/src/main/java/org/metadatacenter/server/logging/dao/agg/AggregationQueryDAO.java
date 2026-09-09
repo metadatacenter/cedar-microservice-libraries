@@ -60,7 +60,12 @@ public class AggregationQueryDAO extends AbstractDAO<AggRequestHourly> {
 
   public List<CypherStat> cypherBreakdown(Instant from, Instant to, int limit) {
     String sql = "SELECT c.operation, c.runnableHash, SUM(c.execCount), MAX(c.maxNanos), "
-        + sumHPrefixed("c") + ", ANY_VALUE(LEFT(cat.runnableSample, 2000)) "
+        + sumHPrefixed("c")
+        // MAX, not ANY_VALUE: the log DB is MariaDB, which has never implemented ANY_VALUE.
+        // Grouping is by runnableHash and the catalog holds one row per hash, so every row in a
+        // group carries the same runnableSample and MAX returns exactly that value -- while also
+        // satisfying ONLY_FULL_GROUP_BY on MySQL. Portable across both engines.
+        + ", MAX(LEFT(cat.runnableSample, 2000)) "
         + "FROM agg_cypher_hourly c LEFT JOIN agg_cypher_query_catalog cat ON cat.runnableHash = c.runnableHash "
         + "WHERE c.hourUtc >= :from AND c.hourUtc < :to "
         + "GROUP BY c.operation, c.runnableHash ORDER BY SUM(c.execCount) DESC LIMIT :lim";

@@ -38,7 +38,7 @@ public abstract class FolderServerResourceCurrentUserReport extends FileSystemRe
   public static FolderServerResourceCurrentUserReport fromResource(FileSystemResource resource) {
     try {
       String s = JsonMapper.MAPPER.writeValueAsString(resource);
-      return JsonMapper.MAPPER.readValue(s, FolderServerResourceCurrentUserReport.class);
+      return JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerResourceCurrentUserReport.class);
     } catch (IOException e) {
       log.error("Error while converting the file system resource to a current-user report", e);
     }

@@ -24,7 +24,8 @@
 --   Index creation is INPLACE/LOCK=NONE and is cheap NOW while log_request/log_cypher are the small
 --   fresh post-rename tables — do it now, not after they grow. Run inside tmux regardless.
 --
--- Requires MySQL 8.0.12+ for ALGORITHM=INSTANT on ADD COLUMN.
+-- Requires MySQL 8.0.12+ or MariaDB 10.3.7+ for ALGORITHM=INSTANT on ADD COLUMN.
+-- The CEDAR log DB is MariaDB 10.6.23 (checked 2026-09-08); both algorithms are supported there.
 -- =============================================================================
 
 -- Pre-flight (inspect, don't change) ------------------------------------------
@@ -50,10 +51,23 @@ ALTER TABLE log_cypher
 -- =============================================================================
 -- Section 2 — indexes (INPLACE, online). Do this while the tables are small.
 -- =============================================================================
-CREATE INDEX IDX_log_request_status       ON log_request (status)       ALGORITHM=INPLACE, LOCK=NONE;
-CREATE INDEX IDX_log_request_apiKeyHash    ON log_request (apiKeyHash)    ALGORITHM=INPLACE, LOCK=NONE;
-CREATE INDEX IDX_log_request_aggregatedAt  ON log_request (aggregatedAt)  ALGORITHM=INPLACE, LOCK=NONE;
-CREATE INDEX IDX_log_cypher_aggregatedAt   ON log_cypher  (aggregatedAt)  ALGORITHM=INPLACE, LOCK=NONE;
+-- FIXED 2026-09-08: the previous CREATE INDEX form here was invalid SQL and had never been run.
+-- `ALGORITHM=..., LOCK=...` is comma-separated only inside ALTER TABLE; CREATE INDEX takes the two
+-- options space-separated, so every one of these statements failed with a syntax error at the comma
+-- (ERROR 1064) on the first index, leaving the columns added and no indexes created.
+--
+-- Using the ALTER TABLE form instead is not just a syntax fix: all three log_request indexes are
+-- built in ONE statement, so InnoDB makes a single pass over the table rather than three. On a small
+-- table that is noise; on prod's log_request it is the difference that matters.
+ALTER TABLE log_request
+  ADD INDEX IDX_log_request_status       (status),
+  ADD INDEX IDX_log_request_apiKeyHash    (apiKeyHash),
+  ADD INDEX IDX_log_request_aggregatedAt  (aggregatedAt),
+  ALGORITHM=INPLACE, LOCK=NONE;
+
+ALTER TABLE log_cypher
+  ADD INDEX IDX_log_cypher_aggregatedAt (aggregatedAt),
+  ALGORITHM=INPLACE, LOCK=NONE;
 
 -- =============================================================================
 -- Verify ----------------------------------------------------------------------

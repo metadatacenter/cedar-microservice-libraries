@@ -148,8 +148,7 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   @Override
   public long findFolderContentsCount(CedarFolderId folderId, NodeListRequest req) {
     return proxies.resource().findFolderContentsCount(folderId, req.getResourceTypes(), req.getVersion(),
-        req.getPublicationStatus(),
-        cu.getResourceId());
+        req.getPublicationStatus());
   }
 
   @Override
@@ -196,7 +195,7 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   public List<FolderServerResourceExtract> findFolderContentsExtract(CedarFolderId folderId, NodeListRequest req) {
     return proxies.resource().findFolderContentsExtract(folderId, req.getResourceTypes(), req.getVersion(),
         req.getPublicationStatus(),
-        req.getLimit(), req.getOffset(), req.getSort(), cu.getResourceId());
+        req.getLimit(), req.getOffset(), req.getSort());
   }
 
   @Override

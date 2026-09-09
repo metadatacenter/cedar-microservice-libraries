@@ -2,6 +2,8 @@ package org.metadatacenter.server.search.elasticsearch.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.exception.CedarProcessingException;
@@ -26,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
-import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -47,8 +49,39 @@ class ElasticsearchManagementServiceTest {
     when(client.indices()).thenReturn(indicesClient);
 
     managementService = spy(new ElasticsearchManagementService(
-        opensearchConfig, mock(CedarConfig.class, RETURNS_DEEP_STUBS)));
-    doReturn(client).when(managementService).getClient();
+        opensearchConfig, mock(CedarConfig.class, RETURNS_DEEP_STUBS), client));
+  }
+
+  @Test
+  void clientConfigurationBoundsPoolAndEveryWait() {
+    OpensearchConfig config = mock(OpensearchConfig.class);
+    when(config.getMaxConnections()).thenReturn(30);
+    when(config.getMaxConnectionsPerRoute()).thenReturn(10);
+    when(config.getConnectionRequestTimeoutMillis()).thenReturn(1000);
+    when(config.getConnectTimeoutMillis()).thenReturn(2000);
+    when(config.getSocketTimeoutMillis()).thenReturn(30000);
+
+    RequestConfig request = ElasticsearchManagementService
+        .configureRequest(RequestConfig.custom(), config).build();
+    HttpAsyncClientBuilder http = mock(HttpAsyncClientBuilder.class, RETURNS_SELF);
+    ElasticsearchManagementService.configureConnections(http, config);
+
+    assertEquals(1000, request.getConnectionRequestTimeout());
+    assertEquals(2000, request.getConnectTimeout());
+    assertEquals(30000, request.getSocketTimeout());
+    verify(http).setMaxConnTotal(30);
+    verify(http).setMaxConnPerRoute(10);
+  }
+
+  @Test
+  void oneClientIsReusedAndClosedOnce() throws Exception {
+    assertEquals(client, managementService.getClient());
+    assertEquals(client, managementService.getClient());
+
+    managementService.closeClient();
+    managementService.closeClient();
+
+    verify(client).close();
   }
 
   @Test

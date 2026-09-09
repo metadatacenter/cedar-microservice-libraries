@@ -1,12 +1,10 @@
 package org.metadatacenter.model.folderserver.currentuserpermissions;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.datagroup.FolderDataGroup;
 import org.metadatacenter.model.folderserver.datagroup.ResourceWithFolderData;
 import org.metadatacenter.server.security.model.auth.FolderWithCurrentUserPermissions;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerFolderCurrentUserReport extends FolderServerResourceCurrentUserReport implements ResourceWithFolderData,
     FolderWithCurrentUserPermissions {
 

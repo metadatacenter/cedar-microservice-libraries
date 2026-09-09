@@ -14,9 +14,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -43,34 +43,23 @@ public abstract class CedarResponse {
 
   public static class CedarResponseBuilder {
 
-    private final Map<String, Object> parameters;
-    private final Map<String, Object> objects;
-    private CedarErrorKey errorKey;
-    private CedarErrorReasonKey errorReasonKey;
-    private String errorMessage;
+    private final CedarErrorPack errorPack;
     private Exception exception;
-    private CedarResponseStatus status;
+    private String legacyErrorType;
+    private final Map<String, Object> extensions = Maps.newHashMap();
     private Object entity;
     private URI createdResourceUri;
-    private CedarOperationDescriptor operation;
     private String type;
     private String fileName;
     private Map<String, Object> headers = Maps.newHashMap();
 
     protected CedarResponseBuilder() {
-      this.parameters = new HashMap<>();
-      this.objects = new HashMap<>();
+      this.errorPack = new CedarErrorPack();
     }
 
     public CedarResponseBuilder(CedarErrorPack errorPack) {
-      parameters = errorPack.getParameters();
-      objects = errorPack.getObjects();
-      errorKey = errorPack.getErrorKey();
-      errorReasonKey = errorPack.getErrorReasonKey();
-      errorMessage = errorPack.getMessage();
+      this.errorPack = new CedarErrorPack(errorPack);
       exception = errorPack.getOriginalException();
-      status = errorPack.getStatus();
-      operation = errorPack.getOperation();
     }
 
     /**
@@ -80,20 +69,21 @@ public abstract class CedarResponse {
      * ignored and at worst confuses an intermediary about where the next message starts.
      */
     private boolean statusForbidsABody() {
-      int code = status.getStatusCode();
+      int code = errorPack.getStatusCode();
       return code == CedarResponseStatus.NO_CONTENT.getStatusCode() || code == 304 || (code >= 100 && code < 200);
     }
 
     public Response build() {
       Response.ResponseBuilder responseBuilder = Response.noContent();
-      responseBuilder.status(status.getStatusCode());
+      boolean generatedErrorEntity = false;
+      responseBuilder.status(errorPack.getStatusCode());
 
       if (!headers.isEmpty()) {
         for (String property : headers.keySet()) {
           responseBuilder.header(property, headers.get(property));
         }
       }
-      if (status == CedarResponseStatus.UNAUTHORIZED) {
+      if (errorPack.getStatus() == CedarResponseStatus.UNAUTHORIZED) {
         responseBuilder.header(HttpHeaders.WWW_AUTHENTICATE, HttpConstants.HTTP_AUTH_CHALLENGE);
       }
       responseBuilder.header(HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS,
@@ -104,39 +94,33 @@ public abstract class CedarResponse {
       if (entity != null) {
         responseBuilder.entity(entity);
       } else {
-        Map<String, Object> r = new HashMap<>();
-        r.put("parameters", parameters);
-        r.put("objects", objects);
-        r.put("errorKey", errorKey);
-        r.put("errorReasonKey", errorReasonKey);
-        r.put("errorMessage", errorMessage);
-        // The exception mapper's CedarErrorPack names the same thing `message`. Both keys are present
-        // in both shapes now, so a client reading either gets the message from either half of the
-        // system rather than null from whichever one it happened to reach.
-        r.put("message", errorMessage);
-        r.put("status", status);
-        r.put("statusCode", status.getStatusCode());
-        r.put("operation", operation == null ? null : operation.asJson());
+        String errorId = null;
         if (exception != null) {
           // Never serialize the stack trace to the client: it leaks class names, source files, line
           // numbers and internal architecture (including on unauthenticated routes). Log the exception
           // server-side under a correlation id and return only that id, so an operator can find the
           // full detail in the logs while the client gets nothing exploitable.
-          String errorId = UUID.randomUUID().toString();
-          log.error("Error response {} (status {}): {}", errorId, status, exception.getMessage(), exception);
-          r.put("errorId", errorId);
+          errorId = UUID.randomUUID().toString();
+          log.error("Error response {} (status {}): {}", errorId, errorPack.getStatus(), exception.getMessage(),
+              exception);
         }
 
-        // The map above always has entries, so the guard this replaces could not be false and every
-        // entity-less response carried a body — including the two 204s, which RFC 9110 forbids from
-        // having one. A status that cannot carry a body gets none; every other entity-less response
-        // still gets the diagnostic map, which is what an error body is made of.
+        // A status that cannot carry a body gets none; every other entity-less response gets the
+        // common envelope.
         if (!statusForbidsABody()) {
-          responseBuilder.entity(r);
+          CedarError error = CedarError.from(errorPack, errorId);
+          if (legacyErrorType != null) {
+            error.legacyErrorType(legacyErrorType);
+          }
+          extensions.forEach(error::extension);
+          responseBuilder.entity(error);
+          generatedErrorEntity = true;
         }
       }
       if (type != null) {
         responseBuilder.type(type);
+      } else if (generatedErrorEntity) {
+        responseBuilder.type(MediaType.APPLICATION_JSON_TYPE);
       }
       if (fileName != null) {
         responseBuilder.header(HttpConstants.HTTP_HEADER_CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"");
@@ -145,7 +129,7 @@ public abstract class CedarResponse {
     }
 
     public CedarResponseBuilder status(CedarResponseStatus status) {
-      this.status = status;
+      this.errorPack.status(status);
       return this;
     }
 
@@ -159,27 +143,37 @@ public abstract class CedarResponse {
     }
 
     public CedarResponseBuilder parameter(String key, Object value) {
-      this.parameters.put(key, value);
+      this.errorPack.parameter(key, value);
       return this;
     }
 
     public CedarResponseBuilder object(String key, Object value) {
-      this.objects.put(key, value);
+      this.errorPack.object(key, value);
       return this;
     }
 
     public CedarResponseBuilder errorKey(CedarErrorKey errorKey) {
-      this.errorKey = errorKey;
+      this.errorPack.errorKey(errorKey);
       return this;
     }
 
     public CedarResponseBuilder errorReasonKey(CedarErrorReasonKey errorReasonKey) {
-      this.errorReasonKey = errorReasonKey;
+      this.errorPack.errorReasonKey(errorReasonKey);
       return this;
     }
 
     public CedarResponseBuilder errorMessage(String errorMessage) {
-      this.errorMessage = errorMessage;
+      this.errorPack.message(errorMessage);
+      return this;
+    }
+
+    public CedarResponseBuilder legacyErrorType(String legacyErrorType) {
+      this.legacyErrorType = legacyErrorType;
+      return this;
+    }
+
+    public CedarResponseBuilder extension(String key, Object value) {
+      this.extensions.put(key, value);
       return this;
     }
 
@@ -199,7 +193,7 @@ public abstract class CedarResponse {
     }
 
     public CedarResponseBuilder operation(CedarOperationDescriptor operation) {
-      this.operation = operation;
+      this.errorPack.operation(operation);
       return this;
     }
 

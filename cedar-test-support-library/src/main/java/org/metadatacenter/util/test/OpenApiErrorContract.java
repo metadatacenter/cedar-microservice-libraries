@@ -17,6 +17,8 @@ public final class OpenApiErrorContract {
   private static final String CEDAR_ERROR = "#/components/schemas/CedarError";
   private static final Set<String> HTTP_METHODS =
       Set.of("get", "put", "post", "delete", "patch", "options", "head", "trace");
+  private static final Set<String> SHARED_NON_ERROR_ENVELOPE_RESPONSES =
+      Set.of("GET /healthcheck 500");
 
   private OpenApiErrorContract() {
   }
@@ -47,6 +49,9 @@ public final class OpenApiErrorContract {
             continue;
           }
           String coordinate = method.getKey().toUpperCase() + " " + path.getKey() + " " + response.getKey();
+          if (SHARED_NON_ERROR_ENVELOPE_RESPONSES.contains(coordinate)) {
+            continue;
+          }
           if (exceptions.remove(coordinate)) {
             continue;
           }

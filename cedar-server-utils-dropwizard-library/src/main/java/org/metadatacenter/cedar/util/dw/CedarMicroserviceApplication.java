@@ -259,6 +259,14 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     // Register Exception Mapper
     environment.jersey().register(new CedarCedarExceptionMapper());
     environment.jersey().register(new CedarExceptionMapper());
+    // Dropwizard registers more-specific mappers for these types. Register CEDAR peers at a higher
+    // provider priority so malformed JSON, validation failures and its other framework outcomes do
+    // not bypass the common error envelope.
+    environment.jersey().register(new CedarJsonProcessingExceptionMapper());
+    environment.jersey().register(new CedarJerseyViolationExceptionMapper());
+    environment.jersey().register(new CedarEmptyOptionalExceptionMapper());
+    environment.jersey().register(new CedarIllegalStateExceptionMapper());
+    environment.jersey().register(new CedarEarlyEofExceptionMapper());
 
     registerSharedHealthChecks(environment);
 

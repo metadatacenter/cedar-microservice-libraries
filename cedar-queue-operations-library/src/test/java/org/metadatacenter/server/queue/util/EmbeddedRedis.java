@@ -3,6 +3,7 @@ package org.metadatacenter.server.queue.util;
 import redis.embedded.RedisServer;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.util.function.IntSupplier;
 
@@ -54,7 +55,7 @@ public final class EmbeddedRedis implements AutoCloseable {
    */
   public static EmbeddedRedis startOn(int port) {
     try {
-      RedisServer server = RedisServer.newRedisServer().port(port).build();
+      RedisServer server = RedisServer.newRedisServer().bind("127.0.0.1").port(port).build();
       server.start();
       return new EmbeddedRedis(server, port);
     } catch (IOException e) {
@@ -107,7 +108,8 @@ public final class EmbeddedRedis implements AutoCloseable {
    * that only need a deliberately unreachable address can use this value directly.
    */
   public static int freePort() {
-    try (ServerSocket socket = new ServerSocket(0)) {
+    try (ServerSocket socket = new ServerSocket(
+        0, 50, InetAddress.getByName("127.0.0.1"))) {
       return socket.getLocalPort();
     } catch (IOException e) {
       throw new IllegalStateException("Could not find a free port for the embedded Redis", e);

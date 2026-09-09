@@ -202,7 +202,8 @@ public class NodeSearchingService extends AbstractSearchingService {
     for (SearchHit hit : searchResult.getHits()) {
       String hitJson = hit.getSourceAsString();
       try {
-        IndexedDocumentDocument indexedDocument = JsonMapper.MAPPER.readValue(hitJson, IndexedDocumentDocument.class);
+        IndexedDocumentDocument indexedDocument = JsonMapper.TOLERANT_MAPPER.readValue(
+            hitJson, IndexedDocumentDocument.class);
 
         FolderServerNodeInfo info = indexedDocument.getInfo();
         FolderServerResourceExtract folderServerNodeExtract = FolderServerResourceExtract.fromNodeInfo(info);

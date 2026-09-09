@@ -4,6 +4,7 @@ import io.dropwizard.core.Configuration;
 import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.db.PooledDataSourceFactory;
 import io.dropwizard.hibernate.HibernateBundle;
+import io.dropwizard.util.Duration;
 import org.metadatacenter.config.HibernateConfig;
 
 import java.util.Map;
@@ -31,6 +32,10 @@ public class CedarHibernateBundle<T extends Configuration> extends HibernateBund
 
   @Override
   public PooledDataSourceFactory getDataSourceFactory(T configuration) {
+    return buildDataSourceFactory(databaseConfig);
+  }
+
+  static DataSourceFactory buildDataSourceFactory(HibernateConfig databaseConfig) {
     DataSourceFactory database = new DataSourceFactory();
     database.setUrl(databaseConfig.getUrl());
     database.setUser(databaseConfig.getUser());
@@ -38,6 +43,14 @@ public class CedarHibernateBundle<T extends Configuration> extends HibernateBund
     database.setDriverClass(databaseConfig.getDriverClass());
     Map<String, String> properties = database.getProperties();
     properties.putAll(databaseConfig.getProperties());
+    database.setMinSize(databaseConfig.getMinSize());
+    database.setInitialSize(databaseConfig.getInitialSize());
+    database.setMaxSize(databaseConfig.getMaxSize());
+    database.setMaxWaitForConnection(Duration.milliseconds(databaseConfig.getMaxWaitForConnectionMillis()));
+    database.setValidationQuery(databaseConfig.getValidationQuery());
+    database.setCheckConnectionWhileIdle(databaseConfig.isCheckConnectionWhileIdle());
+    database.setCheckConnectionOnConnect(databaseConfig.isCheckConnectionOnConnect());
+    database.setValidationInterval(Duration.milliseconds(databaseConfig.getValidationIntervalMillis()));
     return database;
   }
 }

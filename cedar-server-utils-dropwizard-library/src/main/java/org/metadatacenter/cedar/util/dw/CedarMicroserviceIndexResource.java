@@ -1,6 +1,11 @@
 package org.metadatacenter.cedar.util.dw;
 
 import com.codahale.metrics.annotation.Timed;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.model.ServerName;
 
@@ -11,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Path("/")
+@Tag(name = "Service")
 public class CedarMicroserviceIndexResource extends CedarMicroserviceResource {
 
   /** Where the Swagger UI is served, by nginx rather than by the service itself. */
@@ -38,6 +44,9 @@ public class CedarMicroserviceIndexResource extends CedarMicroserviceResource {
 
   @GET
   @Timed
+  @Operation(summary = "Describe this CEDAR service")
+  @ApiResponse(responseCode = "200", description = "The service name and links to its API documentation",
+      content = @Content(schema = @Schema(type = "object")))
   public Map<String, Object> showInfo() {
     Map<String, Object> response = new LinkedHashMap<>(info);
     Map<String, Object> apiDocs =

@@ -2,6 +2,8 @@ package org.metadatacenter.server.search.elasticsearch.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.HttpHost;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.config.OpensearchMappingsConfig;
@@ -31,51 +33,64 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ElasticsearchManagementService {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchManagementService.class);
 
-  private final OpensearchConfig config;
-  private final Settings settings;
   private final Map<String, Object> searchIndexSettings;
   private final Map<String, Object> rulesIndexSettings;
   private final OpensearchMappingsConfig searchIndexMappings;
   private final OpensearchMappingsConfig rulesIndexMappings;
-  private RestHighLevelClient elasticClient = null;
+  private final RestHighLevelClient elasticClient;
+  private final AtomicBoolean closed = new AtomicBoolean();
 
   public ElasticsearchManagementService(OpensearchConfig config, CedarConfig cedarConfig) {
+    this(config, cedarConfig, createClient(config));
+  }
+
+  ElasticsearchManagementService(OpensearchConfig config, CedarConfig cedarConfig,
+                                  RestHighLevelClient elasticClient) {
     System.setProperty("es.set.netty.runtime.available.processors", "false");
-    this.config = config;
     this.searchIndexSettings = (cedarConfig.getSearchSettingsMappingsConfig().getSettings());
     this.rulesIndexSettings = cedarConfig.getRulesSettingsMappingsConfig().getSettings();
     this.searchIndexMappings = cedarConfig.getSearchSettingsMappingsConfig().getMappings();
     this.rulesIndexMappings = cedarConfig.getRulesSettingsMappingsConfig().getMappings();
-    this.settings = Settings.builder().put("cluster.name", config.getClusterName()).build();
+    this.elasticClient = elasticClient;
+  }
+
+  private static RestHighLevelClient createClient(OpensearchConfig config) {
+    RestClientBuilder builder = RestClient.builder(
+        new HttpHost(config.getHost(), config.getRestPort(), "http"));
+    builder.setRequestConfigCallback(request -> configureRequest(request, config));
+    builder.setHttpClientConfigCallback(http -> configureConnections(http, config));
+    return new RestHighLevelClient(builder);
+  }
+
+  static RequestConfig.Builder configureRequest(RequestConfig.Builder request, OpensearchConfig config) {
+    return request
+        .setConnectionRequestTimeout(config.getConnectionRequestTimeoutMillis())
+        .setConnectTimeout(config.getConnectTimeoutMillis())
+        .setSocketTimeout(config.getSocketTimeoutMillis());
+  }
+
+  static HttpAsyncClientBuilder configureConnections(HttpAsyncClientBuilder http, OpensearchConfig config) {
+    return http
+        .setMaxConnTotal(config.getMaxConnections())
+        .setMaxConnPerRoute(config.getMaxConnectionsPerRoute());
   }
 
   RestHighLevelClient getClient() {
-    try {
-      if (elasticClient == null) {
-        RestClientBuilder builder = RestClient.builder(
-            new HttpHost(config.getHost(), config.getRestPort(), "http"));
-        elasticClient = new RestHighLevelClient(builder);
-      }
-      return elasticClient;
-    } catch (Exception e) {
-      log.error("There was an error creating the OpenSearch client", e);
-      return null;
-    }
+    return elasticClient;
   }
 
   public void closeClient() {
-    if (elasticClient != null) {
+    if (closed.compareAndSet(false, true)) {
       try {
         elasticClient.close();
       } catch (IOException e) {
         log.error("Error closing the OpenSearch client", e);
-      } finally {
-        elasticClient = null;
       }
     }
   }

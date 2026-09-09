@@ -14,7 +14,7 @@ public abstract class GraphDbObjectBuilder {
   private static final Logger log = LoggerFactory.getLogger(GraphDbObjectBuilder.class);
 
   public static FolderServerArtifact artifact(InputStream stream) throws IOException {
-    FileSystemResource folderServerNode = JsonMapper.MAPPER.readValue(stream, FileSystemResource.class);
+    FileSystemResource folderServerNode = JsonMapper.TOLERANT_MAPPER.readValue(stream, FileSystemResource.class);
     return (FolderServerArtifact) folderServerNode;
   }
 

@@ -1,12 +1,10 @@
 package org.metadatacenter.model.folderserver.extract;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.metadatacenter.model.folderserver.basic.FolderServerCategory;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerCategoryExtractWithChildren extends FolderServerCategoryExtract {
 
   protected List<FolderServerCategoryExtractWithChildren> children;

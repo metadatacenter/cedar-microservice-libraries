@@ -1,12 +1,16 @@
 package org.metadatacenter.server.dao.mongodb;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.mongodb.MongoWriteException;
+import com.mongodb.ServerAddress;
+import com.mongodb.WriteError;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.result.UpdateResult;
 import com.mongodb.client.result.DeleteResult;
+import org.bson.BsonDocument;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.junit.jupiter.api.Test;
@@ -16,6 +20,7 @@ import org.metadatacenter.util.json.JsonMapper;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -70,5 +75,46 @@ class GenericLDDaoMongoDBTest {
 
     assertThrows(ArtifactRevisionConflictException.class,
         () -> dao.delete("artifact-id", 1L));
+  }
+
+  @Test
+  void insertRejectedByTheUniqueIdentifierIndexIsAConflict() throws Exception {
+    MongoClient client = mock(MongoClient.class);
+    MongoDatabase database = mock(MongoDatabase.class);
+    @SuppressWarnings("unchecked")
+    MongoCollection<Document> collection = mock(MongoCollection.class);
+    when(client.getDatabase("test-db")).thenReturn(database);
+    when(database.getCollection("artifacts")).thenReturn(collection);
+    when(collection.insertOne(any(Document.class))).thenThrow(new MongoWriteException(
+        new WriteError(11000, "E11000 duplicate key error collection: test-db.artifacts index: @id_1",
+            new BsonDocument()), new ServerAddress()));
+
+    GenericLDDaoMongoDB dao = new GenericLDDaoMongoDB(client, "test-db", "artifacts");
+    JsonNode submitted = JsonMapper.MAPPER.readTree("""
+        {"@id":"artifact-id","schema:name":"second writer"}
+        """);
+
+    ArtifactRevisionConflictException conflict = assertThrows(ArtifactRevisionConflictException.class,
+        () -> dao.create(submitted));
+    assertTrue(conflict.getMessage().contains("artifact-id"));
+  }
+
+  @Test
+  void otherWriteErrorsOnInsertAreNotConflicts() throws Exception {
+    MongoClient client = mock(MongoClient.class);
+    MongoDatabase database = mock(MongoDatabase.class);
+    @SuppressWarnings("unchecked")
+    MongoCollection<Document> collection = mock(MongoCollection.class);
+    when(client.getDatabase("test-db")).thenReturn(database);
+    when(database.getCollection("artifacts")).thenReturn(collection);
+    when(collection.insertOne(any(Document.class))).thenThrow(new MongoWriteException(
+        new WriteError(121, "Document failed validation", new BsonDocument()), new ServerAddress()));
+
+    GenericLDDaoMongoDB dao = new GenericLDDaoMongoDB(client, "test-db", "artifacts");
+    JsonNode submitted = JsonMapper.MAPPER.readTree("""
+        {"@id":"artifact-id","schema:name":"writer"}
+        """);
+
+    assertThrows(MongoWriteException.class, () -> dao.create(submitted));
   }
 }

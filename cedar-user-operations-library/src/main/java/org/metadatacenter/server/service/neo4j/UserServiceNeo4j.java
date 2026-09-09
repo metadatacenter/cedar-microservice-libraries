@@ -11,7 +11,7 @@ import org.metadatacenter.server.security.model.user.CedarUserRole;
 import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
 import org.metadatacenter.server.service.UserService;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -70,7 +70,7 @@ public class UserServiceNeo4j implements UserService {
 
   @Override
   public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyId, String newKeyValue,
-                                                       LocalDateTime newCreationDate) {
+                                                       OffsetDateTime newCreationDate) {
     return userProxy.regenerateApiKey(userId, keyId, newKeyValue, newCreationDate);
   }
 

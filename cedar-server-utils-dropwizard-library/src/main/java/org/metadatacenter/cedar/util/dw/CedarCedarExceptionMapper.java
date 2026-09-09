@@ -12,12 +12,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.metadatacenter.constant.HttpConstants;
+import org.metadatacenter.util.http.CedarError;
 
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
+import java.util.UUID;
 
 @Provider
 public class CedarCedarExceptionMapper extends AbstractExceptionMapper implements ExceptionMapper<CedarException> {
@@ -41,9 +43,17 @@ public class CedarCedarExceptionMapper extends AbstractExceptionMapper implement
         .enqueue();
 
     int statusCode = errorPack.getStatus().getStatusCode();
-    logMappedException(log, ":CCEM:", exception, statusCode, exception.isShowFullStackTrace());
+    if (!errorPack.hasResolvedStatus()) {
+      // The pack's 500 is a fallthrough, not a decision: nothing between the throw and here chose a
+      // status or an error type. Every CedarException subclass declares one now, so this names a
+      // pack built bare, and the frame it names is the site to fix.
+      log.warn(":CCEM: {} reached the mapper with no decided status, answering {} by default; thrown at {}",
+          exception.getClass().getSimpleName(), statusCode, throwSite(exception));
+    }
+    String errorId = UUID.randomUUID().toString();
+    logMappedException(log, ":CCEM:", exception, statusCode, exception.isShowFullStackTrace(), errorId);
     Response.ResponseBuilder responseBuilder = Response.status(statusCode)
-        .entity(clientSafeCopy(errorPack))
+        .entity(CedarError.from(errorPack, errorId))
         .type(MediaType.APPLICATION_JSON);
     if (statusCode == Response.Status.UNAUTHORIZED.getStatusCode()) {
       // This mapper builds its own response rather than going through CedarResponse, and it is the
@@ -52,6 +62,11 @@ public class CedarCedarExceptionMapper extends AbstractExceptionMapper implement
       responseBuilder.header(HttpHeaders.WWW_AUTHENTICATE, HttpConstants.HTTP_AUTH_CHALLENGE);
     }
     return responseBuilder.build();
+  }
+
+  private static String throwSite(CedarException exception) {
+    StackTraceElement[] trace = exception.getStackTrace();
+    return trace.length == 0 ? "an unknown site" : trace[0].toString();
   }
 
 }

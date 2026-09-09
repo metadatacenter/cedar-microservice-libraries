@@ -1,7 +1,6 @@
 package org.metadatacenter.model.folderserver.basic;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.model.AbstractCedarResourceWithDates;
@@ -11,7 +10,6 @@ import org.metadatacenter.server.security.model.user.CedarGroupExtract;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerGroup extends AbstractCedarResourceWithDates<CedarGroupId> {
 
   private String specialGroup;

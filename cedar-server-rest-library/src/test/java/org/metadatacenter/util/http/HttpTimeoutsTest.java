@@ -10,6 +10,7 @@ import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.rest.context.CedarRequestContext;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
@@ -49,7 +50,7 @@ class HttpTimeoutsTest {
 
   @BeforeEach
   void startSilentServer() throws IOException {
-    server = new ServerSocket(0);
+    server = new ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"));
     threads = Executors.newFixedThreadPool(2);
     connected = new CountDownLatch(1);
     timeouts = new HttpTimeouts(1_000, LEASE_MILLIS, RESPONSE_MILLIS, 1, 1);

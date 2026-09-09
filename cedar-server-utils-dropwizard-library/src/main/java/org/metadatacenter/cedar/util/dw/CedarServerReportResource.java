@@ -2,6 +2,7 @@ package org.metadatacenter.cedar.util.dw;
 
 import com.codahale.metrics.annotation.Timed;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.swagger.v3.oas.annotations.Hidden;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.CedarResolvedConfigurationReport;
 import org.metadatacenter.config.environment.CedarEnvironmentReport;
@@ -48,6 +49,7 @@ import static org.metadatacenter.rest.assertion.GenericAssertions.LoggedIn;
  */
 @Path("/server-report")
 @Produces(MediaType.APPLICATION_JSON)
+@Hidden // Kept out until these newer diagnostics receive their own published API review.
 public class CedarServerReportResource extends CedarMicroserviceResource {
 
   private final ServerName serverName;

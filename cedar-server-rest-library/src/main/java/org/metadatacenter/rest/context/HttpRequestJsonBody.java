@@ -2,18 +2,16 @@ package org.metadatacenter.rest.context;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.metadatacenter.error.CedarErrorKey;
+import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.rest.assertion.noun.CedarParameter;
 import org.metadatacenter.rest.assertion.noun.CedarParameterImpl;
 import org.metadatacenter.rest.assertion.noun.CedarRequestBody;
 import org.metadatacenter.rest.exception.CedarAssertionException;
 import org.metadatacenter.util.json.JsonMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class HttpRequestJsonBody implements CedarRequestBody {
-
-  protected static final Logger log = LoggerFactory.getLogger(HttpRequestJsonBody.class);
 
   private final JsonNode bodyNode;
 
@@ -52,14 +50,15 @@ public class HttpRequestJsonBody implements CedarRequestBody {
   }
 
   @Override
-  public <T> T convert(Class<T> type) throws CedarAssertionException {
-    T object;
+  public <T> T convert(Class<T> type) throws CedarException {
     try {
-      object = JsonMapper.MAPPER.treeToValue(bodyNode, type);
+      return JsonMapper.MAPPER.treeToValue(bodyNode, type);
     } catch (JsonProcessingException e) {
-      log.warn("Error while processing json", e);
-      throw new CedarAssertionException(e);
+      // The body parsed as JSON, so this is a shape the endpoint does not accept: an unknown key, a
+      // value of the wrong type. That is the caller's to fix, and Jackson's message says which.
+      throw new CedarAssertionException("The request body can not be read as " + type.getSimpleName(), e)
+          .errorKey(CedarErrorKey.INVALID_INPUT)
+          .parameter("type", type.getSimpleName());
     }
-    return object;
   }
 }

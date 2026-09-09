@@ -9,7 +9,7 @@ import org.metadatacenter.server.security.model.user.CedarUserApiKey;
 import org.metadatacenter.server.security.model.user.CedarUserRole;
 import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 public interface UserService extends IUserService {
@@ -36,7 +36,7 @@ public interface UserService extends IUserService {
   BackendCallResult<CedarUser> addApiKey(CedarUserId userId, CedarUserApiKey newApiKey, int maxApiKeys);
 
   BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyId, String newKeyValue,
-                                                LocalDateTime newCreationDate);
+                                                OffsetDateTime newCreationDate);
 
   BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyId);
 

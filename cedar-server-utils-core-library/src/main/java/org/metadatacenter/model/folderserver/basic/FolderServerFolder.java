@@ -1,7 +1,6 @@
 package org.metadatacenter.model.folderserver.basic;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.metadatacenter.id.CedarFolderId;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.currentuserpermissions.FolderServerFolderCurrentUserReport;
@@ -15,7 +14,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerFolder extends FileSystemResource implements ResourceWithFolderData, ResourceWithHomeOf {
 
   private static final Logger log = LoggerFactory.getLogger(FolderServerFolder.class);
@@ -37,7 +35,7 @@ public class FolderServerFolder extends FileSystemResource implements ResourceWi
   public static FolderServerFolder fromFolderServerFolderCurrentUserReport(FolderServerFolderCurrentUserReport folder) {
     try {
       String s = JsonMapper.MAPPER.writeValueAsString(folder);
-      return JsonMapper.MAPPER.readValue(s, FolderServerFolder.class);
+      return JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerFolder.class);
     } catch (IOException e) {
       log.error("Error while converting the current-user report to a FolderServerFolder", e);
     }

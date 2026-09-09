@@ -5,7 +5,7 @@
   <parent>
     <groupId>org.metadatacenter</groupId>
     <artifactId>cedar-microservice-libraries</artifactId>
-    <version>2.9.9</version>
+    <version>2.9.10</version>
   </parent>
 
   <artifactId>cedar-test-support-library</artifactId>
@@ -26,6 +26,13 @@
     <dependency>
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-logging-operations-library</artifactId>
+    </dependency>
+
+    <!-- CedarUserUtil, so the fixture users take their roles from the same blueprint accessor a
+         server calls when it provisions a real one. -->
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-auth-operations-library</artifactId>
     </dependency>
 
     <dependency>
@@ -82,6 +89,14 @@
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
+      <scope>compile</scope>
+    </dependency>
+
+    <!-- Loaded by Surefire through ServiceLoader so embedded child processes close when the
+         complete shared test JVM session ends, after all classes have reused them. -->
+    <dependency>
+      <groupId>org.junit.platform</groupId>
+      <artifactId>junit-platform-launcher</artifactId>
       <scope>compile</scope>
     </dependency>
 

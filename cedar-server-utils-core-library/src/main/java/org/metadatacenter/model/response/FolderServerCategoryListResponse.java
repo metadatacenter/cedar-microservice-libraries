@@ -1,6 +1,5 @@
 package org.metadatacenter.model.response;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.metadatacenter.model.folderserver.basic.FolderServerCategory;
 import org.metadatacenter.model.request.CategoryListRequest;
 
@@ -8,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerCategoryListResponse {
 
   protected CategoryListRequest request;

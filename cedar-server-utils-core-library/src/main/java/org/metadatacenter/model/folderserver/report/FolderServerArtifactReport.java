@@ -50,7 +50,7 @@ public abstract class FolderServerArtifactReport extends FolderServerArtifactCur
   public static FolderServerArtifactReport fromResource(FolderServerArtifact resource) {
     try {
       String s = JsonMapper.MAPPER.writeValueAsString(resource);
-      return JsonMapper.MAPPER.readValue(s, FolderServerArtifactReport.class);
+      return JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerArtifactReport.class);
     } catch (IOException e) {
       log.error("Error while converting the artifact to an artifact report", e);
     }

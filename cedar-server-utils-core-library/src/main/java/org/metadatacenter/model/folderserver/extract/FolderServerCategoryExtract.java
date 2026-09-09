@@ -1,13 +1,11 @@
 package org.metadatacenter.model.folderserver.extract;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FolderServerCategory;
 import org.metadatacenter.model.folderserver.datagroup.NameDescriptionIdentifierGroup;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class FolderServerCategoryExtract {
 
   protected String id;

@@ -1,16 +1,23 @@
 package org.metadatacenter.util.http;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
 import io.swagger.v3.oas.annotations.media.Schema;
+import org.metadatacenter.error.CedarErrorPack;
+import org.metadatacenter.http.CedarResponseStatus;
 
+import jakarta.ws.rs.core.Response;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Documentation model for the error envelope returned by CEDAR REST services.
+ * The error envelope returned by CEDAR REST services.
  *
- * <p>The runtime still renders errors through {@link CedarResponse} and the exception mappers. This
- * class deliberately has no runtime role: it gives OpenAPI one common, permissive schema for the
- * fields those paths expose. A contract test derives the real enum wire values and keeps the
- * documented lists from drifting from the implementation.</p>
+ * <p>This is both the runtime representation and the OpenAPI model. It is deliberately a superset
+ * of the two historical response shapes: {@code message}/{@code errorMessage} and
+ * {@code status}/{@code statusCode} remain paired aliases, while exception-only diagnostic fields
+ * are available to responses built directly by a resource as well. Internal exception objects are
+ * never copied into this client-facing type.</p>
  */
 @Schema(name = "CedarError", description = "A CEDAR error response. Diagnostic fields are populated only "
     + "when they are relevant to the failure.", additionalProperties = Schema.AdditionalPropertiesValue.TRUE)
@@ -55,6 +62,7 @@ public final class CedarError {
           "invalidArtifactType", "readOtherProfileForbidden", "updateOtherProfileForbidden",
           "folderCanNotBeDeleted", "folderCanNotBeChanged", "groupAlreadyPresent",
           "groupCanBeModifiedOnlyByGroupAdmin", "groupCanBeDeletedOnlyByGroupAdmin",
+          "groupMembersCanBeReadOnlyByGroupAdmin",
           "groupRequiresAdministrator", "groupUsersNotUpdated",
           "specialGroupCanNotBeDeleted", "folderPermissionsCanNotBeChanged", "unknownInstanceOutputFormat",
           "folderCopyNotAllowed", "methodNotImplemented", "upstreamServerError", "nothingToDo",
@@ -100,12 +108,63 @@ public final class CedarError {
   public String suggestedAction;
 
   @Schema(description = "Operation that failed. Its fields depend on the operation type.", nullable = true)
-  public Map<String, Object> operation;
+  public Object operation;
 
   @Schema(description = "Correlation identifier for an internal error recorded in server logs.",
       format = "uuid", nullable = true)
   public String errorId;
 
+  private final Map<String, Object> extensions = new LinkedHashMap<>();
+
   private CedarError() {
+  }
+
+  /** Build a client-safe envelope from the internal error accumulator. */
+  public static CedarError from(CedarErrorPack pack, String errorId) {
+    CedarError error = new CedarError();
+    CedarResponseStatus responseStatus = pack.getStatus();
+    error.status = responseStatus == null ? CedarResponseStatus.INTERNAL_SERVER_ERROR.name() : responseStatus.name();
+    error.statusCode = pack.getStatusCode();
+    error.errorKey = pack.getErrorKey() == null ? null : pack.getErrorKey().getValue();
+    error.errorReasonKey = pack.getErrorReasonKey() == null ? null : pack.getErrorReasonKey().getValue();
+    error.errorType = pack.getErrorType() == null ? null : pack.getErrorType().getValue();
+    error.message = pack.getMessage();
+    error.errorMessage = pack.getMessage();
+    error.parameters = pack.getParameters();
+    error.objects = pack.getObjects();
+    error.entities = pack.getEntities();
+    error.suggestedAction = pack.getSuggestedAction() == null ? null : pack.getSuggestedAction().getValue();
+    error.operation = pack.getOperation() == null ? null : pack.getOperation().asJson();
+    error.errorId = errorId;
+    return error;
+  }
+
+  /** Build the envelope for a framework status that is not represented by {@link CedarResponseStatus}. */
+  public static CedarError fromStatus(int statusCode) {
+    CedarError error = new CedarError();
+    Response.Status standardStatus = Response.Status.fromStatusCode(statusCode);
+    error.status = standardStatus == null ? "HTTP_" + statusCode : standardStatus.name();
+    error.statusCode = statusCode;
+    error.parameters = Collections.emptyMap();
+    error.objects = Collections.emptyMap();
+    error.entities = Collections.emptyMap();
+    return error;
+  }
+
+  /** Preserve an endpoint-specific legacy key while also emitting the canonical fields. */
+  public CedarError extension(String name, Object value) {
+    extensions.put(name, value);
+    return this;
+  }
+
+  /** Preserve a legacy broad error type whose value predates the common enum. */
+  public CedarError legacyErrorType(String value) {
+    errorType = value;
+    return this;
+  }
+
+  @JsonAnyGetter
+  public Map<String, Object> extensions() {
+    return extensions;
   }
 }
