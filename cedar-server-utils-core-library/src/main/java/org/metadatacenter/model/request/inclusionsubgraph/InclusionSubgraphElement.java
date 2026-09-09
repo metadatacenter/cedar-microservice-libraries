@@ -1,6 +1,5 @@
 package org.metadatacenter.model.request.inclusionsubgraph;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FolderServerElement;
 import org.metadatacenter.util.json.JsonMapper;
@@ -10,7 +9,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Map;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class InclusionSubgraphElement extends InclusionSubgraphNode {
 
   private static final Logger log = LoggerFactory.getLogger(InclusionSubgraphElement.class);
@@ -30,7 +28,7 @@ public class InclusionSubgraphElement extends InclusionSubgraphNode {
   public static InclusionSubgraphElement fromFolderServerElement(FolderServerElement element) {
     try {
       String s = JsonMapper.STRICT_MAPPER.writeValueAsString(element);
-      InclusionSubgraphElement inclusionSubgraphElement = JsonMapper.STRICT_MAPPER.readValue(s, InclusionSubgraphElement.class);
+      InclusionSubgraphElement inclusionSubgraphElement = JsonMapper.TOLERANT_MAPPER.readValue(s, InclusionSubgraphElement.class);
       return inclusionSubgraphElement;
     } catch (IOException e) {
       log.error("Error while converting the element to an inclusion subgraph element", e);

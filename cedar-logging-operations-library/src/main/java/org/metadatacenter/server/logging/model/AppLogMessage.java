@@ -1,7 +1,6 @@
 package org.metadatacenter.server.logging.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.server.logging.AppLogger;
 
@@ -10,7 +9,6 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class AppLogMessage {
 
   private String globalRequestId;

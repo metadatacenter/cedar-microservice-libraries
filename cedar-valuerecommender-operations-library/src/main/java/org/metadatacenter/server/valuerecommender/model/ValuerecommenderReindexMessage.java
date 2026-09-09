@@ -1,13 +1,11 @@
 package org.metadatacenter.server.valuerecommender.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.metadatacenter.id.CedarInstanceArtifactId;
 import org.metadatacenter.id.CedarTemplateId;
 import org.metadatacenter.id.CedarTemplateInstanceId;
 
 import java.time.Instant;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class ValuerecommenderReindexMessage {
 
   private CedarTemplateId templateId;

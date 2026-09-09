@@ -1,6 +1,5 @@
 package org.metadatacenter.server.logging.query;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.util.List;
 
@@ -20,7 +19,6 @@ import java.util.List;
  * histogram-approximate percentiles). The rest of the spec is identical either way — that is the
  * point.
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
 public record LogQuerySpec(String table,
                            String from,
                            String to,
@@ -49,7 +47,6 @@ public record LogQuerySpec(String table,
    * One predicate. {@code vals} is used by {@code in}/{@code notin}/{@code between}, {@code val} by
    * everything else; {@code isnull}/{@code notnull} need neither.
    */
-  @JsonIgnoreProperties(ignoreUnknown = true)
   public record Filter(String col, String op, String val, List<String> vals) {
   }
 
@@ -57,7 +54,6 @@ public record LogQuerySpec(String table,
    * Sort key: a dimension key in raw mode, or a dimension/metric key ("count", "sum:duration") in
    * grouped mode. {@code dir} is asc|desc (default desc).
    */
-  @JsonIgnoreProperties(ignoreUnknown = true)
   public record Sort(String key, String dir) {
   }
 
@@ -66,7 +62,6 @@ public record LogQuerySpec(String table,
    * half of a pattern query (e.g. the N+1 detector: group by (globalRequestId, runnableHash) having
    * count &gt; 5). {@code op} is gt|gte|lt|lte|eq|ne.
    */
-  @JsonIgnoreProperties(ignoreUnknown = true)
   public record Having(String key, String op, String val) {
   }
 
