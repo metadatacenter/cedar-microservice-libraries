@@ -110,7 +110,11 @@ public final class LogQueryColumns {
 
   /**
    * Collapse 1,165 distinct paths into a readable set: UUIDs (bare or percent-encoded inside an
-   * artifact @id) become {uuid}, long digit runs become {n}. MySQL 8 REGEXP_REPLACE.
+   * artifact @id) become {uuid}, long digit runs become {n}.
+   *
+   * REGEXP_REPLACE exists in both MySQL 8 (ICU) and MariaDB 10.0.5+ (PCRE), and the log DB is
+   * MariaDB. The two engines are not interchangeable for arbitrary patterns, so keep these to plain
+   * character classes and bounded quantifiers, as below -- no \d, lookaround or backreferences.
    */
   private static final String PATH_TEMPLATE_SQL =
       "REGEXP_REPLACE(REGEXP_REPLACE(path,"
