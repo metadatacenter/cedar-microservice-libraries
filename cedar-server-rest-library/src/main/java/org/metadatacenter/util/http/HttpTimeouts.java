@@ -96,6 +96,11 @@ public final class HttpTimeouts {
       HttpConnectionConstants.BATCH_CONNECTION_TIMEOUT, HttpConnectionConstants.BATCH_CONNECTION_LEASE_TIMEOUT,
       HttpConnectionConstants.BATCH_SOCKET_TIMEOUT, 10, 20, false);
 
+  /** Anonymous compatibility proxies preserve redirects as responses rather than following them. */
+  public static final HttpTimeouts ANONYMOUS_INTERACTIVE = new HttpTimeouts(
+      HttpConnectionConstants.CONNECTION_TIMEOUT, HttpConnectionConstants.CONNECTION_LEASE_TIMEOUT,
+      HttpConnectionConstants.SOCKET_TIMEOUT, 100, 200, false);
+
   private final Timeout connectTimeout;
   private final Timeout responseTimeout;
   private final Executor executor;
