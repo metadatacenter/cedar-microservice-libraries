@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.metadatacenter.constant.CedarConstants;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.model.CedarResourceType;
+import org.metadatacenter.model.ModelNodeNames;
 import org.metadatacenter.server.jsonld.LinkedDataUtil;
 import org.metadatacenter.server.model.provenance.ProvenanceInfo;
 import org.metadatacenter.util.json.JsonMapper;
@@ -59,6 +60,25 @@ public class ModelUtil {
 
   public static JsonPointerValuePair extractDOIFromResource(JsonNode jsonNode) {
     return extractStringFromPointer(jsonNode, ANNOTATION_DOI_ID);
+  }
+
+  /**
+   * Removes the DOI annotation from a document about to be stored under a new identifier. A DOI
+   * identifies the artifact it was minted for, so a copy or a successor drawn from that document must
+   * not carry it. Keeping it also puts the two stores at odds. A DOI is recorded on the graph node only
+   * where one was minted, and the update path refuses a request whose DOI differs from the one stored,
+   * which an artifact carrying an inherited DOI does on its first ordinary edit.
+   */
+  public static void removeDOIFromResource(ObjectNode jsonNode) {
+    JsonNode annotations = jsonNode.get(ModelNodeNames.ANNOTATIONS);
+    if (annotations == null || !annotations.isObject()) {
+      return;
+    }
+    ObjectNode annotationsNode = (ObjectNode) annotations;
+    annotationsNode.remove(ModelNodeNames.DATACITE_DOI_URI);
+    if (annotationsNode.isEmpty()) {
+      jsonNode.remove(ModelNodeNames.ANNOTATIONS);
+    }
   }
 
   public static JsonPointerValuePair extractDescriptionFromResource(CedarResourceType resourceType, JsonNode jsonNode) {

@@ -218,6 +218,7 @@ public class CloneInstancesExecutorService {
         originalDocument = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(originalDocument);
         ((ObjectNode) jsonNode).remove("@id");
+        ModelUtil.removeDOIFromResource((ObjectNode) jsonNode);
         ((ObjectNode) jsonNode).put(SCHEMA_IS_BASED_ON, newTemplateId.getId());
         if (jsonNode.get(SCHEMA_ORG_IDENTIFIER) != null) {
           String schemaId = jsonNode.get(SCHEMA_ORG_IDENTIFIER).asText();

@@ -1,6 +1,7 @@
 package org.metadatacenter.util;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -109,6 +110,44 @@ class ModelUtilTest {
     JsonPointerValuePair pair = ModelUtil.extractDOIFromResource(resource);
 
     assertEquals("https://doi.org/10.123/example", pair.getValue());
+  }
+
+  @Test
+  void removingTheDoiLeavesTheAuthorsOtherAnnotationsAlone() throws Exception {
+    ObjectNode resource = (ObjectNode) JsonMapper.STRICT_MAPPER.readTree("""
+        {"_annotations":{"https://datacite.com/doi":{"@id":"https://doi.org/10.123/example"},
+                         "https://schema.org/keywords":{"@value":"metadata"}}}
+        """);
+
+    ModelUtil.removeDOIFromResource(resource);
+
+    assertNull(ModelUtil.extractDOIFromResource(resource).getValue());
+    assertTrue(resource.at("/_annotations/https:~1~1schema.org~1keywords").has("@value"));
+  }
+
+  @Test
+  void removingTheOnlyAnnotationRemovesTheAnnotationsObjectItself() throws Exception {
+    ObjectNode resource = (ObjectNode) JsonMapper.STRICT_MAPPER.readTree("""
+        {"schema:name":"An artifact",
+         "_annotations":{"https://datacite.com/doi":{"@id":"https://doi.org/10.123/example"}}}
+        """);
+
+    ModelUtil.removeDOIFromResource(resource);
+
+    assertFalse(resource.has("_annotations"));
+    assertEquals("An artifact", resource.get("schema:name").textValue());
+  }
+
+  @Test
+  void removingTheDoiFromADocumentThatCarriesNoneChangesNothing() throws Exception {
+    for (String document : new String[]{"{}", "{\"_annotations\":null}", "{\"_annotations\":42}"}) {
+      ObjectNode resource = (ObjectNode) JsonMapper.STRICT_MAPPER.readTree(document);
+      JsonNode before = resource.deepCopy();
+
+      ModelUtil.removeDOIFromResource(resource);
+
+      assertEquals(before, resource);
+    }
   }
 
   @Test
