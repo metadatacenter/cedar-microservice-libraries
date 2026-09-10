@@ -1,6 +1,8 @@
 package org.metadatacenter.server.logging.query;
 
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.util.List;
 
 /**
@@ -19,6 +21,7 @@ import java.util.List;
  * histogram-approximate percentiles). The rest of the spec is identical either way — that is the
  * point.
  */
+@Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
 public record LogQuerySpec(String table,
                            String from,
                            String to,
