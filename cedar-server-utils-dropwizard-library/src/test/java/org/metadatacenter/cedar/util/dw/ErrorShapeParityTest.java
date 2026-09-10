@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Both error producers emit the same runtime envelope.
+ * Both error producers emit the same runtime envelope, and it carries only its declared fields.
  *
  * <p>{@link CedarErrorPack} remains the internal accumulator carried by exceptions. It is converted
  * at the HTTP boundary, so neither it nor its exception fields can become a second public shape.
@@ -25,12 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ErrorShapeParityTest {
 
   private static final Set<String> ENVELOPE_KEYS = Set.of(
-      "status", "statusCode", "errorKey", "errorReasonKey", "errorType", "message", "errorMessage",
+      "status", "statusCode", "errorKey", "errorReasonKey", "errorType", "message",
       "parameters", "objects", "entities", "suggestedAction", "operation", "errorId");
 
   @SuppressWarnings("unchecked")
   private static CedarError builderEntity() {
-    Response response = CedarResponse.notFound().errorMessage("the artifact was not found").build();
+    Response response = CedarResponse.notFound().message("the artifact was not found").build();
     return (CedarError) response.getEntity();
   }
 
@@ -53,12 +53,18 @@ class ErrorShapeParityTest {
   }
 
   @Test
-  @DisplayName("The message reads the same under either key, in either shape")
-  void theMessageAgreesAcrossKeysAndShapes() {
-    assertEquals("the artifact was not found", builderEntity().errorMessage);
+  @DisplayName("The message reads the same in either shape")
+  void theMessageAgreesAcrossShapes() {
     assertEquals("the artifact was not found", builderEntity().message);
-    assertEquals("the artifact was not found", mapperEntity().errorMessage);
     assertEquals("the artifact was not found", mapperEntity().message);
+  }
+
+  @Test
+  @DisplayName("The envelope carries no field outside its declared set")
+  void theEnvelopeCarriesNothingUndeclared() {
+    Response response = CedarResponse.badRequest().message("the request was malformed").build();
+
+    assertEquals(ENVELOPE_KEYS, shape((CedarError) response.getEntity()).keySet());
   }
 
   @Test

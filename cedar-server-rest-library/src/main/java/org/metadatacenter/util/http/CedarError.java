@@ -1,26 +1,23 @@
 package org.metadatacenter.util.http;
 
-import com.fasterxml.jackson.annotation.JsonAnyGetter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.metadatacenter.error.CedarErrorPack;
 import org.metadatacenter.http.CedarResponseStatus;
 
 import jakarta.ws.rs.core.Response;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
  * The error envelope returned by CEDAR REST services.
  *
- * <p>This is both the runtime representation and the OpenAPI model. It is deliberately a superset
- * of the two historical response shapes: {@code message}/{@code errorMessage} and
- * {@code status}/{@code statusCode} remain paired aliases, while exception-only diagnostic fields
+ * <p>This is both the runtime representation and the OpenAPI model. {@code status} and
+ * {@code statusCode} are paired representations of one status, and exception-only diagnostic fields
  * are available to responses built directly by a resource as well. Internal exception objects are
  * never copied into this client-facing type.</p>
  */
 @Schema(name = "CedarError", description = "A CEDAR error response. Diagnostic fields are populated only "
-    + "when they are relevant to the failure.", additionalProperties = Schema.AdditionalPropertiesValue.TRUE)
+    + "when they are relevant to the failure.", additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
 public final class CedarError {
 
   @Schema(description = "Symbolic HTTP response status.", requiredMode = Schema.RequiredMode.REQUIRED,
@@ -73,7 +70,7 @@ public final class CedarError {
           "versioningOnlyByOwner", "nonVersionedArtifactType", "createDraftOnlyFromPublished",
           "publishOnlyDraft", "draftNotCreated", "contentNotValid", "doiNotSupportedByResourceType",
           "doiCanNotBeSetForEmptyAtId", "doiCanNotBeAltered", "doiCanNotBeSet", "doiAlreadyExists",
-          "dataCiteDOIDisabled", "resourceNotFound", "internalError"
+          "dataCiteDOIDisabled", "pinnedVersionUnavailable", "resourceNotFound", "internalError"
       })
   public String errorKey;
 
@@ -89,9 +86,6 @@ public final class CedarError {
 
   @Schema(description = "Human-readable error message.", nullable = true)
   public String message;
-
-  @Schema(description = "Alias of message retained for compatibility.", nullable = true)
-  public String errorMessage;
 
   @Schema(description = "Named scalar values associated with the error.")
   public Map<String, Object> parameters;
@@ -114,8 +108,6 @@ public final class CedarError {
       format = "uuid", nullable = true)
   public String errorId;
 
-  private final Map<String, Object> extensions = new LinkedHashMap<>();
-
   private CedarError() {
   }
 
@@ -129,7 +121,6 @@ public final class CedarError {
     error.errorReasonKey = pack.getErrorReasonKey() == null ? null : pack.getErrorReasonKey().getValue();
     error.errorType = pack.getErrorType() == null ? null : pack.getErrorType().getValue();
     error.message = pack.getMessage();
-    error.errorMessage = pack.getMessage();
     error.parameters = pack.getParameters();
     error.objects = pack.getObjects();
     error.entities = pack.getEntities();
@@ -151,20 +142,4 @@ public final class CedarError {
     return error;
   }
 
-  /** Preserve an endpoint-specific legacy key while also emitting the canonical fields. */
-  public CedarError extension(String name, Object value) {
-    extensions.put(name, value);
-    return this;
-  }
-
-  /** Preserve a legacy broad error type whose value predates the common enum. */
-  public CedarError legacyErrorType(String value) {
-    errorType = value;
-    return this;
-  }
-
-  @JsonAnyGetter
-  public Map<String, Object> extensions() {
-    return extensions;
-  }
 }

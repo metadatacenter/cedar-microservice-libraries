@@ -14,7 +14,7 @@ import org.metadatacenter.util.http.CedarResponse;
 
 import java.util.List;
 
-/** Preserves Dropwizard's validation details under its legacy key and the common envelope. */
+/** Reports Dropwizard's validation details through the common envelope. */
 @Provider
 @Priority(Priorities.USER - 100)
 public class CedarJerseyViolationExceptionMapper implements ExceptionMapper<JerseyViolationException> {
@@ -30,9 +30,8 @@ public class CedarJerseyViolationExceptionMapper implements ExceptionMapper<Jers
 
     return CedarResponse.status(status)
         .errorKey(CedarErrorKey.INVALID_INPUT)
-        .errorMessage("Request validation failed")
+        .message("Request validation failed")
         .object("validationErrors", errors)
-        .extension("errors", errors)
         .build();
   }
 }
