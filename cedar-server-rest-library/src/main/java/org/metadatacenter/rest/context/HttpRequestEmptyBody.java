@@ -36,6 +36,11 @@ public class HttpRequestEmptyBody implements CedarRequestBody {
   }
 
   @Override
+  public CedarRequestBody mustHaveOnly(String... accepted) {
+    return this;
+  }
+
+  @Override
   public <T> T convert(Class<T> type) throws CedarException {
     if (type == HttpRequestEmptyBody.class) {
       return (T) (new HttpRequestEmptyBody());
