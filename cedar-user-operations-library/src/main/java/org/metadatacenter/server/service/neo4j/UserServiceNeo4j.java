@@ -35,10 +35,26 @@ public class UserServiceNeo4j implements UserService {
     return user == null ? null : user.buildUser();
   }
 
+  /**
+   * Resolves an API key to the user it authenticates, or null where it authenticates nobody.
+   *
+   * <p>The graph matches the secret against every key a user holds, disabled ones included, so the
+   * user record decides. Disabling a key is how access is withdrawn from a credential that is kept,
+   * and the rest of the service already reads it that way: deleting a key refuses only when it is the
+   * last enabled one, because a disabled key is not the account's working key. A lookup that ignored
+   * the flag made the withdrawal cosmetic. The disabled key still read the profile it belongs to,
+   * secrets and all, and still issued new keys of its own.
+   */
   @Override
   public CedarUser findUserByApiKey(String apiKey) {
     FolderServerUser user = userProxy.findUserByApiKey(apiKey);
-    return user == null ? null : user.buildUser();
+    if (user == null) {
+      return null;
+    }
+    CedarUser cedarUser = user.buildUser();
+    boolean enabled = cedarUser.getApiKeys().stream()
+        .anyMatch(key -> key.isEnabled() && apiKey.equals(key.getKey()));
+    return enabled ? cedarUser : null;
   }
 
   @Override
