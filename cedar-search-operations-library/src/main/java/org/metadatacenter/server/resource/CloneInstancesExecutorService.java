@@ -43,6 +43,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.metadatacenter.model.ModelNodeNames.JSON_LD_ID;
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_IS_BASED_ON;
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_ORG_IDENTIFIER;
 
@@ -217,7 +218,10 @@ public class CloneInstancesExecutorService {
       if (entity != null) {
         originalDocument = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(originalDocument);
-        ((ObjectNode) jsonNode).remove("@id");
+        // Null rather than absent: the artifact server assigns the copy's identifier, and null is how
+        // a client asks for one. Dropping the key is refused, because an absent key cannot be told
+        // from a forgotten one.
+        ((ObjectNode) jsonNode).putNull(JSON_LD_ID);
         ModelUtil.removeDOIFromResource((ObjectNode) jsonNode);
         ((ObjectNode) jsonNode).put(SCHEMA_IS_BASED_ON, newTemplateId.getId());
         if (jsonNode.get(SCHEMA_ORG_IDENTIFIER) != null) {
