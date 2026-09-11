@@ -214,6 +214,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     environment.jersey().register(new CedarHealthCheckResource(cedarConfig, environment.healthChecks()));
     environment.jersey().register(RequestIdGeneratorFilter.class);
     environment.jersey().register(ResponseLoggerFilter.class);
+    environment.jersey().register(StrongEtagResponseFilter.class);
     environment.jersey().register(new InstanceContextInjectionFeature(environment.jersey().getResourceConfig()));
   }
 
