@@ -23,7 +23,7 @@ public class CedarJsonProcessingExceptionMapper implements ExceptionMapper<JsonP
     }
     return CedarResponse.badRequest()
         .errorKey(CedarErrorKey.MALFORMED_JSON_REQUEST_BODY)
-        .errorMessage("Unable to process JSON")
+        .message("Unable to process JSON")
         .build();
   }
 }

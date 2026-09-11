@@ -40,7 +40,7 @@ public abstract class FolderServerArtifact extends FileSystemResource implements
 
   public static FolderServerArtifact fromFolderServerResourceCurrentUserReport(FolderServerArtifactCurrentUserReport cur) {
     try {
-      String s = JsonMapper.MAPPER.writeValueAsString(cur);
+      String s = JsonMapper.STRICT_MAPPER.writeValueAsString(cur);
       FolderServerArtifact folderServerArtifact = JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerArtifact.class);
       return folderServerArtifact;
     } catch (IOException e) {

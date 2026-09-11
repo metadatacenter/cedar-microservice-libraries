@@ -30,7 +30,7 @@ public abstract class AbstractOpenApiSharedRoutesTest {
     JsonNode spec;
     try (InputStream input = getClass().getResourceAsStream("/assets/swagger-api/swagger.json")) {
       assertNotNull(input, "generated OpenAPI document");
-      spec = JsonMapper.MAPPER.readTree(input);
+      spec = JsonMapper.STRICT_MAPPER.readTree(input);
     }
 
     for (String path : SHARED_PATHS) {

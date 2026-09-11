@@ -197,7 +197,7 @@ public class UserSummaryCache {
       if (entity != null) {
         String userSummaryString = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         if (userSummaryString != null && !userSummaryString.isEmpty()) {
-          JsonNode jsonNode = JsonMapper.MAPPER.readTree(userSummaryString);
+          JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(userSummaryString);
           JsonNode at = jsonNode.at("/screenName");
           if (at != null && !at.isMissingNode()) {
             CedarUserSummary summary = new CedarUserSummary();

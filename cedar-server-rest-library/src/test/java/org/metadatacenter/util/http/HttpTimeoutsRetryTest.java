@@ -28,6 +28,33 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class HttpTimeoutsRetryTest {
 
   @Test
+  void productionClientsDoNotRetryAServiceUnavailableResponse() throws Exception {
+    AtomicInteger requestCount = new AtomicInteger();
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/", exchange -> {
+      requestCount.incrementAndGet();
+      exchange.getRequestBody().readAllBytes();
+      exchange.sendResponseHeaders(503, -1);
+      exchange.close();
+    });
+    server.start();
+    try {
+      String url = "http://127.0.0.1:" + server.getAddress().getPort() + "/artifact";
+      for (HttpTimeouts timeouts : List.of(HttpTimeouts.INTERACTIVE, HttpTimeouts.BATCH)) {
+        for (Request request : List.of(Request.get(url), Request.post(url).bodyString("{}", ContentType.APPLICATION_JSON))) {
+          int before = requestCount.get();
+          try (ClassicHttpResponse response = timeouts.execute(request)) {
+            assertEquals(503, response.getCode());
+            assertEquals(before + 1, requestCount.get(), "The production pool must use the explicit retry policy");
+          }
+        }
+      }
+    } finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
   void aPostIsNotRetriedWhenTheDependencyAnswersServiceUnavailable() throws Exception {
     AtomicInteger requestCount = new AtomicInteger();
     HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);

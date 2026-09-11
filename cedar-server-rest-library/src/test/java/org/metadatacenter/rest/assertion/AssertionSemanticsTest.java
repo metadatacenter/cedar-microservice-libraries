@@ -47,17 +47,17 @@ class AssertionSemanticsTest {
   @ParameterizedTest
   @ValueSource(strings = {"x", "0", "false", " x ", "https://repo.example/id", "\u00a0value\u00a0"})
   void nonEmptyAcceptsEveryNonBlankParameterRepresentation(String value) {
-    assertNull(new NonEmptyAssertion().check(context, parameter(JsonMapper.MAPPER.getNodeFactory().textNode(value))));
+    assertNull(new NonEmptyAssertion().check(context, parameter(JsonMapper.STRICT_MAPPER.getNodeFactory().textNode(value))));
   }
 
   static Stream<Arguments> emptyParameterNodes() {
     return Stream.of(
         Arguments.of((JsonNode) null),
-        Arguments.of(JsonMapper.MAPPER.nullNode()),
-        Arguments.of(JsonMapper.MAPPER.missingNode()),
-        Arguments.of(JsonMapper.MAPPER.getNodeFactory().textNode("")),
-        Arguments.of(JsonMapper.MAPPER.getNodeFactory().textNode(" ")),
-        Arguments.of(JsonMapper.MAPPER.getNodeFactory().textNode("\t\n"))
+        Arguments.of(JsonMapper.STRICT_MAPPER.nullNode()),
+        Arguments.of(JsonMapper.STRICT_MAPPER.missingNode()),
+        Arguments.of(JsonMapper.STRICT_MAPPER.getNodeFactory().textNode("")),
+        Arguments.of(JsonMapper.STRICT_MAPPER.getNodeFactory().textNode(" ")),
+        Arguments.of(JsonMapper.STRICT_MAPPER.getNodeFactory().textNode("\t\n"))
     );
   }
 
@@ -73,7 +73,7 @@ class AssertionSemanticsTest {
   @ParameterizedTest
   @ValueSource(strings = {"{}", "{\"name\":\"x\"}", "{\"nested\":{}}"})
   void nonEmptyAcceptsJsonObjectBodies(String json) throws Exception {
-    assertNull(new NonEmptyAssertion().check(context, new HttpRequestJsonBody(JsonMapper.MAPPER.readTree(json))));
+    assertNull(new NonEmptyAssertion().check(context, new HttpRequestJsonBody(JsonMapper.STRICT_MAPPER.readTree(json))));
   }
 
   static Stream<Arguments> invalidBodies() throws Exception {
@@ -81,10 +81,10 @@ class AssertionSemanticsTest {
         Arguments.of(new HttpRequestEmptyBody()),
         Arguments.of(new HttpRequestJsonBody()),
         Arguments.of(new HttpRequestJsonBody(null)),
-        Arguments.of(new HttpRequestJsonBody(JsonMapper.MAPPER.nullNode())),
-        Arguments.of(new HttpRequestJsonBody(JsonMapper.MAPPER.missingNode())),
-        Arguments.of(new HttpRequestJsonBody(JsonMapper.MAPPER.readTree("[]"))),
-        Arguments.of(new HttpRequestJsonBody(JsonMapper.MAPPER.getNodeFactory().textNode("value")))
+        Arguments.of(new HttpRequestJsonBody(JsonMapper.STRICT_MAPPER.nullNode())),
+        Arguments.of(new HttpRequestJsonBody(JsonMapper.STRICT_MAPPER.missingNode())),
+        Arguments.of(new HttpRequestJsonBody(JsonMapper.STRICT_MAPPER.readTree("[]"))),
+        Arguments.of(new HttpRequestJsonBody(JsonMapper.STRICT_MAPPER.getNodeFactory().textNode("value")))
     );
   }
 
@@ -248,8 +248,8 @@ class AssertionSemanticsTest {
   @Test
   void parameterNullnessDistinguishesMissingExplicitNullAndPresentValue() {
     CedarParameterImpl missing = parameter(null);
-    CedarParameterImpl explicitNull = parameter(JsonMapper.MAPPER.nullNode());
-    CedarParameterImpl value = parameter(JsonMapper.MAPPER.getNodeFactory().textNode("value"));
+    CedarParameterImpl explicitNull = parameter(JsonMapper.STRICT_MAPPER.nullNode());
+    CedarParameterImpl value = parameter(JsonMapper.STRICT_MAPPER.getNodeFactory().textNode("value"));
 
     assertNull(new NullAssertion().check(context, missing));
     assertNull(new NullAssertion().check(context, explicitNull));

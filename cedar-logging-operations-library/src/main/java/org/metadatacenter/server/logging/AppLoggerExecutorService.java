@@ -49,7 +49,7 @@ public class AppLoggerExecutorService {
       ApplicationRequestLog oldLog = requestLogDAO.findByLocalRequestId(appLog.getLocalRequestId());
       if (oldLog != null) {
         try {
-          oldLog.setErrorPack(JsonMapper.MAPPER.writeValueAsString(appLog.getParamAsMap(AppLogParam.EXCEPTION)));
+          oldLog.setErrorPack(JsonMapper.STRICT_MAPPER.writeValueAsString(appLog.getParamAsMap(AppLogParam.EXCEPTION)));
           requestLogDAO.createOrUpdate(oldLog);
         } catch (JsonProcessingException e) {
           log.error("Error while serializing ErrorPack for DB log", e);

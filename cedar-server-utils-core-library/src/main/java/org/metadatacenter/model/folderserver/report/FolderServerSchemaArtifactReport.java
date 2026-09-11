@@ -28,7 +28,7 @@ public abstract class FolderServerSchemaArtifactReport extends FolderServerArtif
 
   public static FolderServerSchemaArtifactReport fromResource(FolderServerArtifact resource) {
     try {
-      String s = JsonMapper.MAPPER.writeValueAsString(resource);
+      String s = JsonMapper.STRICT_MAPPER.writeValueAsString(resource);
       return JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerSchemaArtifactReport.class);
     } catch (IOException e) {
       log.error("Error while converting the artifact to a schema artifact report", e);

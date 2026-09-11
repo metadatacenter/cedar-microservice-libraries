@@ -105,7 +105,7 @@ public class ValuerecommenderReindexExecutorService {
       ClassicHttpResponse response = HttpTimeouts.BATCH.execute(request);
       int statusCode = response.getCode();
       if (statusCode == HttpStatus.SC_OK) {
-        List<RulesGenerationStatus> list = JsonMapper.MAPPER
+        List<RulesGenerationStatus> list = JsonMapper.STRICT_MAPPER
             .readValue(response.getEntity().getContent(), new TypeReference<List<RulesGenerationStatus>>() {
             });
         for (RulesGenerationStatus status : list) {

@@ -130,7 +130,7 @@ public abstract class CedarMicroserviceResource {
    * fails here rather than answering an unauthenticated caller.
    */
   protected CedarRequestContext buildAnonymousRequestContext() {
-    HttpServletRequestContext sc = new HttpServletRequestContext(linkedDataUtil, request, httpHeaders);
+    HttpServletRequestContext sc = HttpServletRequestContext.anonymous(linkedDataUtil, request, httpHeaders);
     StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
     StackTraceElement caller = stackTrace[2];
     requireDeclaredAnonymous(caller);

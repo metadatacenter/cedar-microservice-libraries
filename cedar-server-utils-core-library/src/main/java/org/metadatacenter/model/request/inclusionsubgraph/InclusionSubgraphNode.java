@@ -43,7 +43,7 @@ public class InclusionSubgraphNode extends AbstractCedarResourceWithDates implem
 
   public static InclusionSubgraphNode fromNodeExtract(FolderServerResourceExtract node) {
     try {
-      return JsonMapper.MAPPER.readValue(JsonMapper.MAPPER.writeValueAsString(node), InclusionSubgraphNode.class);
+      return JsonMapper.STRICT_MAPPER.readValue(JsonMapper.STRICT_MAPPER.writeValueAsString(node), InclusionSubgraphNode.class);
     } catch (IOException e) {
       log.error("Error while converting the resource extract to an inclusion subgraph node", e);
     }

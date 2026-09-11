@@ -29,7 +29,7 @@ public class AppLoggerQueueService extends QueueServiceWithBlockingQueue {
     // queue (Redis) can not fail the request that produced the log message
     String json;
     try {
-      json = JsonMapper.MAPPER.writeValueAsString(message);
+      json = JsonMapper.STRICT_MAPPER.writeValueAsString(message);
     } catch (JsonProcessingException e) {
       log.error("The log message could not be serialized. Dropping it.", e);
       return;

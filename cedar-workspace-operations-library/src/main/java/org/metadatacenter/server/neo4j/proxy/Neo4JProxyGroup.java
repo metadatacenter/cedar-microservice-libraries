@@ -195,7 +195,7 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
     }
     Record record = result.next();
     Node node = record.get("resource").asNode();
-    JsonNode json = JsonMapper.MAPPER.valueToTree(node.asMap());
+    JsonNode json = JsonMapper.STRICT_MAPPER.valueToTree(node.asMap());
     return new VersionedResource<>(buildClass(json, FolderServerGroup.class), record.get("revision").asLong());
   }
 
@@ -207,7 +207,7 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
       revision = record.get("revision").asLong();
       if (!record.get("user").isNull()) {
         Node node = record.get("user").asNode();
-        JsonNode json = JsonMapper.MAPPER.valueToTree(node.asMap());
+        JsonNode json = JsonMapper.STRICT_MAPPER.valueToTree(node.asMap());
         FolderServerUser user = buildClass(json, FolderServerUser.class);
         groupUsers.addUser(new CedarGroupUser(user.buildExtract(),
             record.get("administrator").asBoolean(), record.get("member").asBoolean()));

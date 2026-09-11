@@ -80,7 +80,7 @@ class ValuerecommenderReindexQueueServiceTest {
 
     assertEquals(1, drained.size());
     ValuerecommenderReindexMessage read =
-        JsonMapper.MAPPER.readValue(drained.get(0), ValuerecommenderReindexMessage.class);
+        JsonMapper.STRICT_MAPPER.readValue(drained.get(0), ValuerecommenderReindexMessage.class);
     assertEquals(TEMPLATE_IRI, read.getTemplateId().getId());
     assertEquals(ValuerecommenderReindexMessageResourceType.INSTANCE, read.getResourceType());
     assertEquals(ValuerecommenderReindexMessageActionType.CREATED, read.getActionType());
@@ -138,7 +138,7 @@ class ValuerecommenderReindexQueueServiceTest {
 
   private static ValuerecommenderReindexMessageActionType readAction(String json) {
     try {
-      return JsonMapper.MAPPER.readValue(json, ValuerecommenderReindexMessage.class).getActionType();
+      return JsonMapper.STRICT_MAPPER.readValue(json, ValuerecommenderReindexMessage.class).getActionType();
     } catch (Exception e) {
       throw new IllegalStateException("The queued message did not deserialize: " + json, e);
     }

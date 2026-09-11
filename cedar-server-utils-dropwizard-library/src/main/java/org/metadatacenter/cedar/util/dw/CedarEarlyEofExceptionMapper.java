@@ -15,6 +15,6 @@ public class CedarEarlyEofExceptionMapper implements ExceptionMapper<EofExceptio
 
   @Override
   public Response toResponse(EofException exception) {
-    return CedarResponse.badRequest().errorMessage("The client disconnected before the request completed").build();
+    return CedarResponse.badRequest().message("The client disconnected before the request completed").build();
   }
 }

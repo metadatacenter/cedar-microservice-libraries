@@ -13,7 +13,7 @@ import java.util.Map;
 public abstract class UserServiceUtil {
 
   public static CedarUser validateModifications(CedarUser cedarUser, Map<String, Object> modificationsMap) {
-    JsonNode userNode = JsonMapper.MAPPER.valueToTree(cedarUser);
+    JsonNode userNode = JsonMapper.STRICT_MAPPER.valueToTree(cedarUser);
     for (String k : modificationsMap.keySet()) {
       String pointerS = "/" + k.replace(".", "/");
       pointerS.replaceAll("//", "/");
@@ -23,7 +23,7 @@ public abstract class UserServiceUtil {
       JsonPointer pointer = JsonPointer.compile(pointerS);
       JsonNode v = userNode.at(pointer);
       if (!v.isMissingNode()) {
-        JsonNode newValue = JsonMapper.MAPPER.valueToTree(modificationsMap.get(k));
+        JsonNode newValue = JsonMapper.STRICT_MAPPER.valueToTree(modificationsMap.get(k));
         JsonNode parentNode = userNode.at(pointer.head());
         String lastNodeName = pointer.last().toString().replace("/", "");
         ((ObjectNode) parentNode).set(lastNodeName, newValue);
@@ -33,7 +33,7 @@ public abstract class UserServiceUtil {
     }
     CedarUser modifiedUser = null;
     try {
-      modifiedUser = JsonMapper.MAPPER.convertValue(userNode, CedarUser.class);
+      modifiedUser = JsonMapper.STRICT_MAPPER.convertValue(userNode, CedarUser.class);
       if (!userUIPreferencesAreNotNull(modifiedUser)) {
         return null;
       }

@@ -21,7 +21,7 @@ public class CloneInstancesQueueService extends QueueServiceWithBlockingQueue {
     // unreachable queue (Redis) can not fail the request that produced the event
     String json;
     try {
-      json = JsonMapper.MAPPER.writeValueAsString(event);
+      json = JsonMapper.STRICT_MAPPER.writeValueAsString(event);
     } catch (JsonProcessingException e) {
       log.error("The clone-instances event could not be serialized. Dropping it.", e);
       return;

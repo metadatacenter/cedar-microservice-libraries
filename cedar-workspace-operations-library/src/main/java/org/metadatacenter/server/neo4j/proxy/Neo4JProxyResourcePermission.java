@@ -168,7 +168,7 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
   }
 
   private <T extends CedarResource> T buildNode(Node node, Class<T> clazz) {
-    JsonNode json = JsonMapper.MAPPER.valueToTree(node.asMap());
+    JsonNode json = JsonMapper.STRICT_MAPPER.valueToTree(node.asMap());
     return buildClass(json, clazz);
   }
 

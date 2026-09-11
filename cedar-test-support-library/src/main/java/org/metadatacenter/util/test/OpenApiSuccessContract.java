@@ -51,7 +51,7 @@ public final class OpenApiSuccessContract {
    */
   public static void assertDescribed(InputStream input, String... exemptions) throws IOException {
     Assertions.assertNotNull(input, "generated OpenAPI document");
-    JsonNode spec = JsonMapper.MAPPER.readTree(input);
+    JsonNode spec = JsonMapper.STRICT_MAPPER.readTree(input);
     JsonNode schemas = spec.at("/components/schemas");
     Set<String> allowed = new LinkedHashSet<>();
     Set<String> emptyResponses = new LinkedHashSet<>();

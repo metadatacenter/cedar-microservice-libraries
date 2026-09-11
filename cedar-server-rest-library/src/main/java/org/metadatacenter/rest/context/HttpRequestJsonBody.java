@@ -11,6 +11,10 @@ import org.metadatacenter.rest.assertion.noun.CedarRequestBody;
 import org.metadatacenter.rest.exception.CedarAssertionException;
 import org.metadatacenter.util.json.JsonMapper;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
 public class HttpRequestJsonBody implements CedarRequestBody {
 
   private final JsonNode bodyNode;
@@ -43,16 +47,38 @@ public class HttpRequestJsonBody implements CedarRequestBody {
   @Override
   public String asJsonString() throws CedarProcessingException {
     try {
-      return JsonMapper.MAPPER.writeValueAsString(bodyNode);
+      return JsonMapper.STRICT_MAPPER.writeValueAsString(bodyNode);
     } catch (JsonProcessingException e) {
       throw new CedarProcessingException(e);
     }
   }
 
   @Override
+  public CedarRequestBody mustHaveOnly(String... accepted) throws CedarException {
+    if (bodyNode == null || !bodyNode.isObject()) {
+      return this;
+    }
+    Set<String> acceptedProperties = Set.of(accepted);
+    List<String> unsupported = new ArrayList<>();
+    bodyNode.fieldNames().forEachRemaining(name -> {
+      if (!acceptedProperties.contains(name)) {
+        unsupported.add(name);
+      }
+    });
+    if (unsupported.isEmpty()) {
+      return this;
+    }
+    throw new CedarAssertionException("The request body carries properties this endpoint does not "
+        + "accept: " + String.join(", ", unsupported))
+        .errorKey(CedarErrorKey.INVALID_INPUT)
+        .parameter("unsupportedProperties", unsupported)
+        .parameter("acceptedProperties", List.of(accepted));
+  }
+
+  @Override
   public <T> T convert(Class<T> type) throws CedarException {
     try {
-      return JsonMapper.MAPPER.treeToValue(bodyNode, type);
+      return JsonMapper.STRICT_MAPPER.treeToValue(bodyNode, type);
     } catch (JsonProcessingException e) {
       // The body parsed as JSON, so this is a shape the endpoint does not accept: an unknown key, a
       // value of the wrong type. That is the caller's to fix, and Jackson's message says which.

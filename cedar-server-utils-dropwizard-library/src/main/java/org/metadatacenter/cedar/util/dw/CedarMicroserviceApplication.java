@@ -114,6 +114,10 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     Map<String, String> environmentSandbox = CedarEnvironmentVariableProvider.getFor(systemComponent);
     // Initialize config
     cedarConfig = CedarConfig.getInstance(environmentSandbox);
+    if (getServerName() == ServerName.ARTIFACT || getServerName() == ServerName.RESOURCE
+        || getServerName() == ServerName.WORKER) {
+      cedarConfig.getArtifactService().requireApiKey();
+    }
 
     initializeWithBootstrap(bootstrap, cedarConfig);
   }
@@ -210,6 +214,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     environment.jersey().register(new CedarHealthCheckResource(cedarConfig, environment.healthChecks()));
     environment.jersey().register(RequestIdGeneratorFilter.class);
     environment.jersey().register(ResponseLoggerFilter.class);
+    environment.jersey().register(StrongEtagResponseFilter.class);
     environment.jersey().register(new InstanceContextInjectionFeature(environment.jersey().getResourceConfig()));
   }
 

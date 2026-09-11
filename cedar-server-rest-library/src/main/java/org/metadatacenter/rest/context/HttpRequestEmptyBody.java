@@ -23,16 +23,21 @@ public class HttpRequestEmptyBody implements CedarRequestBody {
 
   @Override
   public JsonNode asJson() {
-    return JsonMapper.MAPPER.createObjectNode();
+    return JsonMapper.STRICT_MAPPER.createObjectNode();
   }
 
   @Override
   public String asJsonString() throws CedarProcessingException {
     try {
-      return JsonMapper.MAPPER.writeValueAsString(JsonMapper.MAPPER.createObjectNode());
+      return JsonMapper.STRICT_MAPPER.writeValueAsString(JsonMapper.STRICT_MAPPER.createObjectNode());
     } catch (JsonProcessingException e) {
       throw new CedarProcessingException(e);
     }
+  }
+
+  @Override
+  public CedarRequestBody mustHaveOnly(String... accepted) {
+    return this;
   }
 
   @Override

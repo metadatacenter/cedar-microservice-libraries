@@ -47,6 +47,8 @@ public final class CedarTestEnvironment {
     put(env, CEDAR_VERSION_MODIFIER, "-0");
     put(env, CEDAR_HOME, "/tmp/cedar-test-home");
 
+    put(env, CEDAR_ARTIFACT_SERVICE_API_KEY, "test-only-artifact-service-key-not-for-prod");
+    put(env, CEDAR_ARTIFACT_SERVICE_PREVIOUS_API_KEY, "");
     put(env, CEDAR_ADMIN_USER_PASSWORD, "adminPassword");
     put(env, CEDAR_ADMIN_USER_API_KEY, "1234");
     put(env, CEDAR_CADSR_ADMIN_USER_API_KEY, "5678");

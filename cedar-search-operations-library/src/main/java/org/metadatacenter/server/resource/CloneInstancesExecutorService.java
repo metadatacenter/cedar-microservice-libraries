@@ -29,7 +29,7 @@ import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexM
 import org.metadatacenter.util.ModelUtil;
 import org.metadatacenter.util.http.CedarUrlUtil;
 import org.metadatacenter.util.http.HttpTimeouts;
-import org.metadatacenter.util.http.ProxyUtil;
+import org.metadatacenter.util.http.ArtifactServiceClient;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,11 +54,13 @@ public class CloneInstancesExecutorService {
   private final CedarRequestContext cedarRequestContext;
   protected final MicroserviceUrlUtil microserviceUrlUtil;
   protected final LinkedDataUtil linkedDataUtil;
+  private final ArtifactServiceClient artifactClient;
 
   protected static NodeIndexingService nodeIndexingService;
   protected static ValuerecommenderReindexQueueService valuerecommenderReindexQueueService;
 
   public CloneInstancesExecutorService(CedarConfig cedarConfig) {
+    artifactClient = new ArtifactServiceClient(cedarConfig);
     UserService userService = CedarDataServices.getInstance().getNeoUserService();
 
     cedarRequestContext = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
@@ -70,7 +72,8 @@ public class CloneInstancesExecutorService {
   CloneInstancesExecutorService(FolderServiceSession folderSession,
                                 CedarRequestContext cedarRequestContext,
                                 MicroserviceUrlUtil microserviceUrlUtil,
-                                LinkedDataUtil linkedDataUtil) {
+                                LinkedDataUtil linkedDataUtil, ArtifactServiceClient artifactClient) {
+    this.artifactClient = artifactClient;
     this.folderSession = folderSession;
     this.cedarRequestContext = cedarRequestContext;
     this.microserviceUrlUtil = microserviceUrlUtil;
@@ -208,19 +211,16 @@ public class CloneInstancesExecutorService {
     String originalDocument = null;
     try {
       String url = microserviceUrlUtil.getArtifact().getArtifactTypeWithId(resourceType, oldInstanceId);
-      ClassicHttpResponse proxyResponse = ProxyUtil.proxyGet(url, c, HttpTimeouts.BATCH);
+      ClassicHttpResponse proxyResponse = artifactClient.get(url, c, HttpTimeouts.BATCH);
       HttpEntity entity = proxyResponse.getEntity();
       int statusCode = proxyResponse.getCode();
       if (entity != null) {
         originalDocument = EntityUtils.toString(entity, StandardCharsets.UTF_8);
-        JsonNode jsonNode = JsonMapper.MAPPER.readTree(originalDocument);
-        ((ObjectNode) jsonNode).remove("@id");
+        JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(originalDocument);
+        ArtifactCopyOperations.prepareDerivedBody((ObjectNode) jsonNode);
         ((ObjectNode) jsonNode).put(SCHEMA_IS_BASED_ON, newTemplateId.getId());
-        if (jsonNode.get(SCHEMA_ORG_IDENTIFIER) != null) {
-          String schemaId = jsonNode.get(SCHEMA_ORG_IDENTIFIER).asText();
-          // Since we are creating a copy, we remove the schema:identifier to avoid confusion with the original artifact
-          ((ObjectNode) jsonNode).remove(SCHEMA_ORG_IDENTIFIER);
-        }
+        // The copy is a distinct artifact, so it does not inherit the identifier naming the original.
+        ((ObjectNode) jsonNode).remove(SCHEMA_ORG_IDENTIFIER);
         originalDocument = jsonNode.toString();
       }
     } catch (Exception e) {
@@ -230,7 +230,7 @@ public class CloneInstancesExecutorService {
     try {
       String url = microserviceUrlUtil.getArtifact().getResourceType(resourceType);
 
-      ClassicHttpResponse templateProxyResponse = ProxyUtil.proxyPost(url, c, originalDocument, HttpTimeouts.BATCH);
+      ClassicHttpResponse templateProxyResponse = artifactClient.post(url, c, originalDocument, HttpTimeouts.BATCH);
 
       int statusCode = templateProxyResponse.getCode();
       if (statusCode != HttpStatus.SC_CREATED) {
@@ -241,7 +241,7 @@ public class CloneInstancesExecutorService {
         HttpEntity entity = templateProxyResponse.getEntity();
         Header locationHeader = templateProxyResponse.getFirstHeader(HttpHeaders.LOCATION);
         String entityContent = EntityUtils.toString(entity, StandardCharsets.UTF_8);
-        JsonNode jsonNode = JsonMapper.MAPPER.readTree(entityContent);
+        JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(entityContent);
         String createdId = jsonNode.get("@id").asText();
         CedarArtifactId newInstanceId = CedarArtifactId.build(createdId, resourceType);
 

@@ -98,7 +98,7 @@ public class InMemoryUserService implements UserService {
           .parameter("id", userId.getId());
       return result;
     }
-    Map<String, Object> modificationsMap = JsonMapper.MAPPER.convertValue(modifications, Map.class);
+    Map<String, Object> modificationsMap = JsonMapper.STRICT_MAPPER.convertValue(modifications, Map.class);
     CedarUser modifiedUser = UserServiceUtil.validateModifications(oldUser, modificationsMap);
     if (modifiedUser != null) {
       users.put(modifiedUser.getId(), modifiedUser);

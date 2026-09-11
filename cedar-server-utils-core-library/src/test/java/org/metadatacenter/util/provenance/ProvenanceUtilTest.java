@@ -27,7 +27,7 @@ class ProvenanceUtilTest {
 
   @Test
   void anUpdateStampsOnlyTheLastModifiedPair() throws Exception {
-    JsonNode artifact = JsonMapper.MAPPER.readTree("""
+    JsonNode artifact = JsonMapper.STRICT_MAPPER.readTree("""
         {"pav:createdOn":"2019-01-01T00:00:00Z","pav:createdBy":"https://users.example/author",
          "pav:lastUpdatedOn":"2019-01-01T00:00:00Z","oslc:modifiedBy":"https://users.example/author"}
         """);
@@ -42,10 +42,10 @@ class ProvenanceUtilTest {
 
   @Test
   void takesCreationProvenanceFromWhatIsStoredRatherThanTheRequest() throws Exception {
-    JsonNode request = JsonMapper.MAPPER.readTree("""
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree("""
         {"pav:createdOn":"2026-08-11T09:00:00Z","pav:createdBy":"https://users.example/impostor"}
         """);
-    JsonNode stored = JsonMapper.MAPPER.readTree("""
+    JsonNode stored = JsonMapper.STRICT_MAPPER.readTree("""
         {"pav:createdOn":"2019-01-01T00:00:00Z","pav:createdBy":"https://users.example/author"}
         """);
 
@@ -57,10 +57,10 @@ class ProvenanceUtilTest {
 
   @Test
   void leavesTheRequestValueWhenTheStoredArtifactHasNone() throws Exception {
-    JsonNode request = JsonMapper.MAPPER.readTree("""
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree("""
         {"pav:createdOn":"2019-01-01T00:00:00Z","pav:createdBy":"https://users.example/author"}
         """);
-    JsonNode stored = JsonMapper.MAPPER.readTree("{\"schema:name\":\"no provenance recorded\"}");
+    JsonNode stored = JsonMapper.STRICT_MAPPER.readTree("{\"schema:name\":\"no provenance recorded\"}");
 
     provenanceUtil.preserveCreationProvenance(request, stored);
 
@@ -70,10 +70,10 @@ class ProvenanceUtilTest {
 
   @Test
   void treatsAStoredNullAsNoValueRecorded() throws Exception {
-    JsonNode request = JsonMapper.MAPPER.readTree("""
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree("""
         {"pav:createdOn":"2019-01-01T00:00:00Z","pav:createdBy":"https://users.example/author"}
         """);
-    JsonNode stored = JsonMapper.MAPPER.readTree("{\"pav:createdOn\":null,\"pav:createdBy\":null}");
+    JsonNode stored = JsonMapper.STRICT_MAPPER.readTree("{\"pav:createdOn\":null,\"pav:createdBy\":null}");
 
     provenanceUtil.preserveCreationProvenance(request, stored);
 
@@ -83,8 +83,8 @@ class ProvenanceUtilTest {
 
   @Test
   void addsCreationProvenanceWhenTheRequestOmitsItAndTheStoredArtifactHasIt() throws Exception {
-    JsonNode request = JsonMapper.MAPPER.readTree("{\"schema:name\":\"repaired\"}");
-    JsonNode stored = JsonMapper.MAPPER.readTree("""
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree("{\"schema:name\":\"repaired\"}");
+    JsonNode stored = JsonMapper.STRICT_MAPPER.readTree("""
         {"pav:createdOn":"2019-01-01T00:00:00Z","pav:createdBy":"https://users.example/author"}
         """);
 
@@ -96,7 +96,7 @@ class ProvenanceUtilTest {
 
   @Test
   void ignoresAMissingStoredArtifactRatherThanFailing() throws Exception {
-    JsonNode request = JsonMapper.MAPPER.readTree("{\"pav:createdBy\":\"https://users.example/author\"}");
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree("{\"pav:createdBy\":\"https://users.example/author\"}");
 
     provenanceUtil.preserveCreationProvenance(request, null);
 
@@ -107,11 +107,11 @@ class ProvenanceUtilTest {
 
   @Test
   void anUntouchedChildTakesEveryProvenanceValueTheStoredArtifactRecords() throws Exception {
-    JsonNode request = JsonMapper.MAPPER.readTree("""
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree("""
         {"pav:createdOn":"2026-08-11T09:00:00Z","pav:createdBy":"https://users.example/impostor",
          "pav:lastUpdatedOn":"2026-08-11T09:00:00Z","oslc:modifiedBy":"https://users.example/impostor"}
         """);
-    JsonNode stored = JsonMapper.MAPPER.readTree("""
+    JsonNode stored = JsonMapper.STRICT_MAPPER.readTree("""
         {"pav:createdOn":"2019-01-01T00:00:00Z","pav:createdBy":"https://users.example/author",
          "pav:lastUpdatedOn":"2020-06-01T00:00:00Z","oslc:modifiedBy":"https://users.example/editor"}
         """);
@@ -126,11 +126,11 @@ class ProvenanceUtilTest {
 
   @Test
   void anUntouchedChildKeepsAValueTheStoredArtifactDoesNotRecord() throws Exception {
-    JsonNode request = JsonMapper.MAPPER.readTree("""
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree("""
         {"pav:createdOn":"2019-01-01T00:00:00Z","pav:createdBy":"https://users.example/author",
          "pav:lastUpdatedOn":"2020-06-01T00:00:00Z","oslc:modifiedBy":"https://users.example/editor"}
         """);
-    JsonNode stored = JsonMapper.MAPPER.readTree("{\"pav:lastUpdatedOn\":\"2020-06-01T00:00:00Z\"}");
+    JsonNode stored = JsonMapper.STRICT_MAPPER.readTree("{\"pav:lastUpdatedOn\":\"2020-06-01T00:00:00Z\"}");
 
     provenanceUtil.copyProvenance(request, stored);
 
@@ -144,9 +144,9 @@ class ProvenanceUtilTest {
 
   @Test
   void anUntouchedChildKeepsAValueTheStoredArtifactRecordsAsNull() throws Exception {
-    JsonNode request = JsonMapper.MAPPER.readTree(
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree(
         "{\"pav:createdBy\":\"https://users.example/author\"}");
-    JsonNode stored = JsonMapper.MAPPER.readTree("{\"pav:createdBy\":null}");
+    JsonNode stored = JsonMapper.STRICT_MAPPER.readTree("{\"pav:createdBy\":null}");
 
     provenanceUtil.copyProvenance(request, stored);
 
@@ -156,8 +156,8 @@ class ProvenanceUtilTest {
 
   @Test
   void ignoresATargetThatIsNotAnObject() throws Exception {
-    JsonNode request = JsonMapper.MAPPER.readTree("[]");
-    JsonNode stored = JsonMapper.MAPPER.readTree("{\"pav:createdBy\":\"https://users.example/author\"}");
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree("[]");
+    JsonNode stored = JsonMapper.STRICT_MAPPER.readTree("{\"pav:createdBy\":\"https://users.example/author\"}");
 
     provenanceUtil.preserveCreationProvenance(request, stored);
 

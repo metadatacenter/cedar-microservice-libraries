@@ -45,8 +45,6 @@ public abstract class CedarResponse {
 
     private final CedarErrorPack errorPack;
     private Exception exception;
-    private String legacyErrorType;
-    private final Map<String, Object> extensions = Maps.newHashMap();
     private Object entity;
     private URI createdResourceUri;
     private String type;
@@ -109,10 +107,6 @@ public abstract class CedarResponse {
         // common envelope.
         if (!statusForbidsABody()) {
           CedarError error = CedarError.from(errorPack, errorId);
-          if (legacyErrorType != null) {
-            error.legacyErrorType(legacyErrorType);
-          }
-          extensions.forEach(error::extension);
           responseBuilder.entity(error);
           generatedErrorEntity = true;
         }
@@ -162,18 +156,8 @@ public abstract class CedarResponse {
       return this;
     }
 
-    public CedarResponseBuilder errorMessage(String errorMessage) {
-      this.errorPack.message(errorMessage);
-      return this;
-    }
-
-    public CedarResponseBuilder legacyErrorType(String legacyErrorType) {
-      this.legacyErrorType = legacyErrorType;
-      return this;
-    }
-
-    public CedarResponseBuilder extension(String key, Object value) {
-      this.extensions.put(key, value);
+    public CedarResponseBuilder message(String message) {
+      this.errorPack.message(message);
       return this;
     }
 

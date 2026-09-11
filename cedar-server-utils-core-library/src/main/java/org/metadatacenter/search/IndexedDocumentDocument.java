@@ -1,14 +1,12 @@
 package org.metadatacenter.search;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.metadatacenter.model.folderserver.info.FolderServerNodeInfo;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
 
 import java.util.List;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class IndexedDocumentDocument {
 
   protected String cid;

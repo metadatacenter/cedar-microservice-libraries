@@ -30,7 +30,7 @@ public class ValuerecommenderReindexQueueService extends QueueServiceWithNonBloc
   public boolean enqueueEventWithResult(ValuerecommenderReindexMessage message) {
     String json;
     try {
-      json = JsonMapper.MAPPER.writeValueAsString(message);
+      json = JsonMapper.STRICT_MAPPER.writeValueAsString(message);
     } catch (JsonProcessingException e) {
       log.error("The valuerecommender message could not be serialized. Dropping it.", e);
       return false;

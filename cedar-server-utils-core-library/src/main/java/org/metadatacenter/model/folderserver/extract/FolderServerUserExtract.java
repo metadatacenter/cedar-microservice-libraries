@@ -26,7 +26,7 @@ public class FolderServerUserExtract extends AbstractCedarResourceWithDates impl
 
   public static FolderServerUserExtract fromFolderServerUser(FolderServerUser user) {
     try {
-      String s = JsonMapper.MAPPER.writeValueAsString(user);
+      String s = JsonMapper.STRICT_MAPPER.writeValueAsString(user);
       FolderServerUserExtract extract = JsonMapper.TOLERANT_MAPPER.readValue(s, FolderServerUserExtract.class);
       return extract;
     } catch (IOException e) {

@@ -1,9 +1,18 @@
 package org.metadatacenter.model.request.inclusionsubgraph;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.Map;
 
+/**
+ * The artifact that changed, and the elements and templates to consider.
+ *
+ * <p>The two subgraph commands read this body strictly, so the schema generated from this type
+ * states that it accepts nothing else.
+ */
+@Schema(name = "InclusionSubgraphRequest",
+    additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
 public class InclusionSubgraphRequest {
 
   @JsonProperty("@id")

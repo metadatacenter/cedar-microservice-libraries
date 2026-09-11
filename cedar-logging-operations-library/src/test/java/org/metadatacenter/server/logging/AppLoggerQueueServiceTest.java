@@ -95,7 +95,7 @@ class AppLoggerQueueServiceTest {
     assertNotNull(popped);
     assertEquals(QueueTestConfig.queueName(QueueService.APP_LOG_QUEUE_ID), popped.get(0));
 
-    AppLogMessage read = JsonMapper.MAPPER.readValue(popped.get(1), AppLogMessage.class);
+    AppLogMessage read = JsonMapper.STRICT_MAPPER.readValue(popped.get(1), AppLogMessage.class);
     assertEquals("request-1", read.getGlobalRequestId());
     assertEquals("local-request-1", read.getLocalRequestId());
     assertEquals(SystemComponent.SERVER_RESOURCE, read.getSystemComponent());
@@ -110,9 +110,9 @@ class AppLoggerQueueServiceTest {
     appLogQueue.enqueueEvent(message("second"));
 
     appLogQueue.initializeBlockingQueue();
-    assertEquals("first", JsonMapper.MAPPER
+    assertEquals("first", JsonMapper.STRICT_MAPPER
         .readValue(appLogQueue.waitForMessages().get(1), AppLogMessage.class).getGlobalRequestId());
-    assertEquals("second", JsonMapper.MAPPER
+    assertEquals("second", JsonMapper.STRICT_MAPPER
         .readValue(appLogQueue.waitForMessages().get(1), AppLogMessage.class).getGlobalRequestId());
   }
 

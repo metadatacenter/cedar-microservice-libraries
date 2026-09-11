@@ -120,7 +120,7 @@ public class Neo4JProxyUser extends AbstractNeo4JProxy {
 
   public BackendCallResult<CedarUser> patchUser(CedarUserId userId, JsonNode modifications) {
     BackendCallResult<CedarUser> result = new BackendCallResult<>();
-    Map<String, Object> modificationsMap = JsonMapper.MAPPER.convertValue(modifications, Map.class);
+    Map<String, Object> modificationsMap = JsonMapper.STRICT_MAPPER.convertValue(modifications, Map.class);
     ProfilePatchOutcome outcome = executeInWriteTransaction(tx -> {
       CypherQuery lockAndRead = new CypherQueryWithParameters(
           CypherQueryBuilderUser.lockAndReadUserProfile(), CypherParamBuilderUser.getUserById(userId));

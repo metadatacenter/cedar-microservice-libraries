@@ -271,7 +271,7 @@ class BlockingQueueServiceTest {
 
   private static SearchPermissionQueueEvent readEvent(String json) {
     try {
-      return JsonMapper.MAPPER.readValue(json, SearchPermissionQueueEvent.class);
+      return JsonMapper.STRICT_MAPPER.readValue(json, SearchPermissionQueueEvent.class);
     } catch (Exception e) {
       throw new IllegalStateException("The queued message did not deserialize: " + json, e);
     }

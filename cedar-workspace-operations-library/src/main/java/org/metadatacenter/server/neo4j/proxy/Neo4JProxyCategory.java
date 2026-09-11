@@ -162,7 +162,7 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
     }
     Record record = result.next();
     Node node = record.get("resource").asNode();
-    JsonNode json = JsonMapper.MAPPER.valueToTree(node.asMap());
+    JsonNode json = JsonMapper.STRICT_MAPPER.valueToTree(node.asMap());
     return new VersionedResource<>(buildClass(json, FolderServerCategory.class), record.get("revision").asLong());
   }
 

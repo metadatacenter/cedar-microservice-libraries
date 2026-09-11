@@ -346,7 +346,7 @@ public abstract class AbstractNeo4JProxy {
     if (record != null) {
       Node n = record.get(0).asNode();
       if (n != null) {
-        JsonNode node = JsonMapper.MAPPER.valueToTree(n.asMap());
+        JsonNode node = JsonMapper.STRICT_MAPPER.valueToTree(n.asMap());
         return buildClass(node, type);
       }
     }
@@ -482,14 +482,14 @@ public abstract class AbstractNeo4JProxy {
             if (value.type().equals(driver.defaultTypeSystem().NODE())) {
               Node n = value.asNode();
               if (n != null) {
-                JsonNode node = JsonMapper.MAPPER.valueToTree(n.asMap());
+                JsonNode node = JsonMapper.STRICT_MAPPER.valueToTree(n.asMap());
                 T folderServerNode = buildClass(node, type);
                 folderServerNodeList.add(folderServerNode);
               }
             } else if (value.type().equals(driver.defaultTypeSystem().PATH())) {
               Path segments = value.asPath();
               for (Node n : segments.nodes()) {
-                JsonNode node = JsonMapper.MAPPER.valueToTree(n.asMap());
+                JsonNode node = JsonMapper.STRICT_MAPPER.valueToTree(n.asMap());
                 T folderServerNode = buildClass(node, type);
                 folderServerNodeList.add(folderServerNode);
               }
@@ -497,7 +497,7 @@ public abstract class AbstractNeo4JProxy {
               List<Object> list = value.asList();
               for (Object o : list) {
                 if (o instanceof Node n) {
-                  JsonNode node = JsonMapper.MAPPER.valueToTree(n.asMap());
+                  JsonNode node = JsonMapper.STRICT_MAPPER.valueToTree(n.asMap());
                   T folderServerNode = buildClass(node, type);
                   folderServerNodeList.add(folderServerNode);
                 }
@@ -508,7 +508,7 @@ public abstract class AbstractNeo4JProxy {
               if (value.type().equals(driver.defaultTypeSystem().NODE())) {
                 Node n = value.asNode();
                 if (n != null) {
-                  JsonNode node = JsonMapper.MAPPER.valueToTree(n.asMap());
+                  JsonNode node = JsonMapper.STRICT_MAPPER.valueToTree(n.asMap());
                   T folderServerNode = buildClass(node, type);
                   folderServerNodeList.add(folderServerNode);
                 }
@@ -556,7 +556,7 @@ public abstract class AbstractNeo4JProxy {
       if (records != null) {
         for (org.neo4j.driver.Record r : records) {
           Map m = r.asMap();
-          JsonNode node = JsonMapper.MAPPER.valueToTree(m);
+          JsonNode node = JsonMapper.STRICT_MAPPER.valueToTree(m);
           T tuple = buildToupleClass(node, type);
           tupleList.add(tuple);
         }
@@ -577,7 +577,7 @@ public abstract class AbstractNeo4JProxy {
         for (org.neo4j.driver.Record r : records) {
           Map<String, Object> recordMap = r.asMap();
           if (recordMap != null) {
-            JsonNode node = JsonMapper.MAPPER.valueToTree(recordMap);
+            JsonNode node = JsonMapper.STRICT_MAPPER.valueToTree(recordMap);
             FolderServerArc rel = buildArc(node);
             folderServerArcList.add(rel);
           }

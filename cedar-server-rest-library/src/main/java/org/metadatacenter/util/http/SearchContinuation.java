@@ -115,7 +115,7 @@ public final class SearchContinuation {
 
   public String encode() {
     try {
-      byte[] json = JsonMapper.MAPPER.writeValueAsBytes(this);
+      byte[] json = JsonMapper.STRICT_MAPPER.writeValueAsBytes(this);
       return Base64.getUrlEncoder().withoutPadding().encodeToString(json);
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("A search continuation could not be written", e);
@@ -130,7 +130,7 @@ public final class SearchContinuation {
     SearchContinuation continuation;
     try {
       byte[] json = Base64.getUrlDecoder().decode(value);
-      continuation = JsonMapper.MAPPER.readValue(json, SearchContinuation.class);
+      continuation = JsonMapper.STRICT_MAPPER.readValue(json, SearchContinuation.class);
     } catch (IllegalArgumentException | IOException e) {
       throw refuse("The continuation is not a token this server issued!");
     }

@@ -14,15 +14,27 @@ import jakarta.ws.rs.core.HttpHeaders;
 public class HttpServletRequestContext extends AbstractRequestContext {
 
   private HttpHeaders httpHeaders;
+  private final boolean anonymous;
 
   public HttpServletRequestContext(LinkedDataUtil linkedDataUtil, HttpServletRequest request, HttpHeaders httpHeaders) {
+    this(linkedDataUtil, request, httpHeaders, false);
+  }
+
+  public static HttpServletRequestContext anonymous(LinkedDataUtil linkedDataUtil, HttpServletRequest request,
+                                                    HttpHeaders httpHeaders) {
+    return new HttpServletRequestContext(linkedDataUtil, request, httpHeaders, true);
+  }
+
+  private HttpServletRequestContext(LinkedDataUtil linkedDataUtil, HttpServletRequest request,
+                                    HttpHeaders httpHeaders, boolean anonymous) {
     if (request == null) {
       throw new IllegalArgumentException("The HttpServletRequest should never be null at this point");
     }
     this.httpHeaders = httpHeaders;
+    this.anonymous = anonymous;
     wrappedRequest = new NativeHttpServletRequest(request);
     try {
-      AuthRequest authRequest = CedarAuthFromRequestFactory.fromRequest(request);
+      AuthRequest authRequest = CedarAuthFromRequestFactory.fromRequest(anonymous ? null : request);
       currentUser = Authorization.getUser(linkedDataUtil, authRequest);
     } catch (CedarAccessException e) {
       userCreationException = e;
@@ -33,7 +45,7 @@ public class HttpServletRequestContext extends AbstractRequestContext {
 
   @Override
   public String getAuthorizationHeader() {
-    return httpHeaders.getHeaderString(HttpHeaders.AUTHORIZATION);
+    return anonymous ? null : httpHeaders.getHeaderString(HttpHeaders.AUTHORIZATION);
   }
 
   @Override
