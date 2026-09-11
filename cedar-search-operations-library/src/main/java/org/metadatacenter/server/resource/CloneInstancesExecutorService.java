@@ -43,7 +43,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.metadatacenter.model.ModelNodeNames.JSON_LD_ID;
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_IS_BASED_ON;
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_ORG_IDENTIFIER;
 
@@ -218,17 +217,10 @@ public class CloneInstancesExecutorService {
       if (entity != null) {
         originalDocument = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(originalDocument);
-        // Null rather than absent: the artifact server assigns the copy's identifier, and null is how
-        // a client asks for one. Dropping the key is refused, because an absent key cannot be told
-        // from a forgotten one.
-        ((ObjectNode) jsonNode).putNull(JSON_LD_ID);
-        ModelUtil.removeDOIFromResource((ObjectNode) jsonNode);
+        ArtifactCopyOperations.prepareDerivedBody((ObjectNode) jsonNode);
         ((ObjectNode) jsonNode).put(SCHEMA_IS_BASED_ON, newTemplateId.getId());
-        if (jsonNode.get(SCHEMA_ORG_IDENTIFIER) != null) {
-          String schemaId = jsonNode.get(SCHEMA_ORG_IDENTIFIER).asText();
-          // Since we are creating a copy, we remove the schema:identifier to avoid confusion with the original artifact
-          ((ObjectNode) jsonNode).remove(SCHEMA_ORG_IDENTIFIER);
-        }
+        // The copy is a distinct artifact, so it does not inherit the identifier naming the original.
+        ((ObjectNode) jsonNode).remove(SCHEMA_ORG_IDENTIFIER);
         originalDocument = jsonNode.toString();
       }
     } catch (Exception e) {

@@ -1,5 +1,6 @@
 package org.metadatacenter.server.resource;
 
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.exception.CedarObjectNotFoundException;
@@ -12,6 +13,7 @@ import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.BiboStatus;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.GraphDbObjectBuilder;
+import org.metadatacenter.model.ModelNodeNames;
 import org.metadatacenter.model.ResourceVersion;
 import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
@@ -25,9 +27,33 @@ import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexM
 import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexMessageActionType;
 import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexMessageResourceType;
 import org.metadatacenter.util.CedarResourceTypeUtil;
+import org.metadatacenter.util.ModelUtil;
 
-/** Shared post-copy operations used by both synchronous copies and clone jobs. */
+/** Shared operations used by both synchronous copies and clone jobs. */
 public final class ArtifactCopyOperations {
+
+  /**
+   * Makes a document read from the artifact server fit to be created as a new artifact.
+   *
+   * Every derived write starts as the artifact it derives from: a copy, a clone of an instance onto
+   * a new template, the draft of a published version. Each has to stop being that artifact before
+   * it is sent, and two of the steps are not conveniences but rules the artifact server enforces.
+   * The identifier key must be present carrying null, because the server assigns identifiers and an
+   * absent key cannot be told from a forgotten one. A DOI belongs to the artifact it was minted
+   * for and never to something derived from it.
+   *
+   * What distinguishes the three — the template a clone now points at, the provenance a copy
+   * records, the version and status a draft takes — belongs to the caller that knows it. This is
+   * only what none of them may skip, in one place because they did not all get it right: when the
+   * identifier rule arrived, the two callers in the resource server were updated in the same hour
+   * and the one in this library was not, so copying a published template's instances failed on
+   * every instance for three weeks, silently, on the worker queue.
+   */
+  public static ObjectNode prepareDerivedBody(ObjectNode document) {
+    document.putNull(ModelNodeNames.JSON_LD_ID);
+    ModelUtil.removeDOIFromResource(document);
+    return document;
+  }
 
   public static FolderServerArtifact registerCopy(FolderServiceSession folderSession,
                                                   CedarArtifactId oldId,
