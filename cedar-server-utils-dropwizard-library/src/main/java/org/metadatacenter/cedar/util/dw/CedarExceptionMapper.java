@@ -28,6 +28,10 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
 
   public Response toResponse(Exception exception) {
 
+    if (exception instanceof org.metadatacenter.cedar.util.dw.ratelimit.UserRateLimitException quota) {
+      return quota.getResponse();
+    }
+
     if (isNeo4jUnavailable(exception)) {
       return new CedarCedarExceptionMapper().toResponse(
           new CedarDependencyUnavailableException("Neo4j is unavailable", exception));

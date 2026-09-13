@@ -36,6 +36,8 @@ public final class CedarTestEnvironment {
   public static Map<String, String> build() {
     Map<String, String> env = new LinkedHashMap<>();
 
+    // Quota integration tests supply their own isolated Redis; ordinary suites stay backend-free.
+    put(env, CEDAR_RATE_LIMIT_MODE, "off");
     put(env, CEDAR_HOST, "metadatacenter.orgx");
     put(env, CEDAR_NET_GATEWAY, "127.0.0.1");
     put(env, CEDAR_KEYCLOAK_ALLOW_INSECURE_TLS, "false");

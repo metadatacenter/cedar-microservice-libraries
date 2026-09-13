@@ -72,6 +72,22 @@
       <artifactId>cedar-logging-operations-library</artifactId>
     </dependency>
 
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-queue-operations-library</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.github.codemonstur</groupId>
+      <artifactId>embedded-redis</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.dropwizard</groupId>
+      <artifactId>dropwizard-testing</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   
 </project>

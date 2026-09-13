@@ -212,6 +212,16 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     // artifact rather than the shared library every service loads.
     environment.jersey().register(new CedarServerReportResource(cedarConfig, getServerName(), getClass()));
     environment.jersey().register(new CedarHealthCheckResource(cedarConfig, environment.healthChecks()));
+    if (!cedarConfig.getRateLimits().getMode().equals("off")) {
+      var quotaStore = new org.metadatacenter.cedar.util.dw.ratelimit.RedisUserQuotaStore(
+          cedarConfig.getRateLimits(), cedarConfig.getCacheConfig().getPersistent().getConnection());
+      environment.lifecycle().manage(new io.dropwizard.lifecycle.Managed() {
+        @Override public void stop() { quotaStore.close(); }
+      });
+      environment.jersey().register(new org.metadatacenter.cedar.util.dw.ratelimit.UserRateLimitFeature(
+          new org.metadatacenter.cedar.util.dw.ratelimit.UserRateLimits(
+              cedarConfig.getRateLimits(), quotaStore, environment.metrics())));
+    }
     environment.jersey().register(RequestIdGeneratorFilter.class);
     environment.jersey().register(ResponseLoggerFilter.class);
     environment.jersey().register(StrongEtagResponseFilter.class);

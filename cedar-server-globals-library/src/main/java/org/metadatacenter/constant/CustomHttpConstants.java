@@ -24,6 +24,7 @@ public final class CustomHttpConstants {
    */
   public static final java.util.List<String> EXPOSED_HEADERS = java.util.List.of(
       "ETag",
+      "Retry-After",
       HEADER_CEDAR_VALIDATION_STATUS,
       "Content-Disposition",
       "Link",
