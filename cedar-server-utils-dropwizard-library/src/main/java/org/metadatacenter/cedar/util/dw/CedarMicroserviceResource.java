@@ -118,6 +118,7 @@ public abstract class CedarMicroserviceResource {
     if (sc.getUserCreationException() != null) {
       throw sc.getUserCreationException();
     }
+    org.metadatacenter.cedar.util.dw.ratelimit.UserRateLimits.check(request, sc.getCedarUser());
     return sc;
   }
 

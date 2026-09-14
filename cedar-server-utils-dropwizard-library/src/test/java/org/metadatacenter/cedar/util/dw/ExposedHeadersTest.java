@@ -34,6 +34,7 @@ class ExposedHeadersTest {
         "conditional requests need the client to read the ETag it must send back in If-Match");
     assertTrue(CustomHttpConstants.EXPOSED_HEADERS.contains(CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS));
     assertTrue(CustomHttpConstants.EXPOSED_HEADERS.contains("Content-Disposition"));
+    assertTrue(CustomHttpConstants.EXPOSED_HEADERS.contains("Retry-After"));
   }
 
   @Test
