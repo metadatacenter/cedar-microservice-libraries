@@ -27,6 +27,7 @@ import org.metadatacenter.server.search.IndexedDocumentId;
 import org.metadatacenter.server.search.elasticsearch.worker.ElasticsearchIndexingWorker;
 import org.metadatacenter.server.search.extraction.TemplateInstanceContentExtractor;
 import org.metadatacenter.server.search.extraction.ValueSetsExtractor;
+import org.metadatacenter.server.search.util.IndexRebuildRegistry;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedCategories;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
 import org.metadatacenter.util.json.JsonMapper;
@@ -45,6 +46,12 @@ public class NodeIndexingService extends AbstractIndexingService {
   public final TemplateInstanceContentExtractor instanceContentExtractor;
   private final String nciCADSRValueSetsOntologyFilePath;
 
+  /** Kept so that a write can be mirrored into an index this service was not built for. */
+  private final String indexName;
+  private final RestHighLevelClient client;
+  private volatile String mirrorIndexName;
+  private volatile ElasticsearchIndexingWorker mirrorWorker;
+
   NodeIndexingService(CedarConfig cedarConfig, String indexName, RestHighLevelClient client) {
     Map<String, String> environment = CedarEnvironmentVariableProvider.getFor(SystemComponent.SERVER_RESOURCE);
 
@@ -53,6 +60,64 @@ public class NodeIndexingService extends AbstractIndexingService {
 
     indexWorker = new ElasticsearchIndexingWorker(indexName, client);
     instanceContentExtractor = new TemplateInstanceContentExtractor(cedarConfig);
+    this.indexName = indexName;
+    this.client = client;
+  }
+
+  /**
+   * A writer for the index a rebuild is filling, when this service is not already that writer.
+   *
+   * <p>This service writes through the alias, which during a rebuild still names the old index. The
+   * new index is filled under its own name, so without this every save made while a rebuild runs is
+   * written only to the index that promotion then deletes.
+   *
+   * <p>Empty when no rebuild is running, and empty for the rebuild's own writer, which would
+   * otherwise mirror into itself.
+   */
+  private Optional<ElasticsearchIndexingWorker> mirror() {
+    String target = IndexRebuildRegistry.inProgressIndex().orElse(null);
+    if (target == null || target.equals(indexName)) {
+      return Optional.empty();
+    }
+    if (!target.equals(mirrorIndexName)) {
+      mirrorWorker = new ElasticsearchIndexingWorker(target, client);
+      mirrorIndexName = target;
+    }
+    return Optional.of(mirrorWorker);
+  }
+
+  /**
+   * Mirror one write, and record that the rebuild must not overwrite it.
+   *
+   * <p>A failure here never fails the caller's own operation: the user's save has already succeeded
+   * against the live index, and refusing it because a rebuild's copy could not be updated would make
+   * a maintenance job able to break ordinary writing. It is logged at error with the identifier,
+   * because the consequence — that one document is stale in the index about to be promoted — is
+   * otherwise invisible and is repaired by re-indexing exactly that resource.
+   */
+  private void mirrorWrite(JsonNode document, String cedarId) {
+    mirror().ifPresent(worker -> {
+      try {
+        worker.addToIndex(document, cedarId);
+        IndexRebuildRegistry.recordLiveWrite(cedarId);
+      } catch (Exception e) {
+        log.error("The resource could not be mirrored into the index being rebuilt, so it will be stale"
+            + " there once that index is promoted. Re-index it afterwards. Resource:" + cedarId, e);
+      }
+    });
+  }
+
+  /** The same for a removal, so a resource deleted during a rebuild does not come back on promotion. */
+  private void mirrorRemoval(CedarFilesystemResourceId resourceId) {
+    mirror().ifPresent(worker -> {
+      try {
+        worker.removeAllFromIndex(resourceId);
+        IndexRebuildRegistry.recordLiveDelete(resourceId.getId());
+      } catch (Exception e) {
+        log.error("The resource could not be removed from the index being rebuilt, so it will reappear"
+            + " in search once that index is promoted. Remove it afterwards. Resource:" + resourceId, e);
+      }
+    });
   }
 
   public void readValueSets() throws CedarProcessingException {
@@ -68,10 +133,16 @@ public class NodeIndexingService extends AbstractIndexingService {
                                                       boolean isIndexRegenerationTask) throws CedarProcessingException {
 
     IndexingDocumentDocument ir = new IndexingDocumentDocument(node.getId());
-    // Set node's path info
+    // Set node's path info.
+    //
+    // The undecorated path: the only thing read back off it is the parent folder's identifier, in
+    // FolderServerNodeInfo.fromNode. Asking for the decorated path instead ran getResourceAuthority
+    // and userHasCapability against every element of every resource's ancestor chain — several graph
+    // queries per element, for the whole repository — and then discarded every one of those answers.
+    // They were also the wrong answers to store: they describe what the user running the rebuild may
+    // do, in a document every user searches.
     FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(requestContext);
-    node.setPathInfo(PathInfoBuilder.getResourcePathExtract(requestContext, folderSession,
-        CedarDataServices.getInstance().getResourcePermissionServiceSession(requestContext), node));
+    node.setPathInfo(PathInfoBuilder.getResourcePath(folderSession, node));
     ir.setInfo(FolderServerNodeInfo.fromNode(node));
     ir.setMaterializedPermissions(permissions);
     ir.setMaterializedCategories(categories);
@@ -158,7 +229,9 @@ public class NodeIndexingService extends AbstractIndexingService {
         isIndexRegenerationTask);
     JsonNode jsonResource = JsonMapper.STRICT_MAPPER.convertValue(ir, JsonNode.class);
     // Index under the CEDAR id, so re-indexing replaces the resource's document in place
-    return indexWorker.addToIndex(jsonResource, resource.getId());
+    IndexedDocumentId indexed = indexWorker.addToIndex(jsonResource, resource.getId());
+    mirrorWrite(jsonResource, resource.getId());
+    return indexed;
   }
 
   public void indexBatch(List<IndexingDocumentDocument> currentBatch) throws CedarProcessingException {
@@ -203,7 +276,9 @@ public class NodeIndexingService extends AbstractIndexingService {
   public long removeDocumentFromIndex(CedarFilesystemResourceId resourceId) throws CedarProcessingException {
     if (resourceId != null) {
       log.debug("Removing resource from index (id = " + resourceId + ")");
-      return indexWorker.removeAllFromIndex(resourceId);
+      long removed = indexWorker.removeAllFromIndex(resourceId);
+      mirrorRemoval(resourceId);
+      return removed;
     } else {
       return -1;
     }

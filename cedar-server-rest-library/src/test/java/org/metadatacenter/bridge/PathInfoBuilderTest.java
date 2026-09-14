@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class PathInfoBuilderTest {
@@ -215,6 +216,26 @@ class PathInfoBuilderTest {
     assertEquals(true, folder.getCurrentUserPermissions().isOwner());
     assertEquals(authority.capabilitiesFor(org.metadatacenter.model.CedarResourceType.FOLDER),
         folder.getCurrentUserPermissions().getCapabilities());
+  }
+
+  @Test
+  void theUndecoratedPathIsWhatTheGraphReturned() {
+    List<FolderServerResourceExtract> path = List.of(folder("root", false), folder("parent", false));
+    when(folderSession.findNodePathExtract(node)).thenReturn(new ArrayList<>(path));
+
+    assertEquals(path, PathInfoBuilder.getResourcePath(folderSession, node));
+  }
+
+  @Test
+  void theUndecoratedPathAsksThePermissionServiceNothing() {
+    when(folderSession.findNodePathExtract(node))
+        .thenReturn(new ArrayList<>(List.of(folder("root", false), folder("a", false), folder("b", false))));
+
+    PathInfoBuilder.getResourcePath(folderSession, node);
+
+    // This is the whole point of the method: the decorated path costs several graph queries per
+    // element, and indexing pays it for every resource in the repository to read one identifier.
+    verifyNoInteractions(permissionSession);
   }
 
   private static FolderServerFolderExtract folder(String id, Boolean open) {
