@@ -165,8 +165,13 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
 
   @Override
   public CedarNodeMaterializedPermissions getResourceMaterializedPermission(CedarFilesystemResourceId resourceId) {
-    FileSystemResource node = proxies.filesystemResource().findResourceById(resourceId);
+    return getResourceMaterializedPermission(proxies.filesystemResource().findResourceById(resourceId));
+  }
+
+  @Override
+  public CedarNodeMaterializedPermissions getResourceMaterializedPermission(FileSystemResource node) {
     if (node != null) {
+      CedarFilesystemResourceId resourceId = node.getResourceId();
       NodeSharePermission everybodyPermission = node.getEverybodyPermission();
       if (everybodyPermission == null) {
         everybodyPermission = proxies.permission().getTransitiveEverybodyPermission(resourceId);

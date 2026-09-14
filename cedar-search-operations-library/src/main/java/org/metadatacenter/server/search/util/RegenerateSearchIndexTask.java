@@ -153,7 +153,7 @@ public class RegenerateSearchIndexTask {
             continue;
           }
           try {
-            CedarNodeMaterializedPermissions perm = permissionSession.getResourceMaterializedPermission(node.getResourceId());
+            CedarNodeMaterializedPermissions perm = permissionSession.getResourceMaterializedPermission(node);
             CedarNodeMaterializedCategories categories = null;
             if (node instanceof FolderServerArtifact) {
               categories = categorySession.getArtifactMaterializedCategories((CedarArtifactId) node.getResourceId());

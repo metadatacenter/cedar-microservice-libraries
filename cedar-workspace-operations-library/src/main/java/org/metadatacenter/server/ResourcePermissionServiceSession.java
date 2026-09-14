@@ -1,6 +1,7 @@
 package org.metadatacenter.server;
 
 import org.metadatacenter.id.CedarFilesystemResourceId;
+import org.metadatacenter.model.folderserver.basic.FileSystemResource;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
@@ -20,6 +21,16 @@ public interface ResourcePermissionServiceSession {
   VersionedResourcePermissions getVersionedResourcePermissions(CedarFilesystemResourceId resourceId);
 
   CedarNodeMaterializedPermissions getResourceMaterializedPermission(CedarFilesystemResourceId resourceId);
+
+  /**
+   * The same, for a caller that has already resolved the resource.
+   *
+   * <p>Resolving it is a graph query, and the identifier form runs it again for the one field it reads
+   * off the result. The callers that matter -- the index rebuild and the permission cascade, which run
+   * this once per resource over the whole repository -- are iterating resources they already hold, so
+   * the second lookup is pure repetition on the only paths where its cost is multiplied.
+   */
+  CedarNodeMaterializedPermissions getResourceMaterializedPermission(FileSystemResource resource);
 
   default BackendCallResult<VersionedResourcePermissions> updateResourcePermissions(
       CedarFilesystemResourceId resourceId, ResourcePermissionsRequest request) {
