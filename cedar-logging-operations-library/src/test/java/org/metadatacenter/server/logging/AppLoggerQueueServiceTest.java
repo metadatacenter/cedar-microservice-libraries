@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Timeout;
 import org.metadatacenter.config.CacheServerPersistent;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.server.logging.model.AppLogMessage;
+import org.metadatacenter.server.logging.model.AppLogParam;
 import org.metadatacenter.server.logging.model.AppLogSubType;
 import org.metadatacenter.server.logging.model.AppLogType;
 import org.metadatacenter.server.queue.util.EmbeddedRedis;
@@ -140,6 +141,46 @@ class AppLoggerQueueServiceTest {
       assertEquals(2, offline.getDroppedEventCount(), "each dropped log message is counted");
     } finally {
       offline.close();
+    }
+  }
+
+  /**
+   * The filter has to take effect before the message reaches Redis, not after: the point of it is
+   * that the excluded queries never occupy the queue the consumer drains at ~6 rows/s.
+   */
+  @Test
+  void anExcludedCypherMessageNeverReachesTheQueue() {
+    AppLoggerQueueService filtered =
+        new AppLoggerQueueService(config, new CypherLogFilter("Neo4JProxyUser.findUserByApiKey"));
+    try {
+      AppLogMessage authLookup = new AppLogMessage(SystemComponent.SERVER_RESOURCE,
+          AppLogType.CYPHER_QUERY, AppLogSubType.FULL, "request-1", "local-request-1");
+      authLookup.param(AppLogParam.CLASS_NAME, "org.metadatacenter.server.neo4j.proxy.Neo4JProxyUser");
+      authLookup.param(AppLogParam.METHOD_NAME, "findUserByApiKey");
+
+      filtered.enqueueEvent(authLookup);
+
+      filtered.initializeBlockingQueue();
+      assertEquals(0, filtered.messageCount(), "the excluded message should not be queued");
+      assertEquals(1, filtered.getSuppressedEventCount());
+      assertEquals(0, filtered.getDroppedEventCount(), "suppressed is not dropped");
+    } finally {
+      filtered.close();
+    }
+  }
+
+  @Test
+  void aRequestMessageIsUnaffectedByTheCypherFilter() {
+    AppLoggerQueueService filtered =
+        new AppLoggerQueueService(config, new CypherLogFilter(CypherLogFilter.EXCLUDE_ALL));
+    try {
+      filtered.enqueueEvent(message("request-1"));
+
+      filtered.initializeBlockingQueue();
+      assertEquals(1, filtered.messageCount());
+      assertEquals(0, filtered.getSuppressedEventCount());
+    } finally {
+      filtered.close();
     }
   }
 
