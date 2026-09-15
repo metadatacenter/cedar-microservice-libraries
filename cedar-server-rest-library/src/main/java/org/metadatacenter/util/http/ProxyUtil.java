@@ -25,6 +25,15 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * The proxied calls one CEDAR service makes to another, and the calls that leave the estate.
+ *
+ * <p>Which of those a call is follows from whether it carries a {@link CedarRequestContext}. A hop
+ * to another CEDAR service forwards the caller's identity and correlation headers, so it has a
+ * context; a call to a registry CEDAR does not operate has nobody to forward and takes a plain
+ * header map instead. The overloads without a context are therefore bounded by the external class
+ * of call rather than the interactive one.
+ */
 public class ProxyUtil {
 
   public static final String ZERO_LENGTH = "0";
@@ -70,7 +79,7 @@ public class ProxyUtil {
     copyHeaders(proxyRequest, additionalHeaders);
     requestIdentityEncoding(proxyRequest);
     try {
-      return HttpTimeouts.INTERACTIVE.execute(proxyRequest);
+      return HttpTimeouts.EXTERNAL.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
@@ -122,7 +131,7 @@ public class ProxyUtil {
         .bodyString(content, ContentType.APPLICATION_FORM_URLENCODED);
     copyHeaders(proxyRequest, additionalHeaders);
     try {
-      return HttpTimeouts.INTERACTIVE.execute(proxyRequest);
+      return HttpTimeouts.EXTERNAL.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
