@@ -92,6 +92,7 @@ public final class HttpTimeouts {
   private static volatile OutboundTimeoutOverride artifactHopOverride = new OutboundTimeoutOverride();
   private static volatile OutboundTimeoutOverride externalAuthoritiesOverride = new OutboundTimeoutOverride();
   private static volatile int generation = 0;
+  private static final java.util.Map<CallClass, Pool> pools = new java.util.EnumMap<>(CallClass.class);
 
   /** A call a user is waiting on: one CEDAR service reaching the next, or a nearby dependency. */
   public static final HttpTimeouts INTERACTIVE = forClass(CallClass.INTERACTIVE, true, OverrideSource.NONE);
@@ -109,9 +110,9 @@ public final class HttpTimeouts {
   public static final HttpTimeouts EXTERNAL = forClass(CallClass.EXTERNAL, true, OverrideSource.EXTERNAL_AUTHORITIES);
 
   // Service credentials must never follow a redirect, including one to another path on the host.
-  // These two also carry the artifact hop's own override, the only per-hop value there is today.
+  // The artifact override is interactive; background artifact calls retain the batch budget.
   static final HttpTimeouts ARTIFACT_INTERACTIVE = forClass(CallClass.INTERACTIVE, false, OverrideSource.ARTIFACT_HOP);
-  static final HttpTimeouts ARTIFACT_BATCH = forClass(CallClass.BATCH, false, OverrideSource.ARTIFACT_HOP);
+  static final HttpTimeouts ARTIFACT_BATCH = forClass(CallClass.BATCH, false, OverrideSource.NONE);
 
   /** Anonymous compatibility proxies preserve redirects as responses rather than following them. */
   public static final HttpTimeouts ANONYMOUS_INTERACTIVE = forClass(CallClass.INTERACTIVE, false, OverrideSource.NONE);
@@ -124,18 +125,42 @@ public final class HttpTimeouts {
   private final OverrideSource overrideSource;
   private final OutboundTimeoutOverride override;
   private final OutboundCallClassConfig fixedSettings;
-  private volatile Client client;
+  private Pool fixedPool;
+  private OutboundCallClassConfig fixedBounds;
 
-  /** One materialized client, and the configuration generation it was built for. */
-  private record Client(int generation, CloseableHttpClient http, Executor executor,
-                        Timeout connectTimeout, Timeout responseTimeout) {
+  /** One pool per call class, with credential-safe redirect policy selected per client. */
+  private static final class Pool {
+    final int generation;
+    final CloseableHttpClient redirects;
+    final CloseableHttpClient noRedirects;
+    final Executor redirectsExecutor;
+    final Executor noRedirectsExecutor;
+
+    Pool(int generation, OutboundCallClassConfig settings) {
+      this.generation = generation;
+      var manager = PoolingHttpClientConnectionManagerBuilder.create().useSystemProperties()
+          .setMaxConnPerRoute(settings.getMaxConnectionsPerRoute())
+          .setMaxConnTotal(settings.getMaxConnectionsTotal())
+          .setDefaultConnectionConfig(ConnectionConfig.custom()
+              .setValidateAfterInactivity(TimeValue.ofSeconds(10)).build()).build();
+      redirects = builder(settings, true).setConnectionManager(manager)
+          .evictExpiredConnections().evictIdleConnections(TimeValue.ofMinutes(1)).build();
+      noRedirects = builder(settings, false).setConnectionManager(manager)
+          .setConnectionManagerShared(true).build();
+      redirectsExecutor = Executor.newInstance(redirects);
+      noRedirectsExecutor = Executor.newInstance(noRedirects);
+    }
+
+    private static HttpClientBuilder builder(OutboundCallClassConfig settings, boolean redirects) {
+      return HttpClientBuilder.create().useSystemProperties()
+          .setDefaultRequestConfig(RequestConfig.custom().setRedirectsEnabled(redirects)
+              .setConnectionRequestTimeout(Timeout.ofMilliseconds(settings.getLeaseMillis())).build())
+          .setRetryStrategy(ANSWERLESS_ATTEMPT).disableCookieManagement();
+    }
 
     void close() {
-      try {
-        http.close();
-      } catch (IOException ignored) {
-        // A pool being replaced cannot fail the call that replaced it.
-      }
+      try { noRedirects.close(); } catch (IOException ignored) { }
+      try { redirects.close(); } catch (IOException ignored) { }
     }
   }
 
@@ -151,6 +176,7 @@ public final class HttpTimeouts {
     this.overrideSource = overrideSource;
     this.override = override;
     this.fixedSettings = fixedSettings;
+    if (fixedSettings != null) { fixedPool = new Pool(-1, fixedSettings); }
   }
 
   /**
@@ -191,7 +217,10 @@ public final class HttpTimeouts {
     if (hopOverride == null || hopOverride.isEmpty()) {
       return this;
     }
-    return new HttpTimeouts(callClass, followRedirects, OverrideSource.NONE, hopOverride, fixedSettings);
+    HttpTimeouts derived = new HttpTimeouts(callClass, followRedirects, OverrideSource.NONE, hopOverride, null);
+    derived.fixedPool = fixedPool;
+    derived.fixedBounds = fixedPool == null ? null : settings();
+    return derived;
   }
 
   /**
@@ -199,83 +228,43 @@ public final class HttpTimeouts {
    * the call returns, so the connection is back in the pool by the time the caller reads it.
    */
   public ClassicHttpResponse execute(Request request) throws IOException {
-    Client current = client();
-    return (ClassicHttpResponse) current.executor().execute(request
-            .connectTimeout(current.connectTimeout())
-            .responseTimeout(current.responseTimeout()))
-        .returnResponse();
+    Pool pool = pool();
+    Executor executor = followRedirects ? pool.redirectsExecutor : pool.noRedirectsExecutor;
+    return (ClassicHttpResponse) executor.execute(request
+        .connectTimeout(connectTimeout()).responseTimeout(responseTimeout())).returnResponse();
   }
 
-  /** The connect timeout in force, for a caller that reports the bound rather than making a call. */
-  public Timeout connectTimeout() {
-    return client().connectTimeout();
+  private OutboundCallClassConfig settings() {
+    return fixedBounds != null ? fixedBounds : fixedSettings != null ? fixedSettings : callClass.of(installed);
   }
 
-  /** The response timeout in force, for a caller that reports the bound rather than making a call. */
-  public Timeout responseTimeout() {
-    return client().responseTimeout();
-  }
-
-  private Client client() {
-    int current = generation;
-    Client existing = client;
-    if (existing != null && existing.generation() == current) {
-      return existing;
-    }
-    synchronized (this) {
-      if (client != null && client.generation() == current) {
-        return client;
-      }
-      Client replaced = client;
-      client = build(current);
-      if (replaced != null) {
-        replaced.close();
-      }
-      return client;
-    }
-  }
-
-  private Client build(int forGeneration) {
-    OutboundCallClassConfig settings = fixedSettings != null ? fixedSettings : callClass.of(installed);
-    OutboundTimeoutOverride inForce = switch (overrideSource) {
+  private OutboundTimeoutOverride inForce() {
+    return switch (overrideSource) {
       case ARTIFACT_HOP -> artifactHopOverride;
       case EXTERNAL_AUTHORITIES -> externalAuthoritiesOverride;
       case NONE -> override;
     };
+  }
 
-    // cedar.test.dependencyTimeoutMillis is deliberately not consulted here. It bounds the graph
-    // and database drivers so an outage test reaches the same exception path without thirty seconds
-    // of retry first, and cedar-parent states that production drivers keep their own defaults.
-    // Folding it into outbound HTTP as well would replace every configured bound in any process
-    // that sets it, including the bounds a test is asserting.
-    int connectMillis = inForce.getConnectMillis().orElse(settings.getConnectMillis());
-    int responseMillis = inForce.getResponseMillis().orElse(settings.getResponseMillis());
-    int leaseMillis = settings.getLeaseMillis();
+  public Timeout connectTimeout() {
+    return Timeout.ofMilliseconds(inForce().getConnectMillis().orElse(settings().getConnectMillis()));
+  }
 
-    CloseableHttpClient http = HttpClientBuilder.create()
-        .setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create()
-            .useSystemProperties()
-            .setMaxConnPerRoute(settings.getMaxConnectionsPerRoute())
-            .setMaxConnTotal(settings.getMaxConnectionsTotal())
-            .setDefaultConnectionConfig(ConnectionConfig.custom()
-                .setValidateAfterInactivity(TimeValue.ofSeconds(10))
-                .build())
-            .build())
-        .setDefaultRequestConfig(RequestConfig.custom()
-            .setRedirectsEnabled(followRedirects)
-            .setConnectionRequestTimeout(Timeout.ofMilliseconds(leaseMillis))
-            .build())
-        .useSystemProperties()
-        .setRetryStrategy(ANSWERLESS_ATTEMPT)
-        // Every executor is process-wide. Retaining an upstream cookie here would let one
-        // request leave state that an unrelated later request sends back to the same host.
-        .disableCookieManagement()
-        .evictExpiredConnections()
-        .evictIdleConnections(TimeValue.ofMinutes(1))
-        .build();
+  public Timeout responseTimeout() {
+    return Timeout.ofMilliseconds(inForce().getResponseMillis().orElse(settings().getResponseMillis()));
+  }
 
-    return new Client(forGeneration, http, Executor.newInstance(http),
-        Timeout.ofMilliseconds(connectMillis), Timeout.ofMilliseconds(responseMillis));
+  private Pool pool() {
+    if (fixedPool != null) { return fixedPool; }
+    synchronized (HttpTimeouts.class) {
+      Pool pool = pools.get(callClass);
+      if (pool == null || pool.generation != generation) {
+        if (pool != null) { pool.close(); }
+        pool = new Pool(generation, settings());
+        pools.put(callClass, pool);
+      }
+      return pool;
+    }
   }
 
   /**

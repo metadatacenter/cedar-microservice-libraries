@@ -42,4 +42,21 @@ class HttpTimeoutsConfigurationTest {
     assertSame(HttpTimeouts.EXTERNAL, HttpTimeouts.EXTERNAL.with(new OutboundTimeoutOverride()));
     assertSame(HttpTimeouts.EXTERNAL, HttpTimeouts.EXTERNAL.with(null));
   }
+  @Test
+  void anInteractiveArtifactOverrideDoesNotShortenBatchCalls() {
+    org.metadatacenter.config.CedarConfig config = org.mockito.Mockito.mock(
+        org.metadatacenter.config.CedarConfig.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
+    org.mockito.Mockito.when(config.getOutboundHttp()).thenReturn(new org.metadatacenter.config.OutboundHttpConfig());
+    org.mockito.Mockito.when(config.getServers().getArtifact().getTimeouts())
+        .thenReturn(new OutboundTimeoutOverride(null, 20000));
+    org.mockito.Mockito.when(config.getExternalAuthorities().getTimeouts()).thenReturn(new OutboundTimeoutOverride());
+    try {
+      HttpTimeouts.install(config);
+      assertEquals(20000, HttpTimeouts.ARTIFACT_INTERACTIVE.responseTimeout().toMilliseconds());
+      assertEquals(120000, HttpTimeouts.ARTIFACT_BATCH.responseTimeout().toMilliseconds());
+    } finally {
+      HttpTimeouts.install(new org.metadatacenter.config.CedarConfig());
+    }
+  }
+
 }

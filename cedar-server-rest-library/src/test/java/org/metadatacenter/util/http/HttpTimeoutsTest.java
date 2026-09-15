@@ -94,6 +94,15 @@ class HttpTimeoutsTest {
     assertWaitedNoLongerThanTheLease(start);
   }
 
+  @Test
+  void anOverrideCannotBypassTheClassPoolLimit() throws InterruptedException {
+    occupyTheOnlyConnection();
+    HttpTimeouts override = timeouts.with(new org.metadatacenter.config.OutboundTimeoutOverride(null, 9000));
+    long start = System.nanoTime();
+    assertThrows(ConnectionRequestTimeoutException.class, () -> override.execute(Request.get(url)));
+    assertWaitedNoLongerThanTheLease(start);
+  }
+
   /**
    * Takes the pool's single connection with a request the silent server never answers, and returns
    * only once the server has accepted it, so the next caller is certainly queueing for the lease

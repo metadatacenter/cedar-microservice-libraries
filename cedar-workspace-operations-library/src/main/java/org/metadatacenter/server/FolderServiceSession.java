@@ -56,6 +56,9 @@ public interface FolderServiceSession {
 
   FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType, Map<NodeProperty, String> updateFields);
 
+  FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
+      Map<NodeProperty, String> updateFields, String restoreJobId);
+
   boolean deleteFolderById(CedarFolderId folderId);
 
   boolean deleteFolderById(CedarFolderId folderId, RevisionPrecondition precondition);
