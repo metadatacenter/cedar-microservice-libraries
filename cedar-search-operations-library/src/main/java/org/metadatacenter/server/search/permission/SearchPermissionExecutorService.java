@@ -135,7 +135,7 @@ public class SearchPermissionExecutorService {
       nodeIndexingService.removeDocumentFromIndex(resourceId);
       return;
     }
-    CedarNodeMaterializedPermissions perm = permissionSession.getResourceMaterializedPermission(resourceId);
+    CedarNodeMaterializedPermissions perm = permissionSession.getResourceMaterializedPermission(node);
     CedarNodeMaterializedCategories categories = null;
     if (node.getType() != CedarResourceType.FOLDER) {
       categories = categorySession.getArtifactMaterializedCategories(CedarUntypedArtifactId.build(resourceId.getId()));

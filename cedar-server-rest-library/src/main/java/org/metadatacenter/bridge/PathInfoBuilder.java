@@ -17,6 +17,25 @@ public final class PathInfoBuilder {
   private PathInfoBuilder() {
   }
 
+  /**
+   * The path from the root to this resource, and nothing more.
+   *
+   * <p>{@link #getResourcePathExtract} decorates every element of the path with what the current user
+   * may do with it, which costs several graph queries per element. A caller that needs the shape of
+   * the path — its ids, names and types — rather than one user's authority over it should ask for it
+   * here and not pay for the decoration.
+   *
+   * <p>Indexing is such a caller, and was the expensive one: it built the decorated path for every
+   * resource in the repository, and {@code FolderServerNodeInfo.fromNode} then read a single
+   * {@code getId()} off it to learn the parent folder. The permissions, the capabilities and the
+   * implicit-open flag were all computed and dropped, for the one user who happened to be running
+   * the rebuild.
+   */
+  public static List<FolderServerResourceExtract> getResourcePath(FolderServiceSession folderSession,
+                                                                  FileSystemResource node) {
+    return folderSession.findNodePathExtract(node);
+  }
+
   public static List<FolderServerResourceExtract> getResourcePathExtract(CedarRequestContext context,
                                                                          FolderServiceSession folderSession,
                                                                          ResourcePermissionServiceSession permissionSession,

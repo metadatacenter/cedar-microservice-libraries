@@ -54,7 +54,17 @@ public class IndexUtils {
    * Those resources that don't have to be in the index, such as the "/" folder and the "Lost+Found" folder are ignored.
    */
   public List<FileSystemResource> findAllResources(CedarRequestContext context) throws CedarProcessingException {
-    return findAllResources(offset -> findAllNodes(context, Optional.empty(), limit, offset));
+    return findAllResources(context, new IndexingProgress());
+  }
+
+  /**
+   * The same, reporting how far the paging has got. Enumeration writes no document and can run for
+   * minutes on a large repository, so a rebuild that reported only its indexing loop would look
+   * stalled for the whole of it.
+   */
+  public List<FileSystemResource> findAllResources(CedarRequestContext context, IndexingProgress progress)
+      throws CedarProcessingException {
+    return findAllResources(offset -> findAllNodes(context, Optional.empty(), limit, offset), progress);
   }
 
   @FunctionalInterface
@@ -63,6 +73,11 @@ public class IndexUtils {
   }
 
   List<FileSystemResource> findAllResources(ResourcePageSource pageSource) throws CedarProcessingException {
+    return findAllResources(pageSource, new IndexingProgress());
+  }
+
+  List<FileSystemResource> findAllResources(ResourcePageSource pageSource, IndexingProgress progress)
+      throws CedarProcessingException {
     log.info("Retrieving all resources.");
     List<FileSystemResource> resources = new ArrayList<>();
     boolean finished = false;
@@ -84,6 +99,10 @@ public class IndexUtils {
       int count = pagedNodes.getResources().size();
       long totalCount = pagedNodes.getTotalCount();
       long currentOffset = pagedNodes.getCurrentOffset();
+      // The denominator is the graph's own count, so it counts the resources this loop then skips
+      // as well. Advancing once per resource read rather than once per resource kept keeps the two
+      // measuring the same thing.
+      progress.setTotal(totalCount);
       if (count == 0 && currentOffset < totalCount) {
         throw new CedarProcessingException("Resource pagination made no progress at offset " + currentOffset +
             " of " + totalCount);
@@ -91,6 +110,7 @@ public class IndexUtils {
       countSoFar += count;
       log.info("Retrieved " + countSoFar + "/" + totalCount + " resources");
       for (FolderServerResourceExtract folderServerNodeExtract : pagedNodes.getResources()) {
+        progress.advance();
         FileSystemResource folderServerNode = FileSystemResource.fromNodeExtract(folderServerNodeExtract);
         if (needsIndexing(folderServerNode)) {
           resources.add(folderServerNode);
@@ -149,6 +169,19 @@ public class IndexUtils {
 
   void verifyAndPromoteIndex(ElasticsearchManagementService esManagementService, String aliasName,
                              String newIndexName, long expectedDocumentCount) throws CedarProcessingException {
+    verifyAndPromoteIndex(esManagementService, aliasName, newIndexName, expectedDocumentCount,
+        new IndexingProgress());
+  }
+
+  /**
+   * The same, reporting its two steps. Both are silent and neither is instant: refreshing and
+   * counting a freshly built index takes as long as the index is large, and promotion then deletes
+   * every index the alias used to name.
+   */
+  void verifyAndPromoteIndex(ElasticsearchManagementService esManagementService, String aliasName,
+                             String newIndexName, long expectedDocumentCount, IndexingProgress progress)
+      throws CedarProcessingException {
+    progress.enterPhase(IndexingPhase.VERIFYING);
     log.info("Refreshing newly generated index before promotion: " + newIndexName);
     esManagementService.refreshIndex(newIndexName);
 
@@ -160,6 +193,7 @@ public class IndexUtils {
     }
     log.info("Verified " + actualDocumentCount + " documents in newly generated index: " + newIndexName);
 
+    progress.enterPhase(IndexingPhase.PROMOTING);
     esManagementService.replaceAlias(newIndexName, aliasName);
     deleteOldIndices(esManagementService, aliasName, newIndexName);
   }
