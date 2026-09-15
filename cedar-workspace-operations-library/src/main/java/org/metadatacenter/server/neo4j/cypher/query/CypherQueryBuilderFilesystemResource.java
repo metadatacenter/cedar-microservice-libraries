@@ -117,10 +117,13 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
   }
 
   public static String isFileSystemResourceOpenImplicitly() {
-    return "" +
-        " MATCH (root:<LABEL.FOLDER> {<PROP.NAME>:{<PH.NAME>}})," +
-        " (current:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>} })," +
-        " path=((root)-[:<REL.CONTAINS>*0..]->(open {<PROP.IS_OPEN>:true})-[:<REL.CONTAINS>*0..]->(current))" +
-        " RETURN path";
+    return """
+        MATCH (root:<LABEL.FOLDER> {<PROP.NAME>:{<PH.NAME>}}),
+              (current:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>}})
+        WHERE EXISTS {
+          MATCH (root)-[:<REL.CONTAINS>*0..]->(open {<PROP.IS_OPEN>:true})-[:<REL.CONTAINS>*0..]->(current)
+        }
+        RETURN current
+        """;
   }
 }

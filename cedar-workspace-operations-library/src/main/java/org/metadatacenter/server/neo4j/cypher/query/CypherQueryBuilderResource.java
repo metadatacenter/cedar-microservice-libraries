@@ -227,13 +227,12 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
           MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
           MATCH (resource:<LABEL.RESOURCE>)
           WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
-                  
-          OPTIONAL MATCH p1 = (resource)<-[:CONTAINS*0..]-()<-[:OWNS]-(user:User)
-          OPTIONAL MATCH p2 = (resource)<-[:CONTAINS*0..]-()<-[:%s]-()<-[:MEMBEROF*0..1]-(user:User)
-
-          WITH user, resource, p1, p2
-          WHERE p1 IS NOT NULL OR p2 IS NOT NULL
-          RETURN DISTINCT resource
+            AND (EXISTS {
+              MATCH (resource)<-[:CONTAINS*0..]-()<-[:OWNS]-(user)
+            } OR EXISTS {
+              MATCH (resource)<-[:CONTAINS*0..]-()<-[:%s]-()<-[:MEMBEROF*0..1]-(user)
+            })
+          RETURN resource
 
           ORDER BY resource.<PROP.NODE_SORT_ORDER>,
                    %s,
@@ -245,8 +244,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
       return """
           MATCH (resource:<LABEL.RESOURCE>)
           WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
-                  
-          RETURN DISTINCT resource
+          RETURN resource
 
           ORDER BY resource.<PROP.NODE_SORT_ORDER>,
                    %s,
@@ -261,25 +259,20 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     if (addPermissionConditions) {
       return """
           MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
-          RETURN COUNT {
           MATCH (resource:<LABEL.RESOURCE>)
           WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
-                  
-          OPTIONAL MATCH p1 = (resource)<-[:CONTAINS*0..]-()<-[:OWNS]-(user:User)
-          OPTIONAL MATCH p2 = (resource)<-[:CONTAINS*0..]-()<-[:%s]-()<-[:MEMBEROF*0..1]-(user:User)
-
-          WITH user, resource, p1, p2
-          WHERE p1 IS NOT NULL OR p2 IS NOT NULL
-          RETURN DISTINCT resource
-          }
+            AND (EXISTS {
+              MATCH (resource)<-[:CONTAINS*0..]-()<-[:OWNS]-(user)
+            } OR EXISTS {
+              MATCH (resource)<-[:CONTAINS*0..]-()<-[:%s]-()<-[:MEMBEROF*0..1]-(user)
+            })
+          RETURN count(resource)
           """.formatted(getResourceRoleRelationLabels());
     } else {
       return """
-          RETURN COUNT {
           MATCH (resource:<LABEL.RESOURCE>)
           WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
-          RETURN DISTINCT resource
-          }
+          RETURN count(resource)
           """;
     }
   }

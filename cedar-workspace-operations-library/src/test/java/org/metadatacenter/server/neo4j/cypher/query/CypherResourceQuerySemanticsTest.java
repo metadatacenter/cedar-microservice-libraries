@@ -7,6 +7,7 @@ import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -91,5 +92,40 @@ class CypherResourceQuerySemanticsTest {
       assertTrue(CypherQueryBuilderFilesystemResourcePermission
           .removeRoleForFilesystemResourceFromGroup(role).contains("relation:" + expectedLabels));
     }
+  }
+
+  @Test
+  void permissionExistenceChecksDoNotMaterializeAndDeduplicateEveryMatchingPath() {
+    String specialFolders = CypherQueryBuilderResource.getSpecialFoldersLookupQuery(List.of("name"), true);
+    String unrestrictedSpecialFolders = CypherQueryBuilderResource.getSpecialFoldersLookupQuery(List.of("name"), false);
+    String specialFolderCount = CypherQueryBuilderResource.getSpecialFoldersCountQuery(true);
+    String unrestrictedSpecialFolderCount = CypherQueryBuilderResource.getSpecialFoldersCountQuery(false);
+    String viewerCheck = CypherQueryBuilderFilesystemResourcePermission.userHasViewerRoleOnFilesystemResource();
+    String openCheck = CypherQueryBuilderFilesystemResource.isFileSystemResourceOpenImplicitly();
+
+    for (String query : List.of(specialFolders, specialFolderCount, viewerCheck, openCheck)) {
+      assertTrue(query.contains("EXISTS {"), query);
+      assertFalse(query.contains("OPTIONAL MATCH p"), query);
+    }
+    assertFalse(specialFolders.contains("RETURN DISTINCT resource"), specialFolders);
+    assertFalse(unrestrictedSpecialFolders.contains("RETURN DISTINCT resource"), unrestrictedSpecialFolders);
+    assertTrue(specialFolderCount.contains("RETURN count(resource)"), specialFolderCount);
+    assertTrue(unrestrictedSpecialFolderCount.contains("RETURN count(resource)"), unrestrictedSpecialFolderCount);
+    assertTrue(openCheck.contains("RETURN current"), openCheck);
+    assertFalse(openCheck.contains("RETURN path"), openCheck);
+  }
+
+  @Test
+  void transitivePermissionMaterializationKeepsTraversalsIndependentAndDeduplicated() {
+    String users = CypherQueryBuilderFilesystemResourcePermission
+        .getUserIdsWithTransitiveViewerRoleOnFilesystemResource();
+    String groups = CypherQueryBuilderFilesystemResourcePermission
+        .getGroupIdsWithTransitiveViewerRoleOnFilesystemResource();
+
+    assertTrue(users.contains("CALL {"), users);
+    assertTrue(users.contains("UNION"), users);
+    assertFalse(users.contains("OPTIONAL MATCH"), users);
+    assertTrue(users.contains("RETURN DISTINCT user.<PROP.ID>"), users);
+    assertTrue(groups.contains("RETURN DISTINCT group.<PROP.ID>"), groups);
   }
 }
