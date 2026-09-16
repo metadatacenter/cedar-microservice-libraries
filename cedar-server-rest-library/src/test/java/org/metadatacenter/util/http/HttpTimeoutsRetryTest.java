@@ -7,15 +7,19 @@ import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.NoHttpResponseException;
 import org.junit.jupiter.api.Test;
 
+import jakarta.ws.rs.core.HttpHeaders;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.SocketTimeoutException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -103,6 +107,88 @@ class HttpTimeoutsRetryTest {
 
       assertEquals(1, server.connections(),
           "a create the dependency may already have made is not sent a second time");
+    }
+  }
+
+  @Test
+  void aConditionalWriteIsRepeatedWhenAPooledConnectionAnsweredNothing() throws Exception {
+    for (String etag : List.of("\"v1\"")) {
+      try (StubServer server = new StubServer(List.of(Behavior.CLOSE_WITHOUT_ANSWERING, Behavior.ANSWER_204))) {
+        HttpTimeouts timeouts = new HttpTimeouts(1_000, 1_000, 5_000, 1, 1);
+
+        ClassicHttpResponse response = timeouts.execute(
+            Request.put(server.baseUrl() + "/artifact")
+                .setHeader(HttpHeaders.IF_MATCH, etag)
+                .bodyString("{}", ContentType.APPLICATION_JSON));
+
+        assertEquals(204, response.getCode());
+        assertEquals(2, server.connections(),
+            "a conditional replacement can be repeated: the condition still names the state the"
+                + " first attempt expected");
+      }
+    }
+  }
+
+  @Test
+  void anUnconditionalWriteIsNotRepeatedWhenAPooledConnectionAnsweredNothing() throws Exception {
+    try (StubServer server = new StubServer(List.of(Behavior.CLOSE_WITHOUT_ANSWERING, Behavior.ANSWER_204))) {
+      HttpTimeouts timeouts = new HttpTimeouts(1_000, 1_000, 5_000, 1, 1);
+
+      assertThrows(NoHttpResponseException.class, () -> timeouts.execute(
+          Request.put(server.baseUrl() + "/artifact").bodyString("{}", ContentType.APPLICATION_JSON)));
+
+      assertEquals(1, server.connections(),
+          "without a condition nothing rules out a server that did the work and died before writing");
+    }
+  }
+
+  @Test
+  void aConditionalDeleteIsRepeatedWhenAPooledConnectionAnsweredNothing() throws Exception {
+    try (StubServer server = new StubServer(List.of(Behavior.CLOSE_WITHOUT_ANSWERING, Behavior.ANSWER_204))) {
+      HttpTimeouts timeouts = new HttpTimeouts(1_000, 1_000, 5_000, 1, 1);
+
+      ClassicHttpResponse response = timeouts.execute(
+          Request.delete(server.baseUrl() + "/artifact").setHeader(HttpHeaders.IF_MATCH, "\"v1\""));
+
+      assertEquals(204, response.getCode());
+      assertEquals(2, server.connections());
+    }
+  }
+
+  /**
+   * The rule the class hierarchy makes easy to get wrong.
+   *
+   * <p>{@code ConnectTimeoutException} extends {@code SocketTimeoutException}, so an implementation
+   * that asks whether a failure is a socket timeout in order to find connect failures will retry
+   * response timeouts as well -- and a response timeout means the request arrived and the server may
+   * still be working on it, so repeating it can do the work twice.
+   */
+  @Test
+  void aResponseTimeoutIsNotRepeatedEvenForARead() throws Exception {
+    AtomicInteger requestCount = new AtomicInteger();
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/slow", exchange -> {
+      requestCount.incrementAndGet();
+      exchange.getRequestBody().readAllBytes();
+      try {
+        Thread.sleep(2_000);
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+      }
+      exchange.close();
+    });
+    server.setExecutor(Executors.newFixedThreadPool(2));
+    server.start();
+    try {
+      HttpTimeouts timeouts = new HttpTimeouts(1_000, 1_000, 300, 1, 1);
+      String url = "http://127.0.0.1:" + server.getAddress().getPort() + "/slow";
+
+      assertThrows(SocketTimeoutException.class, () -> timeouts.execute(Request.get(url)));
+
+      assertEquals(1, requestCount.get(),
+          "the server may still be working on the request that timed out");
+    } finally {
+      server.stop(0);
     }
   }
 

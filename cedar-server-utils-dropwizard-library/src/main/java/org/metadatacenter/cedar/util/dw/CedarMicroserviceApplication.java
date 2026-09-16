@@ -15,6 +15,7 @@ import org.eclipse.jetty.ee10.servlets.CrossOriginFilter;
 import org.eclipse.jetty.http.UriCompliance;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.util.http.HttpTimeouts;
 import org.metadatacenter.config.ServerConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.constant.CedarHeaderParameters;
@@ -118,6 +119,11 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
         || getServerName() == ServerName.WORKER) {
       cedarConfig.getArtifactService().requireApiKey();
     }
+    // Every class of outbound call takes its bounds from the configuration this server just read.
+    // Before this point a call would run on the defaults compiled into OutboundHttpConfig, so it
+    // happens here rather than in initializeApp: a bootstrap that reaches a dependency should reach
+    // it under the configured timeouts and not the built-in ones.
+    HttpTimeouts.install(cedarConfig);
 
     initializeWithBootstrap(bootstrap, cedarConfig);
   }

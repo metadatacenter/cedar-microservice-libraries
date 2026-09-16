@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import org.metadatacenter.server.neo4j.ArtifactRestoreTransaction;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.*;
@@ -47,6 +48,26 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     CypherParameters params = CypherParamBuilderArtifact.updateArtifactById(artifactId, updateFields, updatedBy);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeWriteGetOne(q, FolderServerArtifact.class);
+  }
+
+  FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, Map<NodeProperty, String> updateFields,
+      CedarUserId updatedBy, String restoreJobId) {
+    if (restoreJobId == null) {
+      return updateArtifactById(artifactId, updateFields, updatedBy);
+    }
+    return executeInWriteTransaction(tx -> {
+      if (!ArtifactRestoreTransaction.lockForGraph(tx, restoreJobId)) {
+        return null; // A relay has already restored it, or a newer write superseded this job.
+      }
+      FolderServerArtifact result = runInTransactionGetOne(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderArtifact.updateResourceById(updateFields),
+          CypherParamBuilderArtifact.updateArtifactById(artifactId, updateFields, updatedBy)),
+          FolderServerArtifact.class);
+      if (result != null) {
+        ArtifactRestoreTransaction.remove(tx, restoreJobId);
+      }
+      return result;
+    }, "updating an artifact and completing its compensation record");
   }
 
   boolean deleteArtifactById(CedarArtifactId artifactId) {

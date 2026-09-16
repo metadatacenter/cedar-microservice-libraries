@@ -13,18 +13,27 @@ public class AppLoggerQueueService extends QueueServiceWithBlockingQueue {
 
   private static final Logger log = LoggerFactory.getLogger(AppLoggerQueueService.class);
 
+  private final CypherLogFilter cypherLogFilter;
+
   public AppLoggerQueueService(CacheServerPersistent cacheConfig) {
+    this(cacheConfig, new CypherLogFilter());
+  }
+
+  AppLoggerQueueService(CacheServerPersistent cacheConfig, CypherLogFilter cypherLogFilter) {
     super(cacheConfig, APP_LOG_QUEUE_ID);
+    this.cypherLogFilter = cypherLogFilter;
   }
 
   public void enqueueEvent(AppLogMessage message)
   {
-    // We are disabling Cypher logging because of the large volume of logs generated - and the fact that this type
-    // of specialized logging is not required on an ongoing basis.
-    //
-    // See metadatacenter/cedar-server-core-library#8 for a description of a principled way of enabling/disabling
-    // this type of logging.
-    // if (message.getType() != AppLogType.CYPHER_QUERY)
+    // Cypher logging used to be all-or-nothing here, and the "nothing" arm was commented out with a
+    // note that the volume was not worth carrying on an ongoing basis. CypherLogFilter replaces that
+    // switch: it excludes the named authentication lookups, which are one message in four and the
+    // same query every time, and keeps every other Cypher query for the rollups and the outlier
+    // tables that read them. See CypherLogFilter for the configuration.
+    if (!cypherLogFilter.accepts(message)) {
+      return;
+    }
     // Enqueueing is best-effort: a failure is logged and the message dropped, so an unreachable
     // queue (Redis) can not fail the request that produced the log message
     String json;
@@ -39,6 +48,14 @@ public class AppLoggerQueueService extends QueueServiceWithBlockingQueue {
     } catch (Exception e) {
       reportDroppedEvent(log, "log message", e);
     }
+  }
+
+  /**
+   * How many Cypher log messages the filter has excluded. Distinct from the dropped count, which
+   * counts messages lost to a failure: these were never meant to be carried.
+   */
+  public long getSuppressedEventCount() {
+    return cypherLogFilter.getSuppressedEventCount();
   }
 
 }

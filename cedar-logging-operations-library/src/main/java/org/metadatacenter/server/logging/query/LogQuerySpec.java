@@ -1,6 +1,7 @@
 package org.metadatacenter.server.logging.query;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -68,6 +69,13 @@ public record LogQuerySpec(String table,
   public record Having(String key, String op, String val) {
   }
 
+  /**
+   * Derived, not part of the wire contract. Jackson picks up bean-style accessors on a record, so
+   * without this the catalog served a {@code "grouped"} field that the same endpoint then refused
+   * as an unknown property — the boards page POSTs the spec it was given straight back, so every
+   * board answered 400.
+   */
+  @JsonIgnore
   public boolean isGrouped() {
     return groupBy != null && !groupBy.isEmpty();
   }

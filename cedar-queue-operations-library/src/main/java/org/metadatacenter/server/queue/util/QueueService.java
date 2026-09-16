@@ -19,8 +19,10 @@ public abstract class QueueService {
   public static final String VALUERECOMMENDER_QUEUE_ID = "valuerecommender";
   public static final String CLONE_INSTANCES_QUEUE_ID = "cloneInstances";
 
-  protected static final String DEAD_LETTER_SUFFIX = "-dead-letter";
-  protected static final String PROCESSING_SUFFIX = "-processing";
+  // Public because the Monitor reports these depths beside the pending one, and a reader that spelled
+  // the suffixes itself would drift from the queues it is reporting on.
+  public static final String DEAD_LETTER_SUFFIX = "-dead-letter";
+  public static final String PROCESSING_SUFFIX = "-processing";
 
   // Queue writes can happen on request threads. Keep Redis as a small bulkhead and, critically, put
   // a deadline on borrowing from it: the Jedis defaults are eight connections, blocking enabled and
