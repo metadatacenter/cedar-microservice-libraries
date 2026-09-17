@@ -4,6 +4,7 @@ import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.id.CedarSchemaArtifactId;
 import org.metadatacenter.model.BiboStatus;
+import org.metadatacenter.model.folderserver.datagroup.ResourceWithVersionData;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
 import org.metadatacenter.outcome.OutcomeWithReason;
 import org.metadatacenter.server.VersionServiceSession;
@@ -36,12 +37,18 @@ public class Neo4JUserSessionVersionService extends AbstractNeo4JUserSession imp
 
   @Override
   public OutcomeWithReason resourceCanBePublished(FilesystemResourceWithCurrentUserPermissions resource) {
+    if (resource instanceof ResourceWithVersionData res && res.getPublicationStatus() != BiboStatus.DRAFT) {
+      return OutcomeWithReason.negative(CedarErrorKey.PUBLISH_ONLY_DRAFT);
+    }
     if (resource instanceof FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus res) {
       if (res.getPublicationStatus() != BiboStatus.DRAFT) {
         return OutcomeWithReason.negative(CedarErrorKey.PUBLISH_ONLY_DRAFT);
       }
     }
 
+    if (resource instanceof ResourceWithVersionData version && !Boolean.TRUE.equals(version.isLatestVersion())) {
+      return OutcomeWithReason.negative(CedarErrorKey.VERSIONING_ONLY_ON_LATEST);
+    }
     FileSystemResource nextVersion = proxies.version().resourceWithPreviousVersion(CedarSchemaArtifactId.build(resource.getId(), resource.getType()));
     if (nextVersion != null) {
       return OutcomeWithReason.negative(CedarErrorKey.VERSIONING_ONLY_ON_LATEST);
@@ -51,12 +58,18 @@ public class Neo4JUserSessionVersionService extends AbstractNeo4JUserSession imp
 
   @Override
   public OutcomeWithReason resourceCanBeDrafted(FilesystemResourceWithCurrentUserPermissions resource) {
+    if (resource instanceof ResourceWithVersionData res && res.getPublicationStatus() != BiboStatus.PUBLISHED) {
+      return OutcomeWithReason.negative(CedarErrorKey.CREATE_DRAFT_ONLY_FROM_PUBLISHED);
+    }
     if (resource instanceof FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus res) {
       if (res.getPublicationStatus() != BiboStatus.PUBLISHED) {
         return OutcomeWithReason.negative(CedarErrorKey.CREATE_DRAFT_ONLY_FROM_PUBLISHED);
       }
     }
 
+    if (resource instanceof ResourceWithVersionData version && !Boolean.TRUE.equals(version.isLatestVersion())) {
+      return OutcomeWithReason.negative(CedarErrorKey.VERSIONING_ONLY_ON_LATEST);
+    }
     FileSystemResource nextVersion = proxies.version().resourceWithPreviousVersion(CedarSchemaArtifactId.build(resource.getId(), resource.getType()));
     if (nextVersion != null) {
       return OutcomeWithReason.negative(CedarErrorKey.VERSIONING_ONLY_ON_LATEST);

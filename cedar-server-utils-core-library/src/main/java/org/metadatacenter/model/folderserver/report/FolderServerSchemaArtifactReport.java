@@ -3,6 +3,8 @@ package org.metadatacenter.model.folderserver.report;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.metadatacenter.id.CedarSchemaArtifactId;
 import org.metadatacenter.model.BiboStatus;
+import org.metadatacenter.model.ResourceVersion;
+import org.metadatacenter.model.folderserver.datagroup.ResourceWithVersionData;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.datagroup.ResourceWithOpenFlag;
@@ -15,7 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
-public abstract class FolderServerSchemaArtifactReport extends FolderServerArtifactReport implements FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus, ResourceWithOpenFlag {
+public abstract class FolderServerSchemaArtifactReport extends FolderServerArtifactReport implements FilesystemResourceWithCurrentUserPermissionsAndPublicationStatus, ResourceWithOpenFlag, ResourceWithVersionData {
 
   private static final Logger log = LoggerFactory.getLogger(FolderServerSchemaArtifactReport.class);
 
@@ -45,6 +47,15 @@ public abstract class FolderServerSchemaArtifactReport extends FolderServerArtif
   public void setPublicationStatus(String s) {
     versionData.setPublicationStatus(BiboStatus.forValue(s));
   }
+
+  @Override public ResourceVersion getVersion() { return versionData.getVersion(); }
+  @Override public void setVersion(String version) { versionData.setVersion(ResourceVersion.forValue(version)); }
+  @Override public Boolean isLatestVersion() { return versionData.isLatestVersion(); }
+  @Override public void setLatestVersion(Boolean latest) { versionData.setLatestVersion(latest); }
+  @Override public Boolean isLatestDraftVersion() { return versionData.isLatestDraftVersion(); }
+  @Override public void setLatestDraftVersion(Boolean latest) { versionData.setLatestDraftVersion(latest); }
+  @Override public Boolean isLatestPublishedVersion() { return versionData.isLatestPublishedVersion(); }
+  @Override public void setLatestPublishedVersion(Boolean latest) { versionData.setLatestPublishedVersion(latest); }
 
   public CedarSchemaArtifactId getResourceId() {
     return CedarSchemaArtifactId.build(this.getId(), this.getType());

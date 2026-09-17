@@ -48,6 +48,8 @@ public interface FolderServiceSession {
 
   FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentFolderId, CedarUserId userId);
 
+  FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentFolderId, boolean propagateSharing);
+
   FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields);
 
   VersionedResource<FolderServerFolder> updateFolderById(CedarFolderId folderId,
