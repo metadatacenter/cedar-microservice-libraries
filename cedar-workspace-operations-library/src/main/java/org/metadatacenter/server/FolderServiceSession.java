@@ -184,6 +184,24 @@ public interface FolderServiceSession {
 
   long getFolderCount();
 
+  /**
+   * How many of {@link #getFolderCount()} are user home folders, and how many are system folders.
+   *
+   * <p>The search index never holds either kind, by the rule in {@code IndexUtils.needsIndexing}.
+   * Anything comparing the graph's folder count with the index's needs these two to know what the
+   * index is supposed to hold.
+   */
+  long getUserHomeFolderCount();
+
+  long getSystemFolderCount();
+
+  /**
+   * The rest: folders that are neither, which is exactly what the search index holds. Counted in
+   * its own right rather than derived, so that the three parts accounting for the total is
+   * something that can be checked instead of something that is true by construction.
+   */
+  long getRegularFolderCount();
+
   FolderServerFolder getParentFolder(CedarArtifactId artifactId);
 
 }

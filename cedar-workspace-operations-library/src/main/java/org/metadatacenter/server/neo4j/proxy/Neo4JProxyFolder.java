@@ -262,6 +262,27 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     return executeReadGetLong(q);
   }
 
+  public long getUserHomeFolderCount() {
+    String cypher = CypherQueryBuilderFolder.getUserHomeFolderCount();
+    CypherParameters params = new CypherParameters();
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeReadGetLong(q);
+  }
+
+  public long getRegularFolderCount() {
+    String cypher = CypherQueryBuilderFolder.getRegularFolderCount();
+    CypherParameters params = new CypherParameters();
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeReadGetLong(q);
+  }
+
+  public long getSystemFolderCount() {
+    String cypher = CypherQueryBuilderFolder.getSystemFolderCount();
+    CypherParameters params = new CypherParameters();
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeReadGetLong(q);
+  }
+
   public FolderServerFolder getParentFolder(CedarArtifactId artifactId) {
     String cypher = CypherQueryBuilderFolder.getParentFolderById();
     CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);

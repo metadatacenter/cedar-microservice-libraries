@@ -219,6 +219,48 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " RETURN count(folder)";
   }
 
+  /**
+   * How many of the folders counted by {@link #getTotalCount()} are user home folders.
+   *
+   * <p>Both of these exist so that a count taken from this graph can be compared with one taken
+   * from the search index without a human doing the subtraction. {@code IndexUtils.needsIndexing}
+   * refuses to index a folder that is a user home or a system folder, so the index legitimately
+   * holds fewer folders than the graph and always will. Reported as a bare difference that reads
+   * as thousands of missing documents; reported against these two counts it reads as zero.
+   *
+   * <p>{@code UserHomeFolder} and {@code SystemFolder} both carry {@code Folder} as well, so each
+   * of these counts a subset of the total rather than something beside it.
+   */
+  public static String getUserHomeFolderCount() {
+    return "" +
+        " MATCH (folder:<LABEL.USER_HOME_FOLDER>)" +
+        " RETURN count(folder)";
+  }
+
+  /**
+   * The folders counted by {@link #getTotalCount()} that are neither, which is what the search
+   * index holds.
+   *
+   * <p>Read from the graph rather than worked out as total minus the other two, so that the three
+   * parts and the total are four independent counts. Subtracting would make them add up by
+   * construction and there would be nothing left to check; counted separately, a folder that
+   * carried both labels or a label the taxonomy grew later would show as the parts failing to
+   * account for the total.
+   */
+  public static String getRegularFolderCount() {
+    return "" +
+        " MATCH (folder:<LABEL.FOLDER>)" +
+        " WHERE NOT folder:<LABEL.USER_HOME_FOLDER> AND NOT folder:<LABEL.SYSTEM_FOLDER>" +
+        " RETURN count(folder)";
+  }
+
+  /** How many of the folders counted by {@link #getTotalCount()} are system folders. */
+  public static String getSystemFolderCount() {
+    return "" +
+        " MATCH (folder:<LABEL.SYSTEM_FOLDER>)" +
+        " RETURN count(folder)";
+  }
+
   public static String getParentFolderById() {
     return "" +
         " MATCH (folder:<LABEL.FOLDER>)-[:<REL.CONTAINS>]->(resource:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
