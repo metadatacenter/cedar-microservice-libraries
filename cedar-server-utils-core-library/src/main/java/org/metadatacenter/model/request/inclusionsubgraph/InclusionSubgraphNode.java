@@ -1,8 +1,10 @@
 package org.metadatacenter.model.request.inclusionsubgraph;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.model.AbstractCedarResourceWithDates;
+import org.metadatacenter.model.BiboStatus;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.datagroup.NameDescriptionIdentifierGroup;
 import org.metadatacenter.model.folderserver.datagroup.ResourceWithUsersAndUserNamesData;
@@ -10,6 +12,7 @@ import org.metadatacenter.model.folderserver.datagroup.UserNamesDataGroup;
 import org.metadatacenter.model.folderserver.datagroup.UsersDataGroup;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.model.request.InclusionSubgraphNodeOperation;
+import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.security.model.FilesystemResourceWithIdAndType;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
@@ -26,6 +29,8 @@ public class InclusionSubgraphNode extends AbstractCedarResourceWithDates implem
   protected UserNamesDataGroup userNamesData;
 
   protected InclusionSubgraphNodeOperation operation = InclusionSubgraphNodeOperation.DO_NOT_UPDATE;
+
+  protected BiboStatus publicationStatus;
 
   public InclusionSubgraphNode() {
     super();
@@ -153,5 +158,23 @@ public class InclusionSubgraphNode extends AbstractCedarResourceWithDates implem
 
   public void setOperation(InclusionSubgraphNodeOperation operation) {
     this.operation = operation;
+  }
+
+  /**
+   * The publication status this artifact holds in the graph.
+   *
+   * <p>Propagation refuses a published target, so a selector can read this to offer no tick for one
+   * rather than let a caller choose an artifact the update will reject. A draft may still be refused
+   * on other grounds: the caller may lack write access to it, and a structural change into a template
+   * that already has instances needs a new version of that template.
+   */
+  @JsonProperty(NodeProperty.Label.PUBLICATION_STATUS)
+  public BiboStatus getPublicationStatus() {
+    return publicationStatus;
+  }
+
+  @JsonProperty(NodeProperty.Label.PUBLICATION_STATUS)
+  public void setPublicationStatus(String s) {
+    this.publicationStatus = BiboStatus.forValue(s);
   }
 }
