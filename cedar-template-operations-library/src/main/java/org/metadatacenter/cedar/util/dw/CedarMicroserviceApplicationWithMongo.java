@@ -14,6 +14,13 @@ import org.metadatacenter.server.service.mongodb.TemplateElementServiceMongoDB;
 import org.metadatacenter.server.service.mongodb.TemplateFieldServiceMongoDB;
 import org.metadatacenter.server.service.mongodb.TemplateInstanceServiceMongoDB;
 import org.metadatacenter.server.service.mongodb.TemplateServiceMongoDB;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public abstract class CedarMicroserviceApplicationWithMongo<T extends CedarMicroserviceConfiguration>
     extends CedarMicroserviceApplication<T> {
@@ -23,6 +30,11 @@ public abstract class CedarMicroserviceApplicationWithMongo<T extends CedarMicro
   protected static TemplateService<String, JsonNode> templateService;
   protected static TemplateInstanceService<String, JsonNode> templateInstanceService;
   protected MongoDocumentStoreHealthCheck mongoHealthCheck;
+  protected ArtifactIdIndexHealthCheck artifactIdIndexHealthCheck;
+  private ArtifactIdIndexProbe artifactIdIndexProbe;
+
+  private static final Logger logger = LoggerFactory.getLogger(CedarMicroserviceApplicationWithMongo.class);
+  private static final long INDEX_PROBE_TIMEOUT_SECONDS = 5;
 
   protected void initMongoServices(MongoClient mongoClientForDocuments, MongoConfig artifactServerConfig) {
     templateFieldService = new TemplateFieldServiceMongoDB(
@@ -47,6 +59,44 @@ public abstract class CedarMicroserviceApplicationWithMongo<T extends CedarMicro
 
     mongoHealthCheck = new MongoDocumentStoreHealthCheck(
         new DiagnosticsServiceMongoDB(mongoClientForDocuments, artifactServerConfig.getDatabaseName()));
+
+    artifactIdIndexProbe = new ArtifactIdIndexProbe(
+        mongoClientForDocuments,
+        artifactServerConfig.getDatabaseName(),
+        List.of(
+            artifactServerConfig.getMongoCollectionName(CedarResourceType.FIELD),
+            artifactServerConfig.getMongoCollectionName(CedarResourceType.ELEMENT),
+            artifactServerConfig.getMongoCollectionName(CedarResourceType.TEMPLATE),
+            artifactServerConfig.getMongoCollectionName(CedarResourceType.INSTANCE)));
+    artifactIdIndexHealthCheck = new ArtifactIdIndexHealthCheck(artifactIdIndexProbe);
+  }
+
+  /**
+   * Says once, at startup, what the store's @id indexes are, so an unprovisioned store is on the
+   * record from the first line of the log rather than only in a health response nobody reads.
+   *
+   * <p>Bounded and off the startup thread: a store that is slow to answer, or does not answer,
+   * leaves the server starting normally. The probe reads index metadata and creates nothing, so
+   * there is no partial effect to undo when it times out.
+   */
+  private void reportArtifactIdIndexes() {
+    try {
+      ArtifactIdIndexProbe.Status status =
+          CompletableFuture.supplyAsync(artifactIdIndexProbe::inspect)
+              .get(INDEX_PROBE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+      if (status.complete()) {
+        logger.info("Artifact document store: {}", status.describe());
+      } else {
+        logger.error("Artifact document store: {}", status.describe());
+      }
+    } catch (TimeoutException e) {
+      logger.warn("Artifact document store: @id index state not read within {} seconds",
+          INDEX_PROBE_TIMEOUT_SECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } catch (RuntimeException | java.util.concurrent.ExecutionException e) {
+      logger.warn("Artifact document store: @id index state could not be read", e);
+    }
   }
 
   /**
@@ -59,6 +109,10 @@ public abstract class CedarMicroserviceApplicationWithMongo<T extends CedarMicro
     super.setupEnvironment(environment);
     if (mongoHealthCheck != null) {
       environment.healthChecks().register("mongo", mongoHealthCheck);
+    }
+    if (artifactIdIndexHealthCheck != null) {
+      environment.healthChecks().register("artifactIdIndex", artifactIdIndexHealthCheck);
+      reportArtifactIdIndexes();
     }
   }
 
