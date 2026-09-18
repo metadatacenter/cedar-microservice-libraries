@@ -217,6 +217,15 @@ public class CloneInstancesExecutorService {
       if (entity != null) {
         originalDocument = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(originalDocument);
+        String templateUrl = microserviceUrlUtil.getArtifact().getArtifactTypeWithId(
+            CedarResourceType.TEMPLATE, newTemplateId);
+        ClassicHttpResponse templateResponse = artifactClient.get(templateUrl, c, HttpTimeouts.BATCH);
+        if (templateResponse.getCode() != HttpStatus.SC_OK) {
+          throw new CedarProcessingException("Cannot read clone target template: " + templateResponse.getCode());
+        }
+        JsonNode targetSchema = JsonMapper.STRICT_MAPPER.readTree(
+            EntityUtils.toString(templateResponse.getEntity(), StandardCharsets.UTF_8));
+        InstanceCloneRenames.apply((ObjectNode) jsonNode, targetSchema);
         ArtifactCopyOperations.prepareDerivedBody((ObjectNode) jsonNode);
         ((ObjectNode) jsonNode).put(SCHEMA_IS_BASED_ON, newTemplateId.getId());
         // The copy is a distinct artifact, so it does not inherit the identifier naming the original.

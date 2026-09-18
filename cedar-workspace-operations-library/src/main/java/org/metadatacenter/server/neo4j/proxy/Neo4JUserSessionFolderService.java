@@ -63,6 +63,12 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentFolderId, boolean propagateSharing) {
+    draft.setCreatedByTotal(cu.getResourceId());
+    return proxies.artifact().createDraftAsChildOfId(draft, parentFolderId, propagateSharing);
+  }
+
+  @Override
   public FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
                                                  Map<NodeProperty, String> updateFields) {
     return proxies.artifact().updateArtifactById(artifactId, updateFields, cu.getResourceId());
@@ -536,6 +542,21 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   @Override
   public long getFolderCount() {
     return proxies.folder().getFolderCount();
+  }
+
+  @Override
+  public long getUserHomeFolderCount() {
+    return proxies.folder().getUserHomeFolderCount();
+  }
+
+  @Override
+  public long getRegularFolderCount() {
+    return proxies.folder().getRegularFolderCount();
+  }
+
+  @Override
+  public long getSystemFolderCount() {
+    return proxies.folder().getSystemFolderCount();
   }
 
   @Override

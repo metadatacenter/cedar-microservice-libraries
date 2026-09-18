@@ -1,5 +1,6 @@
 package org.metadatacenter.model.request.inclusionsubgraph;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.model.AbstractCedarResourceWithDates;
 import org.metadatacenter.model.CedarResourceType;
@@ -140,6 +141,8 @@ public class InclusionSubgraphNode extends AbstractCedarResourceWithDates implem
     return userNamesData.getLastUpdatedByUserName();
   }
 
+  // Internal authorization helper; previews are sent back as strict request bodies by the selector.
+  @JsonIgnore
   public CedarFilesystemResourceId getResourceId() {
     return CedarFilesystemResourceId.build(this.getId(), this.getType());
   }
