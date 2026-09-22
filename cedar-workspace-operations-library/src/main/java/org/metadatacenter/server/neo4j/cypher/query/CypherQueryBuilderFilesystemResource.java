@@ -78,7 +78,7 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
       sb.append(getPublicationStatusConditions(" AND ", "resource"));
     }
     sb.append(" RETURN DISTINCT(resource)");
-    sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,");
+    sb.append(" ORDER BY ");
     sb.append(getOrderByExpression("resource", sortList));
     sb.append(", resource.<PROP.VERSION> DESC");
     sb.append(", resource.<PROP.ID>");

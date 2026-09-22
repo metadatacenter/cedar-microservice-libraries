@@ -95,6 +95,35 @@ class CypherPermissionQueryEquivalenceTest {
   }
 
   @Test
+  void folderContentsSortAcrossResourceTypesBeforePagination() {
+    try (var session = driver.session()) {
+      session.run("""
+          CREATE (parent:Folder {_id: 'sort-parent'})
+          CREATE (a:Template {_id: 'sort-a', schema_name_lower: 'alpha', resourceType: 'template', nodeSortOrder: 2})
+          CREATE (b:Folder {_id: 'sort-b', schema_name_lower: 'bravo', resourceType: 'folder', nodeSortOrder: 1})
+          CREATE (c:Template {_id: 'sort-c', schema_name_lower: 'charlie', resourceType: 'template', nodeSortOrder: 2})
+          CREATE (d:Folder {_id: 'sort-d', schema_name_lower: 'delta', resourceType: 'folder', nodeSortOrder: 1})
+          CREATE (parent)-[:CONTAINS]->(a)
+          CREATE (parent)-[:CONTAINS]->(b)
+          CREATE (parent)-[:CONTAINS]->(c)
+          CREATE (parent)-[:CONTAINS]->(d)
+          """).consume();
+    }
+    for (String sort : List.of("name", "-name")) {
+      String query = CypherQueryBuilderFolderContent.getFolderContentsFilteredLookupQuery(
+          List.of(sort), null, null);
+      List<String> expected = sort.equals("name")
+          ? List.of("sort-a", "sort-b", "sort-c", "sort-d")
+          : List.of("sort-d", "sort-c", "sort-b", "sort-a");
+      for (int offset = 0; offset < 4; offset += 2) {
+        assertEquals(expected.subList(offset, offset + 2), nodeIds(query,
+            Map.of("folderId", "sort-parent", "resourceTypeList", List.of("folder", "template"),
+                "offset", offset, "limit", 2), "child"));
+      }
+    }
+  }
+
+  @Test
   void specialFolderLookupAndCountPreserveVisibleResourceSets() {
     for (String userId : List.of("user-owner", "user-viewer", "user-editor", "user-manager",
         "user-overlap", "user-outsider")) {

@@ -32,7 +32,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
       sb.append(getPublicationStatusConditions(" AND ", "resource"));
     }
     sb.append(" RETURN DISTINCT(resource)");
-    sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,");
+    sb.append(" ORDER BY ");
     sb.append(getOrderByExpression("resource", sortList));
     sb.append(", resource.<PROP.VERSION> DESC");
     sb.append(", resource.<PROP.ID>");
@@ -87,7 +87,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
       sb.append(getPublicationStatusConditions(" AND ", "resource"));
     }
     sb.append(" RETURN resource");
-    sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,").append(getOrderByExpression("resource", sortList));
+    sb.append(" ORDER BY ").append(getOrderByExpression("resource", sortList));
     sb.append(", resource.<PROP.ID>");
     sb.append(" SKIP $offset");
     sb.append(" LIMIT $limit");
@@ -157,7 +157,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
       sb.append(getResourcePermissionConditions(" AND ", "resource"));
     }
     sb.append(" RETURN resource");
-    sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,").append(getOrderByExpression("resource", sortList));
+    sb.append(" ORDER BY ").append(getOrderByExpression("resource", sortList));
     sb.append(", resource.<PROP.ID>");
     sb.append(" SKIP $offset");
     sb.append(" LIMIT $limit");
@@ -234,7 +234,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
             })
           RETURN resource
 
-          ORDER BY resource.<PROP.NODE_SORT_ORDER>,
+          ORDER BY
                    %s,
                    resource.<PROP.ID>
           SKIP $offset
@@ -246,7 +246,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
           WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
           RETURN resource
 
-          ORDER BY resource.<PROP.NODE_SORT_ORDER>,
+          ORDER BY
                    %s,
                    resource.<PROP.ID>
           SKIP $offset

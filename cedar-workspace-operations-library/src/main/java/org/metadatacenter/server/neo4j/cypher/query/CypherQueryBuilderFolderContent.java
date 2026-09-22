@@ -47,7 +47,7 @@ public class CypherQueryBuilderFolderContent extends AbstractCypherQueryBuilder 
       sb.append(getPublicationStatusConditions(" AND ", "child"));
     }
     sb.append(" RETURN child");
-    sb.append(" ORDER BY child.<PROP.NODE_SORT_ORDER>,");
+    sb.append(" ORDER BY ");
     sb.append(getOrderByExpression("child", sortList));
     sb.append(", child.<PROP.VERSION> DESC");
     sb.append(", child.<PROP.CREATED_ON_TS> DESC");
