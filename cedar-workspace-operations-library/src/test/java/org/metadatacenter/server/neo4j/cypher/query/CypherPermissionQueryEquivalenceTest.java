@@ -138,12 +138,15 @@ class CypherPermissionQueryEquivalenceTest {
           CREATE (parent)-[:CONTAINS]->(d)
           """).consume();
     }
-    for (String sort : List.of("name", "-name")) {
+    for (String sort : List.of("name", "-name", "foldersFirst,name", "foldersFirst,-name")) {
       String query = CypherQueryBuilderFolderContent.getFolderContentsFilteredLookupQuery(
-          List.of(sort), null, null);
-      List<String> expected = sort.equals("name")
-          ? List.of("sort-a", "sort-b", "sort-c", "sort-d")
-          : List.of("sort-d", "sort-c", "sort-b", "sort-a");
+          List.of(sort.split(",")), null, null);
+      List<String> expected = switch (sort) {
+        case "name" -> List.of("sort-a", "sort-b", "sort-c", "sort-d");
+        case "-name" -> List.of("sort-d", "sort-c", "sort-b", "sort-a");
+        case "foldersFirst,name" -> List.of("sort-b", "sort-d", "sort-a", "sort-c");
+        default -> List.of("sort-d", "sort-b", "sort-c", "sort-a");
+      };
       for (int offset = 0; offset < 4; offset += 2) {
         assertEquals(expected.subList(offset, offset + 2), nodeIds(query,
             Map.of("folderId", "sort-parent", "resourceTypeList", List.of("folder", "template"),

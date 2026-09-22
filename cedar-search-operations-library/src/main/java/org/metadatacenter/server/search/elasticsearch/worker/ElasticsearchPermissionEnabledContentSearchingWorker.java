@@ -38,6 +38,8 @@ import org.opensearch.search.SearchHits;
 import org.opensearch.search.builder.PointInTimeBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.sort.SortBuilders;
+import org.opensearch.search.sort.ScriptSortBuilder;
+import org.opensearch.script.Script;
 import org.opensearch.search.sort.SortOrder;
 import org.opensearch.core.rest.RestStatus;
 import org.slf4j.Logger;
@@ -397,6 +399,9 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
           s = s.substring(1);
         }
         switch (s) {
+          case "foldersFirst" -> searchSourceBuilder.sort(SortBuilders.scriptSort(
+              new Script("doc['" + RESOURCE_TYPE + "'].size() != 0 && doc['" + RESOURCE_TYPE
+                  + "'].value == 'folder' ? 0 : 1"), ScriptSortBuilder.ScriptSortType.NUMBER).order(sortOrder));
           case SORT_BY_NAME -> searchSourceBuilder.sort(INFO_SCHEMA_NAME, sortOrder);
           case SORT_LAST_UPDATED_ON_FIELD -> searchSourceBuilder.sort(INFO_PAV_LAST_UPDATED_ON, sortOrder);
           case SORT_CREATED_ON_FIELD -> searchSourceBuilder.sort(INFO_PAV_CREATED_ON, sortOrder);
