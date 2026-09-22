@@ -1,5 +1,6 @@
 package org.metadatacenter.server.search.elasticsearch.worker;
 
+import org.metadatacenter.model.request.ModifiedDateRange;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.ParseException;
@@ -74,10 +75,16 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
                                      ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                      int offset) throws CedarProcessingException {
+    return search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, ModifiedDateRange.ALL);
+  }
+
+  public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
+                                     ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
+                                     int offset, ModifiedDateRange modified) throws CedarProcessingException {
 
     try {
       SearchSourceBuilder searchSourceBuilder =
-          getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
+          getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, modified);
       SearchRequest searchRequest = new SearchRequest(indexName).source(searchSourceBuilder);
 
       // Set pagination parameters
@@ -109,12 +116,18 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
                                          ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                          int offset) throws CedarProcessingException {
+    return searchDeep(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, ModifiedDateRange.ALL);
+  }
+
+  public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
+                                         ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
+                                         int offset, ModifiedDateRange modified) throws CedarProcessingException {
     String pointInTimeId = null;
     try {
       pointInTimeId = openPointInTime();
 
       SearchSourceBuilder searchSourceBuilder = getDeepSearchSourceBuilder(rctx, query, resourceTypes, version,
-          publicationStatus, categoryId, sortList, pointInTimeId);
+          publicationStatus, categoryId, sortList, pointInTimeId, modified);
       searchSourceBuilder.trackTotalHits(true);
 
       // A point in time carries the indices it was opened on, and OpenSearch rejects a request naming both.
@@ -170,6 +183,13 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                        ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
                                        String categoryId, List<String> sortList, int limit, String pointInTimeId,
                                        Object[] searchAfter) throws CedarException {
+    return searchDeepPage(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, pointInTimeId, searchAfter, ModifiedDateRange.ALL);
+  }
+
+  public DeepSearchPage searchDeepPage(CedarRequestContext rctx, String query, List<String> resourceTypes,
+                                       ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                       String categoryId, List<String> sortList, int limit, String pointInTimeId,
+                                       Object[] searchAfter, ModifiedDateRange modified) throws CedarException {
     boolean walkStarts = pointInTimeId == null;
     String walkPointInTimeId;
     try {
@@ -179,7 +199,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     }
     try {
       SearchSourceBuilder searchSourceBuilder = getDeepSearchSourceBuilder(rctx, query, resourceTypes, version,
-          publicationStatus, categoryId, sortList, walkPointInTimeId);
+          publicationStatus, categoryId, sortList, walkPointInTimeId, modified);
       // Only the first page counts the result set. Every page after it is handed the total the walk
       // began with, which is also what makes the pages agree with each other.
       searchSourceBuilder.trackTotalHits(walkStarts);
@@ -224,9 +244,9 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                                          List<String> resourceTypes, ResourceVersionFilter version,
                                                          ResourcePublicationStatusFilter publicationStatus,
                                                          String categoryId, List<String> sortList,
-                                                         String pointInTimeId) throws CedarProcessingException {
+                                                         String pointInTimeId, ModifiedDateRange modified) throws CedarProcessingException {
     SearchSourceBuilder searchSourceBuilder =
-        getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList);
+        getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, modified);
     // search_after resumes at a sort position, so the sort must order the hits totally. The caller's
     // sort fields do not: cid does, and appending it leaves the requested ordering intact. With no
     // caller sort the ordering is relevance, which has to be named explicitly to be sorted on.
@@ -270,7 +290,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                                      List<String> resourceTypes,
                                                      ResourceVersionFilter version,
                                                      ResourcePublicationStatusFilter publicationStatus,
-                                                     String categoryId, List<String> sortList) throws CedarProcessingException {
+                                                     String categoryId, List<String> sortList, ModifiedDateRange modified) throws CedarProcessingException {
 
     SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
 
@@ -360,6 +380,12 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     }
 
     // Set main query
+    if (!modified.isUnbounded()) {
+      var range = QueryBuilders.rangeQuery(INFO_PAV_LAST_UPDATED_ON);
+      if (modified.after() != null) range.gte(modified.after());
+      if (modified.before() != null) range.lt(modified.before());
+      mainQuery.filter(range);
+    }
     searchSourceBuilder.query(mainQuery);
 
     // Sort by field

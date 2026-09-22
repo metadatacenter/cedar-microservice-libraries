@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.cypher.query;
 
+import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
@@ -16,11 +17,15 @@ public class CypherQueryBuilderFolderContent extends AbstractCypherQueryBuilder 
   }
 
   public static String getFolderContentsFilteredCountQuery(ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus) {
+    return getFolderContentsFilteredCountQuery(version, publicationStatus, ModifiedDateRange.ALL);
+  }
+
+  public static String getFolderContentsFilteredCountQuery(ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, ModifiedDateRange modified) {
     StringBuilder sb = new StringBuilder();
     sb.append(" MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PH.FOLDER_ID>}})");
     sb.append(" MATCH (child)");
     sb.append(" MATCH (parent)-[:<REL.CONTAINS>]->(child)");
-    sb.append(" WHERE child.<PROP.RESOURCE_TYPE> in $resourceTypeList");
+    sb.append(" WHERE child.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("child", modified));
     if (version != null && version != ResourceVersionFilter.ALL) {
       sb.append(getVersionConditions(version, " AND ", "child"));
     }
@@ -33,13 +38,18 @@ public class CypherQueryBuilderFolderContent extends AbstractCypherQueryBuilder 
 
   public static String getFolderContentsFilteredLookupQuery(List<String> sortList, ResourceVersionFilter version,
                                                             ResourcePublicationStatusFilter publicationStatus) {
+    return getFolderContentsFilteredLookupQuery(sortList, version, publicationStatus, ModifiedDateRange.ALL);
+  }
+
+  public static String getFolderContentsFilteredLookupQuery(List<String> sortList, ResourceVersionFilter version,
+                                                            ResourcePublicationStatusFilter publicationStatus, ModifiedDateRange modified) {
     // The child node is intentionally not labelled
     // This gives a better performance, 1M hit nodes vs 1.2M if the label is present (200K nodes, 10 users)
     StringBuilder sb = new StringBuilder();
     sb.append(" MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PH.FOLDER_ID>}})");
     sb.append(" MATCH (child)");
     sb.append(" MATCH (parent)-[:<REL.CONTAINS>]->(child)");
-    sb.append(" WHERE child.<PROP.RESOURCE_TYPE> in $resourceTypeList");
+    sb.append(" WHERE child.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("child", modified));
     if (version != null && version != ResourceVersionFilter.ALL) {
       sb.append(getVersionConditions(version, " AND ", "child"));
     }

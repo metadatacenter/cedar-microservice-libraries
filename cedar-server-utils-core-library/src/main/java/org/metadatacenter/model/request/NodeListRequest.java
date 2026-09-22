@@ -9,6 +9,12 @@ import java.util.List;
 
 public class NodeListRequest {
 
+  private ModifiedDateRange modified = ModifiedDateRange.ALL;
+
+  @com.fasterxml.jackson.annotation.JsonIgnore
+  public ModifiedDateRange getModified() { return modified; }
+  public void setModified(ModifiedDateRange modified) { this.modified = modified; }
+
   @JsonProperty("resource_types")
   private List<CedarResourceType> resourceTypes;
   private ResourceVersionFilter version;

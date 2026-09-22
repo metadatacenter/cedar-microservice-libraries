@@ -1,5 +1,7 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import org.metadatacenter.model.request.ModifiedDateRange;
+import org.metadatacenter.server.neo4j.cypher.query.ModifiedDateConditions;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.*;
 import org.metadatacenter.model.CedarResource;
@@ -32,8 +34,14 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
 
   long findFolderContentsCount(CedarFolderId folderId, List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
                                ResourcePublicationStatusFilter publicationStatus) {
-    String cypher = CypherQueryBuilderFolderContent.getFolderContentsFilteredCountQuery(version, publicationStatus);
+    return findFolderContentsCount(folderId, resourceTypeList, version, publicationStatus, ModifiedDateRange.ALL);
+  }
+
+  long findFolderContentsCount(CedarFolderId folderId, List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
+                               ResourcePublicationStatusFilter publicationStatus, ModifiedDateRange modified) {
+    String cypher = CypherQueryBuilderFolderContent.getFolderContentsFilteredCountQuery(version, publicationStatus, modified);
     CypherParameters params = CypherParamBuilderFolderContent.getFolderContentsFilteredCountParameters(folderId, resourceTypeList, publicationStatus);
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetLong(q);
   }
@@ -73,9 +81,16 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
   List<FolderServerResourceExtract> findFolderContentsExtract(CedarFolderId folderId, Collection<CedarResourceType> resourceTypes,
                                                               ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
                                                               long limit, long offset, List<String> sortList) {
-    String cypher = CypherQueryBuilderFolderContent.getFolderContentsFilteredLookupQuery(sortList, version, publicationStatus);
+    return findFolderContentsExtract(folderId, resourceTypes, version, publicationStatus, limit, offset, sortList, ModifiedDateRange.ALL);
+  }
+
+  List<FolderServerResourceExtract> findFolderContentsExtract(CedarFolderId folderId, Collection<CedarResourceType> resourceTypes,
+                                                              ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                                              long limit, long offset, List<String> sortList, ModifiedDateRange modified) {
+    String cypher = CypherQueryBuilderFolderContent.getFolderContentsFilteredLookupQuery(sortList, version, publicationStatus, modified);
     CypherParameters params = CypherParamBuilderFolderContent.getFolderContentsFilteredLookupParameters(folderId, resourceTypes, publicationStatus,
         limit, offset);
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, FolderServerResourceExtract.class);
   }
@@ -84,9 +99,17 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
                                                          ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
                                                          long limit, long offset, List<String> sortList, CedarUserId ownerId,
                                                          List<String> fieldNameList) {
-    String cypher = CypherQueryBuilderFolderContent.getFolderContentsFilteredLookupQuery(sortList, version, publicationStatus);
+    return findFolderContentsExtractMap(folderId, resourceTypes, version, publicationStatus, limit, offset, sortList, ownerId, fieldNameList, ModifiedDateRange.ALL);
+  }
+
+  List<Map<String, Object>> findFolderContentsExtractMap(CedarFolderId folderId, Collection<CedarResourceType> resourceTypes,
+                                                         ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                                         long limit, long offset, List<String> sortList, CedarUserId ownerId,
+                                                         List<String> fieldNameList, ModifiedDateRange modified) {
+    String cypher = CypherQueryBuilderFolderContent.getFolderContentsFilteredLookupQuery(sortList, version, publicationStatus, modified);
     CypherParameters params = CypherParamBuilderFolderContent.getFolderContentsFilteredLookupParameters(folderId, resourceTypes, publicationStatus,
         limit, offset);
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetMapList(q, fieldNameList);
   }
@@ -118,9 +141,16 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
   public List<FolderServerResourceExtract> viewSharedWithMeFiltered(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
                                                                     ResourcePublicationStatusFilter publicationStatus
       , int limit, int offset, List<String> sortList, CedarUserId ownerId) {
-    String cypher = CypherQueryBuilderResource.getSharedWithMeLookupQuery(version, publicationStatus, sortList);
+    return viewSharedWithMeFiltered(resourceTypes, version, publicationStatus, limit, offset, sortList, ownerId, ModifiedDateRange.ALL);
+  }
+
+  public List<FolderServerResourceExtract> viewSharedWithMeFiltered(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
+                                                                    ResourcePublicationStatusFilter publicationStatus
+      , int limit, int offset, List<String> sortList, CedarUserId ownerId, ModifiedDateRange modified) {
+    String cypher = CypherQueryBuilderResource.getSharedWithMeLookupQuery(version, publicationStatus, sortList, modified);
     CypherParameters params = CypherParamBuilderFilesystemResource.getSharedWithMeLookupParameters(resourceTypes, version, publicationStatus, limit
         , offset, ownerId);
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, FolderServerResourceExtract.class);
   }
@@ -128,48 +158,77 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
   public List<FolderServerResourceExtract> viewSharedWithEverybodyFiltered(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
                                                                            ResourcePublicationStatusFilter publicationStatus, int limit, int offset,
                                                                            List<String> sortList, CedarUserId ownerId) {
-    String cypher = CypherQueryBuilderFilesystemResource.getSharedWithEverybodyLookupQuery(version, publicationStatus, sortList);
+    return viewSharedWithEverybodyFiltered(resourceTypes, version, publicationStatus, limit, offset, sortList, ownerId, ModifiedDateRange.ALL);
+  }
+
+  public List<FolderServerResourceExtract> viewSharedWithEverybodyFiltered(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
+                                                                           ResourcePublicationStatusFilter publicationStatus, int limit, int offset,
+                                                                           List<String> sortList, CedarUserId ownerId, ModifiedDateRange modified) {
+    String cypher = CypherQueryBuilderFilesystemResource.getSharedWithEverybodyLookupQuery(version, publicationStatus, sortList, modified);
     CypherParameters params = CypherParamBuilderFilesystemResource.getSharedWithEverybodyLookupParameters(resourceTypes, version, publicationStatus
         , limit, offset, ownerId);
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, FolderServerResourceExtract.class);
   }
 
   public long viewSharedWithMeFilteredCount(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
                                             ResourcePublicationStatusFilter publicationStatus, CedarUserId ownerId) {
-    String cypher = CypherQueryBuilderResource.getSharedWithMeCountQuery(version, publicationStatus);
+    return viewSharedWithMeFilteredCount(resourceTypes, version, publicationStatus, ownerId, ModifiedDateRange.ALL);
+  }
+
+  public long viewSharedWithMeFilteredCount(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
+                                            ResourcePublicationStatusFilter publicationStatus, CedarUserId ownerId, ModifiedDateRange modified) {
+    String cypher = CypherQueryBuilderResource.getSharedWithMeCountQuery(version, publicationStatus, modified);
     CypherParameters params = CypherParamBuilderFilesystemResource.getSharedWithMeCountParameters(resourceTypes, version, publicationStatus, ownerId);
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetLong(q);
   }
 
   public long viewSharedWithEverybodyFilteredCount(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
                                                    ResourcePublicationStatusFilter publicationStatus, CedarUserId ownerId) {
-    String cypher = CypherQueryBuilderFilesystemResource.getSharedWithEverybodyCountQuery(version, publicationStatus);
+    return viewSharedWithEverybodyFilteredCount(resourceTypes, version, publicationStatus, ownerId, ModifiedDateRange.ALL);
+  }
+
+  public long viewSharedWithEverybodyFilteredCount(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
+                                                   ResourcePublicationStatusFilter publicationStatus, CedarUserId ownerId, ModifiedDateRange modified) {
+    String cypher = CypherQueryBuilderFilesystemResource.getSharedWithEverybodyCountQuery(version, publicationStatus, modified);
     CypherParameters params = CypherParamBuilderFilesystemResource.getSharedWithEverybodyCountParameters(resourceTypes, version, publicationStatus,
         ownerId);
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetLong(q);
   }
 
   public List<FolderServerResourceExtract> viewSpecialFoldersFiltered(int limit, int offset, List<String> sortList, CedarUser cu) {
+    return viewSpecialFoldersFiltered(limit, offset, sortList, cu, ModifiedDateRange.ALL);
+  }
+
+  public List<FolderServerResourceExtract> viewSpecialFoldersFiltered(int limit, int offset, List<String> sortList, CedarUser cu, ModifiedDateRange modified) {
     boolean addPermissionConditions = true;
     if (cu.has(READ_NOT_READABLE_NODE)) {
       addPermissionConditions = false;
     }
-    String cypher = CypherQueryBuilderResource.getSpecialFoldersLookupQuery(sortList, addPermissionConditions);
+    String cypher = CypherQueryBuilderResource.getSpecialFoldersLookupQuery(sortList, addPermissionConditions, modified);
     CypherParameters params = CypherParamBuilderFilesystemResource.getSpecialFoldersLookupParameters(limit, offset, cu.getResourceId());
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, FolderServerResourceExtract.class);
   }
 
   public long viewSpecialFoldersFilteredCount(CedarUser cu) {
+    return viewSpecialFoldersFilteredCount(cu, ModifiedDateRange.ALL);
+  }
+
+  public long viewSpecialFoldersFilteredCount(CedarUser cu, ModifiedDateRange modified) {
     boolean addPermissionConditions = true;
     if (cu.has(READ_NOT_READABLE_NODE)) {
       addPermissionConditions = false;
     }
-    String cypher = CypherQueryBuilderResource.getSpecialFoldersCountQuery(addPermissionConditions);
+    String cypher = CypherQueryBuilderResource.getSpecialFoldersCountQuery(addPermissionConditions, modified);
     CypherParameters params = CypherParamBuilderFilesystemResource.getSpecialFoldersCountParameters(cu.getResourceId());
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetLong(q);
   }
@@ -177,26 +236,39 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
   public List<FolderServerResourceExtract> viewAllFiltered(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
                                                            ResourcePublicationStatusFilter publicationStatus, long limit, long offset,
                                                            List<String> sortList, CedarUser cu) {
+    return viewAllFiltered(resourceTypes, version, publicationStatus, limit, offset, sortList, cu, ModifiedDateRange.ALL);
+  }
+
+  public List<FolderServerResourceExtract> viewAllFiltered(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
+                                                           ResourcePublicationStatusFilter publicationStatus, long limit, long offset,
+                                                           List<String> sortList, CedarUser cu, ModifiedDateRange modified) {
     boolean addPermissionConditions = true;
     if (cu.has(READ_NOT_READABLE_NODE)) {
       addPermissionConditions = false;
     }
-    String cypher = CypherQueryBuilderResource.getAllLookupQuery(version, publicationStatus, sortList, addPermissionConditions);
+    String cypher = CypherQueryBuilderResource.getAllLookupQuery(version, publicationStatus, sortList, addPermissionConditions, modified);
     CypherParameters params = CypherParamBuilderFilesystemResource.getAllLookupParameters(resourceTypes, version, publicationStatus, limit, offset,
         cu.getResourceId(), addPermissionConditions);
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, FolderServerResourceExtract.class);
   }
 
   public long viewAllFilteredCount(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
                                    ResourcePublicationStatusFilter publicationStatus, CedarUser cu) {
+    return viewAllFilteredCount(resourceTypes, version, publicationStatus, cu, ModifiedDateRange.ALL);
+  }
+
+  public long viewAllFilteredCount(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
+                                   ResourcePublicationStatusFilter publicationStatus, CedarUser cu, ModifiedDateRange modified) {
     boolean addPermissionConditions = true;
     if (cu.has(READ_NOT_READABLE_NODE)) {
       addPermissionConditions = false;
     }
-    String cypher = CypherQueryBuilderResource.getAllCountQuery(version, publicationStatus, addPermissionConditions);
+    String cypher = CypherQueryBuilderResource.getAllCountQuery(version, publicationStatus, addPermissionConditions, modified);
     CypherParameters params = CypherParamBuilderFilesystemResource.getAllCountParameters(resourceTypes, version, publicationStatus,
         cu.getResourceId(), addPermissionConditions);
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetLong(q);
   }
@@ -217,25 +289,36 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
 
   public List<FolderServerResourceExtract> searchIsBasedOn(List<CedarResourceType> resourceTypes, CedarTemplateId isBasedOnId, int limit, int offset,
                                                            List<String> sortList, CedarUser cu) {
+    return searchIsBasedOn(resourceTypes, isBasedOnId, limit, offset, sortList, cu, ModifiedDateRange.ALL);
+  }
+
+  public List<FolderServerResourceExtract> searchIsBasedOn(List<CedarResourceType> resourceTypes, CedarTemplateId isBasedOnId, int limit, int offset,
+                                                           List<String> sortList, CedarUser cu, ModifiedDateRange modified) {
     boolean addPermissionConditions = true;
     if (cu.has(READ_NOT_READABLE_NODE)) {
       addPermissionConditions = false;
     }
-    String cypher = CypherQueryBuilderResource.getSearchIsBasedOnLookupQuery(sortList, addPermissionConditions);
+    String cypher = CypherQueryBuilderResource.getSearchIsBasedOnLookupQuery(sortList, addPermissionConditions, modified);
     CypherParameters params = CypherParamBuilderFilesystemResource.getSearchIsBasedOnLookupParameters(resourceTypes, isBasedOnId, limit, offset,
         cu.getResourceId(), addPermissionConditions);
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetList(q, FolderServerResourceExtract.class);
   }
 
   public long searchIsBasedOnCount(List<CedarResourceType> resourceTypes, CedarTemplateId isBasedOn, CedarUser cu) {
+    return searchIsBasedOnCount(resourceTypes, isBasedOn, cu, ModifiedDateRange.ALL);
+  }
+
+  public long searchIsBasedOnCount(List<CedarResourceType> resourceTypes, CedarTemplateId isBasedOn, CedarUser cu, ModifiedDateRange modified) {
     boolean addPermissionConditions = true;
     if (cu.has(READ_NOT_READABLE_NODE)) {
       addPermissionConditions = false;
     }
-    String cypher = CypherQueryBuilderResource.getSearchIsBasedOnCountQuery(addPermissionConditions);
+    String cypher = CypherQueryBuilderResource.getSearchIsBasedOnCountQuery(addPermissionConditions, modified);
     CypherParameters params = CypherParamBuilderFilesystemResource.getSearchIsBasedOnCountParameters(resourceTypes, isBasedOn, cu.getResourceId(),
         addPermissionConditions);
+    ModifiedDateConditions.parameters(params, modified);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetLong(q);
   }

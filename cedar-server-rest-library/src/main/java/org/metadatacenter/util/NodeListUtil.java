@@ -26,6 +26,7 @@ public abstract class NodeListUtil {
     ResourcePublicationStatusFilter publicationStatus = pagedSortedTypedQuery.getPublicationStatus();
 
     NodeListRequest req = new NodeListRequest();
+    req.setModified(pagedSortedTypedQuery.getModified());
     req.setResourceTypes(resourceTypeList);
     req.setVersion(version);
     req.setPublicationStatus(publicationStatus);

@@ -1,5 +1,6 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
+import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.OpensearchConfig;
@@ -122,11 +123,19 @@ public class NodeSearchingService extends AbstractSearchingService {
   public FolderServerNodeListResponse search(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
                                              ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
                                              List<String> sortList, int limit, int offset, String absoluteUrl) throws CedarProcessingException {
+    return search(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, absoluteUrl, ModifiedDateRange.ALL);
+  }
+
+  public FolderServerNodeListResponse search(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
+                                             ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
+                                             List<String> sortList, int limit, int offset, String absoluteUrl, ModifiedDateRange modified) throws CedarProcessingException {
     try {
       SearchResponseResult searchResult = permissionEnabledSearchWorker.search(rctx, query, resourceTypes, version, publicationStatus, categoryId,
-          sortList, limit, offset);
-      return assembleResponse(rctx, searchResult, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
+          sortList, limit, offset, modified);
+      FolderServerNodeListResponse response = assembleResponse(rctx, searchResult, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
           absoluteUrl);
+      response.getRequest().setModified(modified);
+      return response;
     } catch (CedarDependencyUnavailableException e) {
       throw e;
     } catch (Exception e) {
@@ -137,8 +146,14 @@ public class NodeSearchingService extends AbstractSearchingService {
   public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes,
                                      ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
                                      List<String> sortList, int limit, int offset) throws CedarProcessingException {
+    return search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, ModifiedDateRange.ALL);
+  }
+
+  public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes,
+                                     ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
+                                     List<String> sortList, int limit, int offset, ModifiedDateRange modified) throws CedarProcessingException {
     try {
-      return permissionEnabledSearchWorker.search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset);
+      return permissionEnabledSearchWorker.search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, modified);
     } catch (CedarDependencyUnavailableException e) {
       throw e;
     } catch (Exception e) {
@@ -149,11 +164,19 @@ public class NodeSearchingService extends AbstractSearchingService {
   public FolderServerNodeListResponse searchDeep(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
                                                  ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
                                                  String categoryId, List<String> sortList, int limit, int offset, String absoluteUrl) throws CedarProcessingException {
+    return searchDeep(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, absoluteUrl, ModifiedDateRange.ALL);
+  }
+
+  public FolderServerNodeListResponse searchDeep(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
+                                                 ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                                 String categoryId, List<String> sortList, int limit, int offset, String absoluteUrl, ModifiedDateRange modified) throws CedarProcessingException {
     try {
       SearchResponseResult searchResult = permissionEnabledSearchWorker.searchDeep(rctx, query, resourceTypes, version, publicationStatus,
-          categoryId, sortList, limit, offset);
-      return assembleResponse(rctx, searchResult, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
+          categoryId, sortList, limit, offset, modified);
+      FolderServerNodeListResponse response = assembleResponse(rctx, searchResult, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
           absoluteUrl);
+      response.getRequest().setModified(modified);
+      return response;
     } catch (CedarDependencyUnavailableException e) {
       throw e;
     } catch (Exception e) {
@@ -171,9 +194,17 @@ public class NodeSearchingService extends AbstractSearchingService {
                                                String categoryId, List<String> sortList, int limit, long rowsSeen,
                                                long knownTotalCount, String pointInTimeId, Object[] searchAfter,
                                                String absoluteUrl) throws CedarException {
+    return searchDeepPage(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, rowsSeen, knownTotalCount, pointInTimeId, searchAfter, absoluteUrl, ModifiedDateRange.ALL);
+  }
+
+  public DeepSearchPageResponse searchDeepPage(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
+                                               ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                               String categoryId, List<String> sortList, int limit, long rowsSeen,
+                                               long knownTotalCount, String pointInTimeId, Object[] searchAfter,
+                                               String absoluteUrl, ModifiedDateRange modified) throws CedarException {
     try {
       DeepSearchPage page = permissionEnabledSearchWorker.searchDeepPage(rctx, query, resourceTypes, version,
-          publicationStatus, categoryId, sortList, limit, pointInTimeId, searchAfter);
+          publicationStatus, categoryId, sortList, limit, pointInTimeId, searchAfter, modified);
       SearchResponseResult result = page.result();
       if (pointInTimeId != null) {
         result.setTotalCount(knownTotalCount);
@@ -182,6 +213,7 @@ public class NodeSearchingService extends AbstractSearchingService {
       FolderServerNodeListResponse response = assembleResponse(rctx, result, query, id, resourceTypes, version,
           publicationStatus, categoryId, sortList, limit, offsetOfPage, absoluteUrl);
       response.setCurrentOffset(rowsSeen);
+      response.getRequest().setModified(modified);
       return new DeepSearchPageResponse(response, page.pointInTimeId(), page.nextSearchAfter());
     } catch (CedarException e) {
       // A continuation that has expired, or one that was refused, is the caller's answer. Wrapping it
