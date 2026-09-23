@@ -1,5 +1,6 @@
 package org.metadatacenter.server;
 
+import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.id.*;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
@@ -108,24 +109,46 @@ public interface FolderServiceSession {
   List<FolderServerResourceExtract> viewSharedWithMe(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
                                                      ResourcePublicationStatusFilter publicationStatus, int limit, int offset, List<String> sortList);
 
+  List<FolderServerResourceExtract> viewSharedWithMe(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
+                                                     ResourcePublicationStatusFilter publicationStatus, int limit, int offset, List<String> sortList, ModifiedDateRange modified);
+
   List<FolderServerResourceExtract> viewSharedWithEverybody(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
                                                             ResourcePublicationStatusFilter publicationStatus, int limit, int offset,
                                                             List<String> sortList);
 
+  List<FolderServerResourceExtract> viewSharedWithEverybody(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
+                                                            ResourcePublicationStatusFilter publicationStatus, int limit, int offset,
+                                                            List<String> sortList, ModifiedDateRange modified);
+
   long viewSharedWithMeCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
                              ResourcePublicationStatusFilter publicationStatus);
+
+  long viewSharedWithMeCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
+                             ResourcePublicationStatusFilter publicationStatus, ModifiedDateRange modified);
 
   long viewSharedWithEverybodyCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
                                     ResourcePublicationStatusFilter publicationStatus);
 
+  long viewSharedWithEverybodyCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
+                                    ResourcePublicationStatusFilter publicationStatus, ModifiedDateRange modified);
+
   List<FolderServerResourceExtract> viewAll(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
                                             ResourcePublicationStatusFilter publicationStatus, int limit, int offset, List<String> sortList);
 
+  List<FolderServerResourceExtract> viewAll(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
+                                            ResourcePublicationStatusFilter publicationStatus, int limit, int offset, List<String> sortList, ModifiedDateRange modified);
+
   long viewAllCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus);
+
+  long viewAllCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, ModifiedDateRange modified);
 
   List<FolderServerResourceExtract> viewSpecialFolders(int limit, int offset, List<String> sortList);
 
+  List<FolderServerResourceExtract> viewSpecialFolders(int limit, int offset, List<String> sortList, ModifiedDateRange modified);
+
   long viewSpecialFoldersCount();
+
+  long viewSpecialFoldersCount(ModifiedDateRange modified);
 
   List<FileSystemResource> findAllDescendantNodesById(CedarFolderId id);
 
@@ -178,7 +201,12 @@ public interface FolderServiceSession {
   List<FolderServerResourceExtract> searchIsBasedOn(List<CedarResourceType> resourceTypeList, CedarTemplateId isBasedOn, int limit, int offset,
                                                     List<String> sortList);
 
+  List<FolderServerResourceExtract> searchIsBasedOn(List<CedarResourceType> resourceTypeList, CedarTemplateId isBasedOn, int limit, int offset,
+                                                    List<String> sortList, ModifiedDateRange modified);
+
   long searchIsBasedOnCount(List<CedarResourceType> resourceTypeList, CedarTemplateId isBasedOn);
+
+  long searchIsBasedOnCount(List<CedarResourceType> resourceTypeList, CedarTemplateId isBasedOn, ModifiedDateRange modified);
 
   CedarResourceType getResourceType(CedarResourceId resourceId);
 

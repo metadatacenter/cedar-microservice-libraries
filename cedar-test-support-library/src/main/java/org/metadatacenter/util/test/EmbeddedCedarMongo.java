@@ -2,6 +2,8 @@ package org.metadatacenter.util.test;
 
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import com.mongodb.client.model.IndexOptions;
+import com.mongodb.client.model.Indexes;
 import de.flapdoodle.embed.mongo.commands.ServerAddress;
 import de.flapdoodle.embed.mongo.distribution.Version;
 import de.flapdoodle.embed.mongo.transitions.Mongod;
@@ -20,7 +22,9 @@ import java.util.Map;
  * configuration: it boots a real mongod on a random port (so it can never collide with, or
  * write into, a real MongoDB), provisions the application user - the CEDAR Mongo client always
  * authenticates, so the account must exist - and redirects the CEDAR Mongo environment
- * variables. Collections are created lazily by the driver; no schema setup is involved.
+ * variables. It also creates the unique `@id` index each artifact collection carries in a
+ * provisioned store, so a suite runs against the constraint the deployed store enforces rather
+ * than against a collection that accepts a repeated identifier.
  *
  * The mongod version tracks the deployed MongoDB major line. The binary is downloaded on first
  * use and cached under ~/.embedmongo.
@@ -28,6 +32,15 @@ import java.util.Map;
 public final class EmbeddedCedarMongo {
 
   private static final String DATABASE_NAME = "cedar";
+
+  /**
+   * The artifact collections, as `artifactServer.collections` in cedar-main.yml names them. Each
+   * carries a unique index on `@id` in a provisioned store, created natively by the admin tool's
+   * artifactServer-initDB task and in Docker by the Mongo image's create-indices.js.
+   */
+  public static final List<String> ARTIFACT_COLLECTIONS =
+      List.of("template-fields", "template-elements", "templates", "template-instances");
+
   private static final String DEFAULT_TEST_USER = "cedar-test";
   private static final String DEFAULT_TEST_PASSWORD = "cedar-test-password";
 
@@ -55,6 +68,7 @@ public final class EmbeddedCedarMongo {
         client.getDatabase(DATABASE_NAME).runCommand(new Document("createUser", userName)
             .append("pwd", password)
             .append("roles", List.of(new Document("role", "readWrite").append("db", DATABASE_NAME))));
+        createArtifactIdIndexes(client);
       }
     }
     // Re-applied even when the server is already up: in a shared JVM a later test class may
@@ -73,6 +87,17 @@ public final class EmbeddedCedarMongo {
    * Stops the child process synchronously. The JUnit launcher-session listener calls this after the
    * suite; the JVM shutdown hook is the fallback outside a launcher session.
    */
+  /**
+   * Creates the unique `@id` index on each artifact collection, which also creates the collection.
+   * Repeating it with the same options is a no-op, so a restarted server pays nothing.
+   */
+  private static void createArtifactIdIndexes(MongoClient client) {
+    for (String collection : ARTIFACT_COLLECTIONS) {
+      client.getDatabase(DATABASE_NAME).getCollection(collection)
+          .createIndex(Indexes.ascending("@id"), new IndexOptions().unique(true));
+    }
+  }
+
   static synchronized void stop() {
     if (running == null) {
       return;

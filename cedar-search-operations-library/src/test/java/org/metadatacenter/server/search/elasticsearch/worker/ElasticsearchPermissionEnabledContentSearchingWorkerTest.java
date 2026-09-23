@@ -85,6 +85,24 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
     }).when(client).search(any(SearchRequest.class), any(RequestOptions.class));
   }
 
+  @Test
+  void modifiedBoundsAreFiltersOnTheIndexQueryBeforePaging() throws Exception {
+    worker.search(requestContext, "heart", List.of("template", "field"), ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, List.of("name"), 2, 1,
+        new org.metadatacenter.model.request.ModifiedDateRange(100L, 400L));
+    var source = capturedRequest.get().source();
+    var json = new ObjectMapper().readTree(source.toString());
+    var range = json.at("/query/bool/filter/0/range").elements().next();
+    assertEquals(100, range.get("from").asLong());
+    assertEquals(400, range.get("to").asLong());
+    assertTrue(range.get("include_lower").asBoolean());
+    assertFalse(range.get("include_upper").asBoolean());
+    assertEquals(1, source.from());
+    assertEquals(2, source.size());
+    assertTrue(source.query().toString().contains("heart"));
+    assertTrue(source.query().toString().contains("user-1"));
+  }
+
   static Stream<Arguments> accessiblePermissionQueries() {
     return Stream.of(
         Arguments.of(ResourceRole.VIEWER, "user-1|viewer", true, true),

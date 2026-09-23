@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.cypher.query;
 
+import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.RelationLabel;
 import org.metadatacenter.server.neo4j.NodeLabel;
@@ -13,6 +14,12 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
   public static String getSharedWithMeLookupQuery(ResourceVersionFilter version,
                                                   ResourcePublicationStatusFilter publicationStatus,
                                                   List<String> sortList) {
+    return getSharedWithMeLookupQuery(version, publicationStatus, sortList, ModifiedDateRange.ALL);
+  }
+
+  public static String getSharedWithMeLookupQuery(ResourceVersionFilter version,
+                                                  ResourcePublicationStatusFilter publicationStatus,
+                                                  List<String> sortList, ModifiedDateRange modified) {
     StringBuilder sb = new StringBuilder();
     sb.append(
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})-" +
@@ -20,7 +27,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
             "()-" +
             "[:" + getResourceRoleRelationLabels() + "]->" +
             "(resource)" +
-            " WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
+            " WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified) +
             " AND resource.<PROP.EVERYBODY_PERMISSION> IS NULL" +
             " AND resource.<PROP.OWNED_BY> <> {<PH.USER_ID>}" +
             " AND resource.<PROP.IS_USER_HOME> IS NULL "
@@ -32,7 +39,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
       sb.append(getPublicationStatusConditions(" AND ", "resource"));
     }
     sb.append(" RETURN DISTINCT(resource)");
-    sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,");
+    sb.append(" ORDER BY ");
     sb.append(getOrderByExpression("resource", sortList));
     sb.append(", resource.<PROP.VERSION> DESC");
     sb.append(", resource.<PROP.ID>");
@@ -43,6 +50,11 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
 
   public static String getSharedWithMeCountQuery(ResourceVersionFilter version,
                                                  ResourcePublicationStatusFilter publicationStatus) {
+    return getSharedWithMeCountQuery(version, publicationStatus, ModifiedDateRange.ALL);
+  }
+
+  public static String getSharedWithMeCountQuery(ResourceVersionFilter version,
+                                                 ResourcePublicationStatusFilter publicationStatus, ModifiedDateRange modified) {
     StringBuilder sb = new StringBuilder();
     sb.append(
         " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})-" +
@@ -50,7 +62,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
             "()-" +
             "[:" + getResourceRoleRelationLabels() + "]->" +
             "(resource)" +
-            " WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
+            " WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified) +
             " AND resource.<PROP.EVERYBODY_PERMISSION> IS NULL" +
             " AND resource.<PROP.OWNED_BY> <> {<PH.USER_ID>}" +
             " AND resource.<PROP.IS_USER_HOME> IS NULL "
@@ -70,12 +82,18 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
   public static String getAllLookupQuery(ResourceVersionFilter version,
                                          ResourcePublicationStatusFilter publicationStatus, List<String> sortList,
                                          boolean addPermissionConditions) {
+    return getAllLookupQuery(version, publicationStatus, sortList, addPermissionConditions, ModifiedDateRange.ALL);
+  }
+
+  public static String getAllLookupQuery(ResourceVersionFilter version,
+                                         ResourcePublicationStatusFilter publicationStatus, List<String> sortList,
+                                         boolean addPermissionConditions, ModifiedDateRange modified) {
     StringBuilder sb = new StringBuilder();
     if (addPermissionConditions) {
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
     }
     sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
-    sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
+    sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified));
     sb.append(" AND resource.<PROP.IS_USER_HOME> IS NULL ");
     if (addPermissionConditions) {
       sb.append(getResourcePermissionConditions(" AND ", "resource"));
@@ -87,7 +105,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
       sb.append(getPublicationStatusConditions(" AND ", "resource"));
     }
     sb.append(" RETURN resource");
-    sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,").append(getOrderByExpression("resource", sortList));
+    sb.append(" ORDER BY ").append(getOrderByExpression("resource", sortList));
     sb.append(", resource.<PROP.ID>");
     sb.append(" SKIP $offset");
     sb.append(" LIMIT $limit");
@@ -97,13 +115,19 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
   public static String getAllCountQuery(ResourceVersionFilter version,
                                         ResourcePublicationStatusFilter publicationStatus,
                                         boolean addPermissionConditions) {
+    return getAllCountQuery(version, publicationStatus, addPermissionConditions, ModifiedDateRange.ALL);
+  }
+
+  public static String getAllCountQuery(ResourceVersionFilter version,
+                                        ResourcePublicationStatusFilter publicationStatus,
+                                        boolean addPermissionConditions, ModifiedDateRange modified) {
     StringBuilder sb = new StringBuilder();
 
     if (addPermissionConditions) {
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
       sb.append(" RETURN COUNT {");
       sb.append(" MATCH ").append(getUserToResourceRelationWithContains(RelationLabel.OWNS, "resource"));
-      sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
+      sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified));
       sb.append(" AND resource.<PROP.IS_USER_HOME> IS NULL ");
       if (version != null && version != ResourceVersionFilter.ALL) {
         sb.append(getVersionConditions(version, " AND ", "resource"));
@@ -117,7 +141,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
 
       sb.append(" MATCH ").append(getUserToResourceRelationThroughGroupWithContains(
           getResourceRoleRelationLabels(), "resource"));
-      sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
+      sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified));
       sb.append(" AND resource.<PROP.IS_USER_HOME> IS NULL ");
       if (version != null && version != ResourceVersionFilter.ALL) {
         sb.append(getVersionConditions(version, " AND ", "resource"));
@@ -130,7 +154,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
     } else {
       sb.append(" RETURN COUNT {");
       sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
-      sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
+      sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified));
       sb.append(" AND resource.<PROP.IS_USER_HOME> IS NULL ");
       if (version != null && version != ResourceVersionFilter.ALL) {
         sb.append(getVersionConditions(version, " AND ", "resource"));
@@ -146,18 +170,22 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
   }
 
   public static String getSearchIsBasedOnLookupQuery(List<String> sortList, boolean addPermissionConditions) {
+    return getSearchIsBasedOnLookupQuery(sortList, addPermissionConditions, ModifiedDateRange.ALL);
+  }
+
+  public static String getSearchIsBasedOnLookupQuery(List<String> sortList, boolean addPermissionConditions, ModifiedDateRange modified) {
     StringBuilder sb = new StringBuilder();
     if (addPermissionConditions) {
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
     }
     sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
-    sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
+    sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified));
     sb.append(" AND (resource.<PROP.IS_BASED_ON> = {<PH.IS_BASED_ON>}) ");
     if (addPermissionConditions) {
       sb.append(getResourcePermissionConditions(" AND ", "resource"));
     }
     sb.append(" RETURN resource");
-    sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,").append(getOrderByExpression("resource", sortList));
+    sb.append(" ORDER BY ").append(getOrderByExpression("resource", sortList));
     sb.append(", resource.<PROP.ID>");
     sb.append(" SKIP $offset");
     sb.append(" LIMIT $limit");
@@ -165,12 +193,16 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
   }
 
   public static String getSearchIsBasedOnCountQuery(boolean addPermissionConditions) {
+    return getSearchIsBasedOnCountQuery(addPermissionConditions, ModifiedDateRange.ALL);
+  }
+
+  public static String getSearchIsBasedOnCountQuery(boolean addPermissionConditions, ModifiedDateRange modified) {
     StringBuilder sb = new StringBuilder();
     if (addPermissionConditions) {
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
     }
     sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
-    sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
+    sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified));
     sb.append(" AND (resource.<PROP.IS_BASED_ON> = {<PH.IS_BASED_ON>}) ");
     if (addPermissionConditions) {
       sb.append(getResourcePermissionConditions(" AND ", "resource"));
@@ -222,6 +254,10 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
   }
 
   public static String getSpecialFoldersLookupQuery(List<String> sortList, boolean addPermissionConditions) {
+    return getSpecialFoldersLookupQuery(sortList, addPermissionConditions, ModifiedDateRange.ALL);
+  }
+
+  public static String getSpecialFoldersLookupQuery(List<String> sortList, boolean addPermissionConditions, ModifiedDateRange modified) {
     if (addPermissionConditions) {
       return """
           MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
@@ -232,30 +268,36 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
             } OR EXISTS {
               MATCH (resource)<-[:CONTAINS*0..]-()<-[:%s]-()<-[:MEMBEROF*0..1]-(user)
             })
+          %s
           RETURN resource
 
-          ORDER BY resource.<PROP.NODE_SORT_ORDER>,
+          ORDER BY
                    %s,
                    resource.<PROP.ID>
           SKIP $offset
           LIMIT $limit
-          """.formatted(getResourceRoleRelationLabels(), getOrderByExpression("resource", sortList));
+          """.formatted(getResourceRoleRelationLabels(), ModifiedDateConditions.and("resource", modified), getOrderByExpression("resource", sortList));
     } else {
       return """
           MATCH (resource:<LABEL.RESOURCE>)
           WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
+          %s
           RETURN resource
 
-          ORDER BY resource.<PROP.NODE_SORT_ORDER>,
+          ORDER BY
                    %s,
                    resource.<PROP.ID>
           SKIP $offset
           LIMIT $limit
-          """.formatted(getOrderByExpression("resource", sortList));
+          """.formatted(ModifiedDateConditions.and("resource", modified), getOrderByExpression("resource", sortList));
     }
   }
 
   public static String getSpecialFoldersCountQuery(boolean addPermissionConditions) {
+    return getSpecialFoldersCountQuery(addPermissionConditions, ModifiedDateRange.ALL);
+  }
+
+  public static String getSpecialFoldersCountQuery(boolean addPermissionConditions, ModifiedDateRange modified) {
     if (addPermissionConditions) {
       return """
           MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
@@ -266,14 +308,16 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
             } OR EXISTS {
               MATCH (resource)<-[:CONTAINS*0..]-()<-[:%s]-()<-[:MEMBEROF*0..1]-(user)
             })
+          %s
           RETURN count(resource)
-          """.formatted(getResourceRoleRelationLabels());
+          """.formatted(getResourceRoleRelationLabels(), ModifiedDateConditions.and("resource", modified));
     } else {
       return """
           MATCH (resource:<LABEL.RESOURCE>)
           WHERE resource.<PROP.SPECIAL_FOLDER> IS NOT NULL
+          %s
           RETURN count(resource)
-          """;
+          """.formatted(ModifiedDateConditions.and("resource", modified));
     }
   }
 

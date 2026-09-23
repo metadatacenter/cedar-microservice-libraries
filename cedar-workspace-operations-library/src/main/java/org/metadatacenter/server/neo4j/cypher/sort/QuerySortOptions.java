@@ -18,6 +18,7 @@ public class QuerySortOptions {
     knownSortKeys = new HashMap<>();
     DEFAULT_SORT_FIELD = new QuerySortField("name", NodeProperty.NAME_LOWER.getValue(), QuerySortFieldType.TEXTUAL);
     addField(DEFAULT_SORT_FIELD);
+    addField(new QuerySortField("foldersFirst", NodeProperty.NODE_SORT_ORDER.getValue(), QuerySortFieldType.NUMERIC));
     addField(
         new QuerySortField("createdOnTS", NodeProperty.CREATED_ON_TS.getValue(), QuerySortFieldType.NUMERIC));
     addField(

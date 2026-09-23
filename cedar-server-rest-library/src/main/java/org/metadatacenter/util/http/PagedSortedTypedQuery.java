@@ -1,5 +1,6 @@
 package org.metadatacenter.util.http;
 
+import org.metadatacenter.model.request.ModifiedDateRange;
 import org.apache.commons.lang3.StringUtils;
 import org.metadatacenter.config.PaginationConfig;
 import org.metadatacenter.error.CedarErrorKey;
@@ -16,6 +17,11 @@ import java.util.List;
 import java.util.Optional;
 
 public class PagedSortedTypedQuery extends PagedSortedQuery {
+
+  private ModifiedDateRange modified = ModifiedDateRange.ALL;
+
+  public ModifiedDateRange getModified() { return modified; }
+  public void setModified(ModifiedDateRange modified) { this.modified = modified; }
 
   protected Optional<String> resourceTypesInput;
   protected List<CedarResourceType> resourceTypeList;

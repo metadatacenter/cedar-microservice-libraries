@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.*;
 import org.metadatacenter.model.CedarResourceType;
@@ -160,7 +161,7 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   @Override
   public long findFolderContentsCount(CedarFolderId folderId, NodeListRequest req) {
     return proxies.resource().findFolderContentsCount(folderId, req.getResourceTypes(), req.getVersion(),
-        req.getPublicationStatus());
+        req.getPublicationStatus(), req.getModified());
   }
 
   @Override
@@ -207,7 +208,7 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   public List<FolderServerResourceExtract> findFolderContentsExtract(CedarFolderId folderId, NodeListRequest req) {
     return proxies.resource().findFolderContentsExtract(folderId, req.getResourceTypes(), req.getVersion(),
         req.getPublicationStatus(),
-        req.getLimit(), req.getOffset(), req.getSort());
+        req.getLimit(), req.getOffset(), req.getSort(), req.getModified());
   }
 
   @Override
@@ -215,7 +216,7 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
                                                                 List<String> fieldNameList) {
     return proxies.resource().findFolderContentsExtractMap(folderId, req.getResourceTypes(), req.getVersion(),
         req.getPublicationStatus(),
-        req.getLimit(), req.getOffset(), req.getSort(), cu.getResourceId(), fieldNameList);
+        req.getLimit(), req.getOffset(), req.getSort(), cu.getResourceId(), fieldNameList, req.getModified());
   }
 
   @Override
@@ -323,8 +324,16 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
                                                             ResourcePublicationStatusFilter publicationStatus,
                                                             int limit, int offset,
                                                             List<String> sortList) {
+    return viewSharedWithMe(resourceTypeList, version, publicationStatus, limit, offset, sortList, ModifiedDateRange.ALL);
+  }
+
+  public List<FolderServerResourceExtract> viewSharedWithMe(List<CedarResourceType> resourceTypeList,
+                                                            ResourceVersionFilter version,
+                                                            ResourcePublicationStatusFilter publicationStatus,
+                                                            int limit, int offset,
+                                                            List<String> sortList, ModifiedDateRange modified) {
     return proxies.resource().viewSharedWithMeFiltered(resourceTypeList, version, publicationStatus, limit, offset,
-        sortList, cu.getResourceId());
+        sortList, cu.getResourceId(), modified);
   }
 
   @Override
@@ -333,23 +342,41 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
                                                                    ResourcePublicationStatusFilter publicationStatus,
                                                                    int limit, int offset,
                                                                    List<String> sortList) {
+    return viewSharedWithEverybody(resourceTypeList, version, publicationStatus, limit, offset, sortList, ModifiedDateRange.ALL);
+  }
+
+  public List<FolderServerResourceExtract> viewSharedWithEverybody(List<CedarResourceType> resourceTypeList,
+                                                                   ResourceVersionFilter version,
+                                                                   ResourcePublicationStatusFilter publicationStatus,
+                                                                   int limit, int offset,
+                                                                   List<String> sortList, ModifiedDateRange modified) {
     return proxies.resource().viewSharedWithEverybodyFiltered(resourceTypeList, version, publicationStatus, limit,
         offset, sortList,
-        cu.getResourceId());
+        cu.getResourceId(), modified);
   }
 
   @Override
   public long viewSharedWithMeCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
                                     ResourcePublicationStatusFilter publicationStatus) {
+    return viewSharedWithMeCount(resourceTypeList, version, publicationStatus, ModifiedDateRange.ALL);
+  }
+
+  public long viewSharedWithMeCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
+                                    ResourcePublicationStatusFilter publicationStatus, ModifiedDateRange modified) {
     return proxies.resource().viewSharedWithMeFilteredCount(resourceTypeList, version, publicationStatus,
-        cu.getResourceId());
+        cu.getResourceId(), modified);
   }
 
   @Override
   public long viewSharedWithEverybodyCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
                                            ResourcePublicationStatusFilter publicationStatus) {
+    return viewSharedWithEverybodyCount(resourceTypeList, version, publicationStatus, ModifiedDateRange.ALL);
+  }
+
+  public long viewSharedWithEverybodyCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
+                                           ResourcePublicationStatusFilter publicationStatus, ModifiedDateRange modified) {
     return proxies.resource().viewSharedWithEverybodyFilteredCount(resourceTypeList, version, publicationStatus,
-        cu.getResourceId());
+        cu.getResourceId(), modified);
   }
 
   @Override
@@ -357,24 +384,44 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
                                                    ResourceVersionFilter version,
                                                    ResourcePublicationStatusFilter publicationStatus, int limit,
                                                    int offset, List<String> sortList) {
+    return viewAll(resourceTypeList, version, publicationStatus, limit, offset, sortList, ModifiedDateRange.ALL);
+  }
+
+  public List<FolderServerResourceExtract> viewAll(List<CedarResourceType> resourceTypeList,
+                                                   ResourceVersionFilter version,
+                                                   ResourcePublicationStatusFilter publicationStatus, int limit,
+                                                   int offset, List<String> sortList, ModifiedDateRange modified) {
     return proxies.resource().viewAllFiltered(resourceTypeList, version, publicationStatus, limit, offset, sortList,
-        cu);
+        cu, modified);
   }
 
   @Override
   public long viewAllCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
                            ResourcePublicationStatusFilter publicationStatus) {
-    return proxies.resource().viewAllFilteredCount(resourceTypeList, version, publicationStatus, cu);
+    return viewAllCount(resourceTypeList, version, publicationStatus, ModifiedDateRange.ALL);
+  }
+
+  public long viewAllCount(List<CedarResourceType> resourceTypeList, ResourceVersionFilter version,
+                           ResourcePublicationStatusFilter publicationStatus, ModifiedDateRange modified) {
+    return proxies.resource().viewAllFilteredCount(resourceTypeList, version, publicationStatus, cu, modified);
   }
 
   @Override
   public List<FolderServerResourceExtract> viewSpecialFolders(int limit, int offset, List<String> sortList) {
-    return proxies.resource().viewSpecialFoldersFiltered(limit, offset, sortList, cu);
+    return viewSpecialFolders(limit, offset, sortList, ModifiedDateRange.ALL);
+  }
+
+  public List<FolderServerResourceExtract> viewSpecialFolders(int limit, int offset, List<String> sortList, ModifiedDateRange modified) {
+    return proxies.resource().viewSpecialFoldersFiltered(limit, offset, sortList, cu, modified);
   }
 
   @Override
   public long viewSpecialFoldersCount() {
-    return proxies.resource().viewSpecialFoldersFilteredCount(cu);
+    return viewSpecialFoldersCount(ModifiedDateRange.ALL);
+  }
+
+  public long viewSpecialFoldersCount(ModifiedDateRange modified) {
+    return proxies.resource().viewSpecialFoldersFilteredCount(cu, modified);
   }
 
   @Override
@@ -521,12 +568,22 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   public List<FolderServerResourceExtract> searchIsBasedOn(List<CedarResourceType> resourceTypeList,
                                                            CedarTemplateId isBasedOnId, int limit,
                                                            int offset, List<String> sortList) {
-    return proxies.resource().searchIsBasedOn(resourceTypeList, isBasedOnId, limit, offset, sortList, cu);
+    return searchIsBasedOn(resourceTypeList, isBasedOnId, limit, offset, sortList, ModifiedDateRange.ALL);
+  }
+
+  public List<FolderServerResourceExtract> searchIsBasedOn(List<CedarResourceType> resourceTypeList,
+                                                           CedarTemplateId isBasedOnId, int limit,
+                                                           int offset, List<String> sortList, ModifiedDateRange modified) {
+    return proxies.resource().searchIsBasedOn(resourceTypeList, isBasedOnId, limit, offset, sortList, cu, modified);
   }
 
   @Override
   public long searchIsBasedOnCount(List<CedarResourceType> resourceTypeList, CedarTemplateId isBasedOnId) {
-    return proxies.resource().searchIsBasedOnCount(resourceTypeList, isBasedOnId, cu);
+    return searchIsBasedOnCount(resourceTypeList, isBasedOnId, ModifiedDateRange.ALL);
+  }
+
+  public long searchIsBasedOnCount(List<CedarResourceType> resourceTypeList, CedarTemplateId isBasedOnId, ModifiedDateRange modified) {
+    return proxies.resource().searchIsBasedOnCount(resourceTypeList, isBasedOnId, cu, modified);
   }
 
   @Override

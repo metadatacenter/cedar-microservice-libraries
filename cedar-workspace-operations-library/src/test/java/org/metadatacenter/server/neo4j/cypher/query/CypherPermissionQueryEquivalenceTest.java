@@ -3,6 +3,7 @@ package org.metadatacenter.server.neo4j.cypher.query;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.neo4j.driver.AuthTokens;
@@ -91,6 +92,66 @@ class CypherPermissionQueryEquivalenceTest {
     }
     if (neo4j != null) {
       neo4j.close();
+    }
+  }
+
+  @Test
+  void modifiedDatesFilterBeforePaginationAndCountWithInclusiveStartExclusiveEnd() {
+    try (var session = driver.session()) {
+      session.run("""
+          CREATE (parent:Folder {_id: 'date-parent'})
+          WITH parent
+          UNWIND range(0, 5) AS i
+          CREATE (child:Resource:FileSystemResource:Template {
+            _id: 'date-' + toString(i), schema_name_lower: toString(i),
+            resourceType: 'template', lastUpdatedOnTS: i * 100, everybodyPermission: 'read'})
+          CREATE (parent)-[:CONTAINS]->(child)
+          """).consume();
+    }
+    var range = new ModifiedDateRange(100_000L, 400_000L);
+    var dateParams = new CypherParameters();
+    ModifiedDateConditions.parameters(dateParams, range);
+    Map<String, Object> params = new java.util.HashMap<>(dateParams.asMap());
+    params.putAll(Map.of("folderId", "date-parent", "resourceTypeList", List.of("template"), "offset", 1, "limit", 1));
+    assertEquals(List.of("date-2"), nodeIds(CypherQueryBuilderFolderContent.getFolderContentsFilteredLookupQuery(
+        List.of("name"), null, null, range), params, "child"));
+    assertEquals(3L, firstLongOrMinusOne(CypherQueryBuilderFolderContent.getFolderContentsFilteredCountQuery(null, null, range), params));
+    assertEquals(List.of("date-2"), nodeIds(CypherQueryBuilderFilesystemResource.getSharedWithEverybodyLookupQuery(
+        null, null, List.of("name"), range), params, "resource"));
+    assertEquals(3L, firstLongOrMinusOne(CypherQueryBuilderFilesystemResource.getSharedWithEverybodyCountQuery(null, null, range), params));
+    assertEquals(List.of("date-2"), nodeIds(CypherQueryBuilderResource.getAllLookupQuery(null, null, List.of("name"), false, range), params, "resource"));
+    assertEquals(3L, firstLongOrMinusOne(CypherQueryBuilderResource.getAllCountQuery(null, null, false, range), params));
+  }
+
+  @Test
+  void folderContentsSortAcrossResourceTypesBeforePagination() {
+    try (var session = driver.session()) {
+      session.run("""
+          CREATE (parent:Folder {_id: 'sort-parent'})
+          CREATE (a:Template {_id: 'sort-a', schema_name_lower: 'alpha', resourceType: 'template', nodeSortOrder: 2})
+          CREATE (b:Folder {_id: 'sort-b', schema_name_lower: 'bravo', resourceType: 'folder', nodeSortOrder: 1})
+          CREATE (c:Template {_id: 'sort-c', schema_name_lower: 'charlie', resourceType: 'template', nodeSortOrder: 2})
+          CREATE (d:Folder {_id: 'sort-d', schema_name_lower: 'delta', resourceType: 'folder', nodeSortOrder: 1})
+          CREATE (parent)-[:CONTAINS]->(a)
+          CREATE (parent)-[:CONTAINS]->(b)
+          CREATE (parent)-[:CONTAINS]->(c)
+          CREATE (parent)-[:CONTAINS]->(d)
+          """).consume();
+    }
+    for (String sort : List.of("name", "-name", "foldersFirst,name", "foldersFirst,-name")) {
+      String query = CypherQueryBuilderFolderContent.getFolderContentsFilteredLookupQuery(
+          List.of(sort.split(",")), null, null);
+      List<String> expected = switch (sort) {
+        case "name" -> List.of("sort-a", "sort-b", "sort-c", "sort-d");
+        case "-name" -> List.of("sort-d", "sort-c", "sort-b", "sort-a");
+        case "foldersFirst,name" -> List.of("sort-b", "sort-d", "sort-a", "sort-c");
+        default -> List.of("sort-d", "sort-b", "sort-c", "sort-a");
+      };
+      for (int offset = 0; offset < 4; offset += 2) {
+        assertEquals(expected.subList(offset, offset + 2), nodeIds(query,
+            Map.of("folderId", "sort-parent", "resourceTypeList", List.of("folder", "template"),
+                "offset", offset, "limit", 2), "child"));
+      }
     }
   }
 

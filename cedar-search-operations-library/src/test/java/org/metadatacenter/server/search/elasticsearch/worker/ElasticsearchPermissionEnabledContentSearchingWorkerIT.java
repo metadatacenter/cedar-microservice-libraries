@@ -133,6 +133,26 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerIT {
         "walk-template-3", "walk-template-4"), new HashSet<>(walked));
   }
 
+  @Test
+  void folderGroupingPrecedesNameDirectionAndPagination() throws Exception {
+    index("sort-a", "sortprobe alpha", List.of(readKey(READER_ID)), null, "template");
+    index("sort-b", "sortprobe bravo", List.of(readKey(READER_ID)), null, "folder");
+    index("sort-c", "sortprobe charlie", List.of(readKey(READER_ID)), null, "field");
+    index("sort-d", "sortprobe delta", List.of(readKey(READER_ID)), null, "folder");
+    refresh();
+    for (var sort : List.of(List.of("name"), List.of("foldersFirst", "name"), List.of("foldersFirst", "-name"))) {
+      List<String> expected = sort.size() == 1 ? List.of("sort-a", "sort-b", "sort-c", "sort-d")
+          : sort.get(1).equals("name") ? List.of("sort-b", "sort-d", "sort-a", "sort-c")
+          : List.of("sort-d", "sort-b", "sort-c", "sort-a");
+      for (int offset = 0; offset < 4; offset += 2) {
+        var result = worker.search(context(READER_ID, false), "sortprobe", List.of("folder", "template", "field"),
+            ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, null, sort, 2, offset);
+        assertEquals(4, result.getTotalCount());
+        assertEquals(expected.subList(offset, offset + 2), result.getHits().stream().map(SearchHit::getId).toList());
+      }
+    }
+  }
+
   private static SearchResponseResult search(CedarRequestContext context, String query) throws Exception {
     return worker.search(context, query, List.of("template"), ResourceVersionFilter.ALL,
         ResourcePublicationStatusFilter.ALL, null, List.of(), 20, 0);
@@ -162,9 +182,14 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerIT {
 
   private static void index(String id, String name, List<String> users, String everybodyPermission)
       throws Exception {
+    index(id, name, users, everybodyPermission, "template");
+  }
+
+  private static void index(String id, String name, List<String> users, String everybodyPermission, String type)
+      throws Exception {
     Map<String, Object> info = new LinkedHashMap<>();
     info.put("@id", "https://repo.metadatacenter.org/templates/" + id);
-    info.put("resourceType", "template");
+    info.put("resourceType", type);
     info.put("schema:name", name);
 
     Map<String, Object> document = new LinkedHashMap<>();

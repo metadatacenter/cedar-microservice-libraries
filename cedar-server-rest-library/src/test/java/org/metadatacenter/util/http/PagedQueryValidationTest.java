@@ -94,6 +94,7 @@ class PagedQueryValidationTest {
   static Stream<Arguments> validSorts() {
     return Stream.of(
         Arguments.of("name", List.of("name")),
+        Arguments.of("foldersFirst,-name", List.of("foldersFirst", "-name")),
         Arguments.of("-name", List.of("-name")),
         Arguments.of("createdOnTS", List.of("createdOnTS")),
         Arguments.of("-createdOnTS", List.of("-createdOnTS")),

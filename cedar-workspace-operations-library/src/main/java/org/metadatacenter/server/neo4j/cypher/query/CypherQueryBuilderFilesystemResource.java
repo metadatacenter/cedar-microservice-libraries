@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.cypher.query;
 
+import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
@@ -64,11 +65,16 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
 
   public static String getSharedWithEverybodyLookupQuery(ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
                                                          List<String> sortList) {
+    return getSharedWithEverybodyLookupQuery(version, publicationStatus, sortList, ModifiedDateRange.ALL);
+  }
+
+  public static String getSharedWithEverybodyLookupQuery(ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                                         List<String> sortList, ModifiedDateRange modified) {
     StringBuilder sb = new StringBuilder();
     sb.append(
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE>)" +
             " WHERE resource.<PROP.EVERYBODY_PERMISSION> IS NOT NULL" +
-            " AND resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
+            " AND resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified) +
             " AND resource.<PROP.IS_USER_HOME> IS NULL "
     );
     if (version != null && version != ResourceVersionFilter.ALL) {
@@ -78,7 +84,7 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
       sb.append(getPublicationStatusConditions(" AND ", "resource"));
     }
     sb.append(" RETURN DISTINCT(resource)");
-    sb.append(" ORDER BY resource.<PROP.NODE_SORT_ORDER>,");
+    sb.append(" ORDER BY ");
     sb.append(getOrderByExpression("resource", sortList));
     sb.append(", resource.<PROP.VERSION> DESC");
     sb.append(", resource.<PROP.ID>");
@@ -88,11 +94,15 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
   }
 
   public static String getSharedWithEverybodyCountQuery(ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus) {
+    return getSharedWithEverybodyCountQuery(version, publicationStatus, ModifiedDateRange.ALL);
+  }
+
+  public static String getSharedWithEverybodyCountQuery(ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, ModifiedDateRange modified) {
     StringBuilder sb = new StringBuilder();
     sb.append(
         " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE>)" +
             " WHERE resource.<PROP.EVERYBODY_PERMISSION> IS NOT NULL" +
-            " AND resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" +
+            " AND resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified) +
             " AND resource.<PROP.IS_USER_HOME> IS NULL "
     );
     if (version != null && version != ResourceVersionFilter.ALL) {

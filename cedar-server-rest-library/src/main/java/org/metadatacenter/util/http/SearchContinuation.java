@@ -1,5 +1,6 @@
 package org.metadatacenter.util.http;
 
+import org.metadatacenter.model.request.ModifiedDateRange;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -158,6 +159,11 @@ public final class SearchContinuation {
    */
   public static String fingerprint(String query, String id, List<String> resourceTypes, String version,
                                    String publicationStatus, String categoryId, List<String> sortList) {
+    return fingerprint(query, id, resourceTypes, version, publicationStatus, categoryId, sortList, ModifiedDateRange.ALL);
+  }
+
+  public static String fingerprint(String query, String id, List<String> resourceTypes, String version,
+                                   String publicationStatus, String categoryId, List<String> sortList, ModifiedDateRange modified) {
     String canonical = String.join("|",
         String.valueOf(query),
         String.valueOf(id),
@@ -165,7 +171,7 @@ public final class SearchContinuation {
         String.valueOf(version),
         String.valueOf(publicationStatus),
         String.valueOf(categoryId),
-        String.valueOf(sortList));
+        String.valueOf(sortList)) + (modified.isUnbounded() ? "" : "|" + modified.after() + "|" + modified.before());
     try {
       byte[] digest = MessageDigest.getInstance("SHA-256").digest(canonical.getBytes(StandardCharsets.UTF_8));
       StringBuilder hex = new StringBuilder();
