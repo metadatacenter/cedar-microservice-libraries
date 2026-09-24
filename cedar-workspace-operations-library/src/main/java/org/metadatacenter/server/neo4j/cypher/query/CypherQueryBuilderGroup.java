@@ -109,16 +109,19 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
         " RETURN user";
   }
 
-  /** Reads the complete membership and its validator from one Neo4j transaction. */
+  /**
+   * Reads membership and its validator in one statement. Typed existence checks avoid
+   * dereferencing a relationship's type after a concurrent group deletion removes it.
+   */
   public static String getVersionedGroupUsers() {
     return """
         MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})
-        OPTIONAL MATCH (user:<LABEL.USER>)-[relation:<REL.MEMBEROF>|<REL.ADMINISTERS>]->(group)
-        WITH group, user, collect(type(relation)) AS relationTypes
+        OPTIONAL MATCH (user:<LABEL.USER>)-[:<REL.MEMBEROF>|<REL.ADMINISTERS>]->(group)
+        WITH DISTINCT group, user
         RETURN coalesce(group._cedarMembershipRevision, 1) AS revision,
                user AS user,
-               '<REL.ADMINISTERS>' IN relationTypes AS administrator,
-               '<REL.MEMBEROF>' IN relationTypes AS member
+               EXISTS { MATCH (user)-[:<REL.ADMINISTERS>]->(group) } AS administrator,
+               EXISTS { MATCH (user)-[:<REL.MEMBEROF>]->(group) } AS member
         ORDER BY user.<PROP.ID>
         """;
   }
@@ -155,12 +158,12 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
           MERGE (user)-[:<REL.MEMBEROF>]->(group))
         SET group._cedarMembershipRevision = {<PH.CURRENT_REVISION>} + 1
         WITH group
-        OPTIONAL MATCH (user:<LABEL.USER>)-[relation:<REL.MEMBEROF>|<REL.ADMINISTERS>]->(group)
-        WITH group, user, collect(type(relation)) AS relationTypes
+        OPTIONAL MATCH (user:<LABEL.USER>)-[:<REL.MEMBEROF>|<REL.ADMINISTERS>]->(group)
+        WITH DISTINCT group, user
         RETURN group._cedarMembershipRevision AS revision,
                user AS user,
-               '<REL.ADMINISTERS>' IN relationTypes AS administrator,
-               '<REL.MEMBEROF>' IN relationTypes AS member
+               EXISTS { MATCH (user)-[:<REL.ADMINISTERS>]->(group) } AS administrator,
+               EXISTS { MATCH (user)-[:<REL.MEMBEROF>]->(group) } AS member
         ORDER BY user.<PROP.ID>
         """;
   }

@@ -4,6 +4,7 @@ import ch.vorburger.mariadb4j.DB;
 import ch.vorburger.mariadb4j.DBConfigurationBuilder;
 import org.metadatacenter.config.environment.CedarEnvironmentSource;
 
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -34,6 +35,11 @@ public final class EmbeddedCedarMySql {
     if (db == null) {
       try {
         DBConfigurationBuilder configuration = DBConfigurationBuilder.newBuilder();
+        // Maven reactor workers share java.io.tmpdir, but must never unpack or
+        // delete another test JVM's database binaries or writable store.
+        configuration.setBaseDir(Files.createTempDirectory("mdb-base-").toFile());
+        configuration.setDataDir(Files.createTempDirectory("mdb-data-").toFile());
+        configuration.setDeletingTemporaryBaseAndDataDirsOnShutdown(true);
         configuration.addArg("--bind-address=127.0.0.1");
         configuration.setPort(0); // 0 picks a free port
         db = DB.newEmbeddedDB(configuration.build());
