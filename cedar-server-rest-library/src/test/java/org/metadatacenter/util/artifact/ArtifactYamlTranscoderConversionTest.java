@@ -8,8 +8,11 @@ import org.metadatacenter.util.json.JsonMapper;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -101,6 +104,34 @@ public class ArtifactYamlTranscoderConversionTest {
 
     assertEquals(original.get("@id"), roundTripped.get("@id"));
     assertEquals(original.get("schema:isBasedOn"), roundTripped.get("schema:isBasedOn"));
+  }
+
+  @Test
+  public void yamlInstanceIsCompletedAgainstTheTemplateItIsBasedOn() throws IOException {
+    JsonNode template = JsonMapper.STRICT_MAPPER.readTree(readFixture("SimpleTemplate.json"));
+    String templateIri = template.get("@id").asText();
+    String yaml = "type: instance\n"
+        + "name: Simple metadata\n"
+        + "isBasedOn: " + templateIri + "\n"
+        + "children:\n"
+        + "  Text Field:\n"
+        + "    value: hello\n";
+    List<String> requested = new ArrayList<>();
+
+    JsonNode alone = JsonMapper.STRICT_MAPPER.readTree(
+        ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.INSTANCE));
+    JsonNode completed = JsonMapper.STRICT_MAPPER.readTree(ArtifactYamlTranscoder.yamlToJsonString(yaml,
+        CedarResourceType.INSTANCE, iri -> {
+          requested.add(iri);
+          return template;
+        }));
+
+    assertEquals(List.of(templateIri), requested);
+    assertFalse(alone.has("Email"), "without a template the YAML's omitted fields stay omitted");
+    assertEquals("hello", completed.get("Text Field").get("@value").asText());
+    for (JsonNode property : template.get("required")) {
+      assertTrue(completed.has(property.asText()), "the completed instance lacks " + property.asText());
+    }
   }
 
   @Test

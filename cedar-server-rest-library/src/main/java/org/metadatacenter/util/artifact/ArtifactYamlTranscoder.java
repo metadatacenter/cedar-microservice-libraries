@@ -11,7 +11,6 @@ import org.metadatacenter.artifacts.model.core.TemplateSchemaArtifact;
 import org.metadatacenter.artifacts.model.reader.JsonArtifactReader;
 import org.metadatacenter.artifacts.model.reader.YamlArtifactReader;
 import org.metadatacenter.artifacts.model.renderer.JsonArtifactRenderer;
-import org.metadatacenter.artifacts.model.tools.InstanceInflater;
 import org.metadatacenter.artifacts.model.tools.YamlSerializer;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.util.json.JsonMapper;
@@ -174,17 +173,16 @@ public final class ArtifactYamlTranscoder {
       case TEMPLATE -> renderer.renderTemplateSchemaArtifact(reader.readTemplateSchemaArtifact(yamlMap));
       case ELEMENT -> renderer.renderElementSchemaArtifact(reader.readElementSchemaArtifact(yamlMap));
       case FIELD -> renderer.renderFieldSchemaArtifact(reader.readFieldSchemaArtifact(yamlMap));
-      case INSTANCE -> renderer.renderTemplateInstanceArtifact(
-          completed(reader.readTemplateInstanceArtifact(yamlMap), templateResolver));
+      case INSTANCE -> renderInstance(renderer, reader.readTemplateInstanceArtifact(yamlMap), templateResolver);
       default -> throw new IllegalArgumentException("YAML is not supported for resource type: " + resourceType);
     };
     return JsonMapper.STRICT_MAPPER.writeValueAsString(rendered);
   }
 
-  private static TemplateInstanceArtifact completed(TemplateInstanceArtifact instance,
-                                                    TemplateResolver templateResolver) throws IOException {
+  private static ObjectNode renderInstance(JsonArtifactRenderer renderer, TemplateInstanceArtifact instance,
+                                           TemplateResolver templateResolver) throws IOException {
     if (templateResolver == null) {
-      return instance;
+      return renderer.renderTemplateInstanceArtifact(instance);
     }
     String templateIri = instance.isBasedOn().toString();
     JsonNode template = templateResolver.templateFor(templateIri);
@@ -193,7 +191,7 @@ public final class ArtifactYamlTranscoder {
           "the template this instance says it isBasedOn can not be found: " + templateIri);
     }
     TemplateSchemaArtifact schema = new JsonArtifactReader().readTemplateSchemaArtifact((ObjectNode) template);
-    return InstanceInflater.inflate(schema, instance);
+    return renderer.renderTemplateInstanceArtifact(schema, instance);
   }
 
   /**
