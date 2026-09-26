@@ -33,7 +33,14 @@ class LinkHeaderUtilTest {
         Arguments.of(100L, 10, 90, 80L, null),
         Arguments.of(95L, 10, 90, 80L, null),
         Arguments.of(95L, 10, 80, 70L, 90L),
-        Arguments.of(7L, 3, 3, 0L, 6L)
+        Arguments.of(7L, 3, 3, 0L, 6L),
+        // An offset less than a limit in still has a previous page, which starts at the beginning.
+        Arguments.of(7L, 3, 2, 0L, 5L),
+        Arguments.of(100L, 10, 1, 0L, 11L),
+        Arguments.of(100L, 10, 5, 0L, 15L),
+        // An offset off the page grid steps back by a whole limit.
+        Arguments.of(100L, 10, 95, 85L, null),
+        Arguments.of(100L, 10, 17, 7L, 27L)
     );
   }
 
