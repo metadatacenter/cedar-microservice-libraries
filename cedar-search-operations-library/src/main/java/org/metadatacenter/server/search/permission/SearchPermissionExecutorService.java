@@ -23,10 +23,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
-public class SearchPermissionExecutorService {
+public class SearchPermissionExecutorService implements AutoCloseable {
 
   private static final Logger log = LoggerFactory.getLogger(SearchPermissionExecutorService.class);
+
+  private final ExecutorService projectionWorkers = Executors.newFixedThreadPool(8, runnable -> {
+    Thread thread = new Thread(runnable, "search-permission-projection");
+    thread.setDaemon(true);
+    return thread;
+  });
 
   private final FolderServiceSession folderSession;
   private final ResourcePermissionServiceSession permissionSession;
@@ -62,69 +74,127 @@ public class SearchPermissionExecutorService {
     this.cedarRequestContext = cedarRequestContext;
   }
 
-  // Main entry point
   public void handleEvent(SearchPermissionQueueEvent event) throws CedarProcessingException {
-    switch (event.getEventType()) {
-      case RESOURCE_MOVED:
-        updateOneArtifact(CedarUntypedArtifactId.build(event.getId()));
-        break;
-      case RESOURCE_PERMISSION_CHANGED:
-        updateOneArtifact(CedarUntypedArtifactId.build(event.getId()));
-        break;
-      case FOLDER_MOVED:
-        updateFolderRecursively(CedarFolderId.build(event.getId()));
-        break;
-      case FOLDER_PERMISSION_CHANGED:
-        updateFolderRecursively(CedarFolderId.build(event.getId()));
-        break;
-      case GROUP_MEMBERS_UPDATED:
-        updateAllByUpdatedGroup(CedarGroupId.build(event.getId()));
-        break;
-      case GROUP_DELETED:
-        updateAllByDeletedGroup(CedarGroupId.build(event.getId()));
-        break;
-    }
+    handleEvents(List.of(event));
   }
 
-  private void updateOneArtifact(CedarArtifactId artifactId) throws CedarProcessingException {
-    log.debug("Update one artifact:" + artifactId);
-    // upsertOnePermissions resolves the artifact itself, and removes the index document when the
-    // artifact no longer exists
-    upsertOnePermissions(Upsert.UPDATE, artifactId);
-  }
-
-  private void updateFolderRecursively(CedarFolderId folderId) throws CedarProcessingException {
-    log.debug("Update recursive folder:");
-    List<FileSystemResource> subtree = folderSession.findAllDescendantNodesById(folderId);
-    for (FileSystemResource n : subtree) {
-      upsertOnePermissions(Upsert.UPDATE, n.getResourceId());
-    }
-  }
-
-  private void updateAllByUpdatedGroup(CedarGroupId groupId) throws CedarProcessingException {
-    log.debug("Update all visible by group:");
-    List<FileSystemResource> collection = folderSession.findAllNodesVisibleByGroupId(groupId);
-    for (FileSystemResource n : collection) {
-      if (indexUtils.needsIndexing(n)) {
-        upsertOnePermissions(Upsert.UPDATE, n.getResourceId());
-      } else {
-        log.info("The resource was skipped from indexing:" + n.getId());
+  /** Events request a current graph projection, so overlapping targets need only one update. */
+  public void handleEvents(List<SearchPermissionQueueEvent> events) throws CedarProcessingException {
+    java.util.Map<String, CedarFilesystemResourceId> targets = new java.util.LinkedHashMap<>();
+    for (SearchPermissionQueueEvent event : events) {
+      switch (event.getEventType()) {
+        case RESOURCE_MOVED, RESOURCE_PERMISSION_CHANGED -> {
+          var id = CedarUntypedArtifactId.build(event.getId());
+          targets.putIfAbsent(id.getId(), id);
+        }
+        case FOLDER_MOVED, FOLDER_PERMISSION_CHANGED -> {
+          for (var resource : folderSession.findAllDescendantNodesById(CedarFolderId.build(event.getId()))) {
+            targets.putIfAbsent(resource.getId(), resource.getResourceId());
+          }
+        }
+        case GROUP_MEMBERS_UPDATED -> {
+          for (var resource : folderSession.findAllNodesVisibleByGroupId(CedarGroupId.build(event.getId()))) {
+            if (indexUtils.needsIndexing(resource)) targets.putIfAbsent(resource.getId(), resource.getResourceId());
+          }
+        }
+        case GROUP_DELETED -> {
+          for (String id : nodeSearchingService.findAllCedarIdsForGroup(CedarGroupId.build(event.getId()))) {
+            targets.putIfAbsent(id, CedarUntypedFilesystemResourceId.build(id));
+          }
+        }
       }
     }
+    if (targets.size() == 1) {
+      upsertOnePermissions(Upsert.UPDATE, targets.values().iterator().next());
+    } else {
+      projectResources(new ArrayList<>(targets.values()));
+    }
   }
 
-  private void updateAllByDeletedGroup(CedarGroupId groupId) throws CedarProcessingException {
-    log.debug("Update all visible by group:");
-    List<String> allCedarIdsForGroup = nodeSearchingService.findAllCedarIdsForGroup(groupId);
-    for (String cid : allCedarIdsForGroup) {
-      log.info("Need to update permissions for:" + cid);
-      upsertOnePermissions(Upsert.UPDATE, CedarUntypedFilesystemResourceId.build(cid));
+  /** Independent resources may run together, but the next event cannot overtake this one. */
+  private void projectResources(List<CedarFilesystemResourceId> resourceIds) throws CedarProcessingException {
+    List<CedarFilesystemResourceId> distinct = new ArrayList<>(new LinkedHashSet<>(resourceIds));
+    var completion = new java.util.concurrent.ExecutorCompletionService<NodeIndexingService.PermissionProjection>(projectionWorkers);
+    var pending = distinct.iterator();
+    java.util.Set<java.util.concurrent.Future<NodeIndexingService.PermissionProjection>> started = new java.util.HashSet<>();
+    List<NodeIndexingService.PermissionProjection> prepared = new ArrayList<>();
+    List<java.util.concurrent.Future<Void>> writes = new ArrayList<>();
+    int active = 0;
+    ExecutionException failure = null;
+    try {
+      while (pending.hasNext() || active > 0) {
+        while (failure == null && active < 8 && pending.hasNext()) {
+          var id = pending.next();
+          started.add(completion.submit(() -> projectOne(id, true)));
+          active++;
+        }
+        if (active == 0) break;
+        try {
+          var finished = completion.take();
+          started.remove(finished);
+          var projection = finished.get();
+          if (projection != null && failure == null) prepared.add(projection);
+          if (prepared.size() >= 128 && failure == null) {
+            submitPermissionBatches(prepared, writes);
+            prepared.clear();
+          }
+        } catch (ExecutionException e) {
+          if (failure == null) failure = e;
+        }
+        active--;
+      }
+      if (failure == null && !prepared.isEmpty()) {
+        try {
+          submitPermissionBatches(prepared, writes);
+        } catch (ExecutionException e) {
+          failure = e;
+        }
+      }
+      // A failed bulk must not let its still-running peers overwrite the next event's projection.
+      for (var write : writes) {
+        try {
+          write.get();
+        } catch (ExecutionException e) {
+          if (failure == null) failure = e;
+        }
+      }
+      if (failure != null) throw new CedarProcessingException(failure);
+    } catch (InterruptedException e) {
+      for (var future : started) future.cancel(true);
+      for (var write : writes) write.cancel(true);
+      Thread.currentThread().interrupt();
+      throw new CedarProcessingException(e);
     }
+  }
+
+  private void submitPermissionBatches(List<NodeIndexingService.PermissionProjection> prepared,
+      List<java.util.concurrent.Future<Void>> writes) throws InterruptedException, ExecutionException {
+    for (int offset = 0; offset < prepared.size(); offset += 32) {
+      if (writes.size() >= 4) {
+        writes.get(0).get();
+        writes.remove(0);
+      }
+      var batch = List.copyOf(prepared.subList(offset, Math.min(offset + 32, prepared.size())));
+      writes.add(projectionWorkers.submit(() -> {
+        nodeIndexingService.updatePermissionProjections(batch);
+        return null;
+      }));
+    }
+  }
+
+  @Override
+  public void close() throws InterruptedException {
+    projectionWorkers.shutdownNow();
+    projectionWorkers.awaitTermination(5, TimeUnit.SECONDS);
   }
 
   private void upsertOnePermissions(Upsert upsert, CedarFilesystemResourceId resourceId)
       throws CedarProcessingException {
-    log.debug("upsertOneDocument for permissions:" + upsert.getValue() + ":" + resourceId);
+    projectOne(resourceId, false);
+  }
+
+  private NodeIndexingService.PermissionProjection projectOne(CedarFilesystemResourceId resourceId, boolean prepare)
+      throws CedarProcessingException {
     FileSystemResource node = folderSession.findResourceById(resourceId);
     if (node == null) {
       // The resource is gone from the graph, so any document the index still holds for it is
@@ -133,16 +203,15 @@ public class SearchPermissionExecutorService {
       // which sources its work list from the index. Remove it instead.
       log.info("The resource no longer exists, removing it from the index:" + resourceId);
       nodeIndexingService.removeDocumentFromIndex(resourceId);
-      return;
+      return null;
     }
     CedarNodeMaterializedPermissions perm = permissionSession.getResourceMaterializedPermission(node);
     CedarNodeMaterializedCategories categories = null;
     if (node.getType() != CedarResourceType.FOLDER) {
       categories = categorySession.getArtifactMaterializedCategories(CedarUntypedArtifactId.build(resourceId.getId()));
     }
-    if (upsert == Upsert.UPDATE) {
-      nodeIndexingService.removeDocumentFromIndex(resourceId);
-    }
-    nodeIndexingService.indexDocument(node, perm, categories, cedarRequestContext);
+    if (prepare) return nodeIndexingService.preparePermissionProjection(node, perm, categories, cedarRequestContext);
+    nodeIndexingService.updatePermissionProjection(node, perm, categories, cedarRequestContext);
+    return null;
   }
 }

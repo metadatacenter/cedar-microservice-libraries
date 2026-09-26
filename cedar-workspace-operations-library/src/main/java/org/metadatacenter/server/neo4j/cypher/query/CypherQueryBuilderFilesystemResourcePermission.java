@@ -246,6 +246,31 @@ public class CypherQueryBuilderFilesystemResourcePermission extends AbstractCyph
     };
   }
 
+  /** Traverse ancestors once for every named role; avoid six separate materialization reads. */
+  public static String getMaterializedNamedRoles() {
+    return """
+        MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})
+          <-[:CONTAINS*0..]-(ancestor)
+        WITH DISTINCT ancestor
+        MATCH (principal)-[grant:OWNS|CANREAD|VIEWER_ROLE|EDITOR_ROLE|CANWRITE|MANAGER_ROLE]->(ancestor)
+        CALL {
+          WITH principal, grant
+          WITH principal, grant WHERE principal:User
+          RETURN principal._id AS id, false AS isGroup, type(grant) AS role
+          UNION
+          WITH principal, grant
+          MATCH (user:User)-[:MEMBEROF]->(principal:Group)
+          WHERE type(grant) <> 'OWNS'
+          RETURN user._id AS id, false AS isGroup, type(grant) AS role
+          UNION
+          WITH principal, grant
+          WITH principal, grant WHERE principal:Group AND type(grant) <> 'OWNS'
+          RETURN principal._id AS id, true AS isGroup, type(grant) AS role
+        }
+        RETURN DISTINCT id, isGroup, role
+        """;
+  }
+
   public static String getTransitiveEverybodyPermission() {
     return """
         MATCH

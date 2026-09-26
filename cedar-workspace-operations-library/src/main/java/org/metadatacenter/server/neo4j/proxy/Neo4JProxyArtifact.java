@@ -1,5 +1,7 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import org.metadatacenter.server.ArtifactGraphUpdateResult;
+
 import org.metadatacenter.server.neo4j.ArtifactRestoreTransaction;
 import org.metadatacenter.server.neo4j.VersionChainTransaction;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -95,19 +97,28 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     return executeWriteGetOne(q, FolderServerArtifact.class);
   }
 
-  FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, Map<NodeProperty, String> updateFields,
+  ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, Map<NodeProperty, String> updateFields,
       CedarUserId updatedBy, String restoreJobId) {
     if (restoreJobId == null) {
-      return updateArtifactById(artifactId, updateFields, updatedBy);
+      return ArtifactGraphUpdateResult.updated(updateArtifactById(artifactId, updateFields, updatedBy));
     }
     if (updateFields.containsKey(NodeProperty.PUBLICATION_STATUS)) initializeVersioning();
     return executeInWriteTransaction(tx -> {
       if (updateFields.containsKey(NodeProperty.PUBLICATION_STATUS)) {
         VersionChainTransaction.lock(tx);
-        if (!VersionChainTransaction.requirePublish(tx, artifactId.getId(), updateFields.get(NodeProperty.VERSION))) return null;
       }
-      if (!ArtifactRestoreTransaction.lockForGraph(tx, restoreJobId)) {
-        return null; // A relay has already restored it, or a newer write superseded this job.
+      var decision = ArtifactRestoreTransaction.graphDecision(tx, artifactId.getId(), restoreJobId);
+      if (decision != ArtifactRestoreTransaction.GraphDecision.READY) {
+        var outcome = switch (decision) {
+          case SUPERSEDED -> ArtifactGraphUpdateResult.Outcome.SUPERSEDED;
+          case RESTORED -> ArtifactGraphUpdateResult.Outcome.RESTORED;
+          default -> ArtifactGraphUpdateResult.Outcome.FAILED;
+        };
+        return new ArtifactGraphUpdateResult(null, outcome);
+      }
+      if (updateFields.containsKey(NodeProperty.PUBLICATION_STATUS)
+          && !VersionChainTransaction.requirePublish(tx, artifactId.getId(), updateFields.get(NodeProperty.VERSION))) {
+        return ArtifactGraphUpdateResult.updated(null);
       }
       FolderServerArtifact result = runInTransactionGetOne(tx, new CypherQueryWithParameters(
           CypherQueryBuilderArtifact.updateResourceById(updateFields),
@@ -117,7 +128,7 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
         if (updateFields.containsKey(NodeProperty.PUBLICATION_STATUS)) VersionChainTransaction.reconcile(tx,artifactId.getId());
         ArtifactRestoreTransaction.remove(tx, restoreJobId);
       }
-      return result;
+      return ArtifactGraphUpdateResult.updated(result);
     }, "updating an artifact and completing its compensation record");
   }
 

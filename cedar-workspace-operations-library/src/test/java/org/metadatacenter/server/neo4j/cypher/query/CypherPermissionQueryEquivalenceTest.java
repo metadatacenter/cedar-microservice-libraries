@@ -212,6 +212,51 @@ class CypherPermissionQueryEquivalenceTest {
   }
 
   @Test
+  void combinedMaterializationPreservesStrongestRolesForOwnersUsersAndGroupMembers() {
+    try (var session = driver.session()) {
+      session.run("""
+          CREATE (root:FileSystemResource {_id:'matrix-root'})-[:CONTAINS]->
+            (:FileSystemResource {_id:'matrix-child'})
+          CREATE (:User {_id:'matrix-owner'})-[:OWNS]->(root)
+          """).consume();
+      for (String role : List.of("CANREAD", "VIEWER_ROLE", "EDITOR_ROLE", "CANWRITE", "MANAGER_ROLE")) {
+        session.run("MATCH (root {_id:'matrix-root'}) "
+            + "CREATE (:User {_id:$user})-[:" + role + "]->(root) "
+            + "CREATE (:User {_id:$member})-[:MEMBEROF]->(g:Group {_id:$group}) "
+            + "CREATE (g)-[:" + role + "]->(root)",
+            Map.of("user", "matrix-user-" + role, "member", "matrix-member-" + role,
+                "group", "matrix-group-" + role)).consume();
+      }
+      session.run("MATCH (u:User {_id:'matrix-user-CANREAD'}), (r {_id:'matrix-child'}) "
+          + "CREATE (u)-[:MANAGER_ROLE]->(r)").consume();
+    }
+    for (String target : List.of(RESOURCE_ID, "resource-special-private", "matrix-child", "absent")) {
+      Map<String, Integer> expected = new java.util.HashMap<>();
+      var labels = List.of("CANREAD|VIEWER_ROLE", "EDITOR_ROLE", "CANWRITE|MANAGER_ROLE");
+      for (int strength = 0; strength < labels.size(); strength++) {
+        for (String id : strings(oldTransitiveUsers(labels.get(strength)), Map.of("fsResourceId", target))) {
+          expected.merge("user:" + id, strength, Math::max);
+        }
+        for (String id : strings(oldTransitiveGroups(labels.get(strength)), Map.of("fsResourceId", target))) {
+          expected.merge("group:" + id, strength, Math::max);
+        }
+      }
+      Map<String, Integer> actual = new java.util.HashMap<>();
+      for (var row : records(CypherQueryBuilderFilesystemResourcePermission.getMaterializedNamedRoles(),
+          Map.of("fsResourceId", target))) {
+          int strength = switch (row.get("role").asString()) {
+            case "CANREAD", "VIEWER_ROLE" -> 0;
+            case "EDITOR_ROLE" -> 1;
+            default -> 2;
+          };
+          actual.merge((row.get("isGroup").asBoolean() ? "group:" : "user:")
+              + row.get("id").asString(), strength, Math::max);
+      }
+      assertEquals(expected, actual, target);
+    }
+  }
+
+  @Test
   void transitiveGroupMaterializationOnlyRemovesDuplicateRows() {
     List<String> oldRows = strings(oldTransitiveGroups("CANREAD|VIEWER_ROLE"),
         Map.of("fsResourceId", RESOURCE_ID));

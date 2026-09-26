@@ -72,6 +72,10 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
     String lockQuery = "MERGE (:" + RELAY_LOCK_LABEL + " {name: $name})";
     try (Session session = driver.session()) {
       session.run(constraintQuery).consume();
+      session.run("CREATE INDEX cedar_search_permission_outbox_id IF NOT EXISTS "
+          + "FOR (e:" + LABEL + ") ON (e.outboxId)").consume();
+      session.run("CREATE INDEX cedar_search_permission_outbox_created_id IF NOT EXISTS "
+          + "FOR (e:" + LABEL + ") ON (e.createdAtTS, e.outboxId)").consume();
       session.run(lockQuery, Map.of("name", RELAY_LOCK_NAME)).consume();
       relayLockReady = true;
     }
@@ -108,25 +112,43 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
   @Override
   public List<Entry> pending(int limit) {
     ensureRelayLock();
+    String query = "MATCH (e:" + LABEL + ") "
+        + "WHERE e.createdAtTS IS NOT NULL AND e.outboxId IS NOT NULL "
+        + "AND e.resourceId IS NOT NULL AND e.eventType IN $validEventTypes "
+        + "WITH e ORDER BY e.createdAtTS, e.outboxId LIMIT $limit "
+        + "RETURN toString(e.outboxId) AS outboxId, toString(e.resourceId) AS resourceId, "
+        + "toString(e.eventType) AS eventType";
+    try (Session session = driver.session()) {
+      return session.writeTransaction(tx -> {
+        acquireRelayLock(tx);
+        List<Entry> entries = new ArrayList<>();
+        for (Record record : tx.run(query, Map.of("limit", limit, "validEventTypes", VALID_EVENT_TYPES)).list()) {
+          entryFromRecord(record).ifPresent(entries::add);
+        }
+        return entries;
+      });
+    }
+  }
+
+  @Override
+  public void quarantineMalformed() {
+    // Maintenance is independent of the relay mutex and runs at most once a minute per
+    // producer. Pending selection excludes malformed nodes, so they cannot block delivery.
     String quarantineQuery = "MATCH (e:" + LABEL + ") "
-        + "WHERE e.outboxId IS NULL OR e.resourceId IS NULL OR e.eventType IS NULL "
+        + "WHERE e.outboxId IS NULL OR e.resourceId IS NULL OR e.eventType IS NULL OR e.createdAtTS IS NULL "
         + "OR NOT e.eventType IN $validEventTypes "
         + "WITH e, CASE "
         + "WHEN e.outboxId IS NULL THEN 'missing outboxId' "
         + "WHEN e.resourceId IS NULL THEN 'missing resourceId' "
         + "WHEN e.eventType IS NULL THEN 'missing eventType' "
+        + "WHEN e.createdAtTS IS NULL THEN 'missing createdAtTS' "
         + "ELSE 'unknown eventType: ' + toString(e.eventType) END AS reason "
         + "SET e:" + DEAD_LETTER_LABEL + ", e.deadLetterReason = reason, "
         + "e.deadLetteredAtTS = $deadLetteredAtTS "
         + "REMOVE e:" + LABEL + " "
         + "RETURN coalesce(toString(e.outboxId), '<missing>') AS outboxId, reason";
-    String query = "MATCH (e:" + LABEL + ") "
-        + "RETURN toString(e.outboxId) AS outboxId, toString(e.resourceId) AS resourceId, "
-        + "toString(e.eventType) AS eventType "
-        + "ORDER BY e.createdAtTS, e.outboxId LIMIT $limit";
     try (Session session = driver.session()) {
-      return session.writeTransaction(tx -> {
-        acquireRelayLock(tx);
+      session.writeTransaction(tx -> {
         List<Record> quarantined = tx.run(quarantineQuery, Map.of(
             "validEventTypes", VALID_EVENT_TYPES,
             "deadLetteredAtTS", TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis()))).list();
@@ -137,11 +159,7 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
           log.error("Quarantined {} malformed search-permission outbox event(s): {}",
               descriptions.size(), descriptions);
         }
-        List<Entry> entries = new ArrayList<>();
-        for (Record record : tx.run(query, Map.of("limit", limit)).list()) {
-          entryFromRecord(record).ifPresent(entries::add);
-        }
-        return entries;
+        return null;
       });
     }
   }
@@ -160,10 +178,10 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
     }
     String eventTypeName = eventType.asString();
     if (!VALID_EVENT_TYPES.contains(eventTypeName)) {
-      // A malformed event committed after this transaction's quarantine pass will be parked by the
+      // A malformed event committed after the maintenance pass will be parked by the
       // next pass. Do not let that narrow race abort the valid entries already selected here.
       log.warn("Skipping search-permission outbox event {} with unknown event type {}; "
-          + "the next relay pass will quarantine it", outboxId.asString(), eventTypeName);
+          + "the next maintenance pass will quarantine it", outboxId.asString(), eventTypeName);
       return Optional.empty();
     }
     return Optional.of(new Entry(outboxId.asString(),
@@ -172,13 +190,16 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
   }
 
   @Override
-  public void remove(String outboxId) {
+  public void remove(List<String> outboxIds) {
+    if (outboxIds.isEmpty()) {
+      return;
+    }
     ensureRelayLock();
-    String query = "MATCH (e:" + LABEL + " {outboxId: $outboxId}) DELETE e";
+    String query = "UNWIND $outboxIds AS outboxId MATCH (e:" + LABEL + " {outboxId: outboxId}) DELETE e";
     try (Session session = driver.session()) {
       session.writeTransaction(tx -> {
         acquireRelayLock(tx);
-        tx.run(query, Map.of("outboxId", outboxId)).consume();
+        tx.run(query, Map.of("outboxIds", outboxIds)).consume();
         return null;
       });
     }

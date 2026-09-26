@@ -181,70 +181,10 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
         everybodyPermission = NodeSharePermission.NONE;
       }
 
-      List<CedarUserId> viewerUsers = new ArrayList<>();
-      List<CedarUserId> editorUsers = new ArrayList<>();
-      List<CedarUserId> managerUsers = new ArrayList<>();
-      List<CedarGroupId> viewerGroups = new ArrayList<>();
-      List<CedarGroupId> editorGroups = new ArrayList<>();
-      List<CedarGroupId> managerGroups = new ArrayList<>();
-
-      if (everybodyPermission == NodeSharePermission.WRITE) {
-        // A legacy exception. Preserve its current reach until the owner-review migration removes it.
-      } else if (everybodyPermission == NodeSharePermission.READ) {
-        // Viewer is supplied by Everyone; retain only more capable named grants in the index.
-      }
-      managerUsers = getUserIdsWithTransitiveRole(resourceId, ResourceRole.MANAGER);
-      managerGroups = getGroupIdsWithTransitiveRole(resourceId, ResourceRole.MANAGER);
-      editorUsers = getUserIdsWithTransitiveRole(resourceId, ResourceRole.EDITOR);
-      editorGroups = getGroupIdsWithTransitiveRole(resourceId, ResourceRole.EDITOR);
-      if (everybodyPermission == NodeSharePermission.NONE) {
-        viewerUsers = getUserIdsWithTransitiveRole(resourceId, ResourceRole.VIEWER);
-        viewerGroups = getGroupIdsWithTransitiveRole(resourceId, ResourceRole.VIEWER);
-      }
-
-      return buildMaterializedPermissions(resourceId, viewerUsers, editorUsers, managerUsers,
-          viewerGroups, editorGroups, managerGroups, everybodyPermission);
+      return proxies.permission().getMaterializedPermissions(resourceId, everybodyPermission);
     } else {
       return null;
     }
-  }
-
-  private CedarNodeMaterializedPermissions buildMaterializedPermissions(CedarFilesystemResourceId resourceId,
-                                                                        List<CedarUserId> viewerUsers,
-                                                                        List<CedarUserId> editorUsers,
-                                                                        List<CedarUserId> managerUsers,
-                                                                        List<CedarGroupId> viewerGroups,
-                                                                        List<CedarGroupId> editorGroups,
-                                                                        List<CedarGroupId> managerGroups,
-                                                                        NodeSharePermission everybodyPermission) {
-    CedarNodeMaterializedPermissions permissions = new CedarNodeMaterializedPermissions(resourceId, everybodyPermission);
-    addUserRoles(permissions, viewerUsers, ResourceRole.VIEWER);
-    addUserRoles(permissions, editorUsers, ResourceRole.EDITOR);
-    addUserRoles(permissions, managerUsers, ResourceRole.MANAGER);
-    addGroupRoles(permissions, viewerGroups, ResourceRole.VIEWER);
-    addGroupRoles(permissions, editorGroups, ResourceRole.EDITOR);
-    addGroupRoles(permissions, managerGroups, ResourceRole.MANAGER);
-    return permissions;
-  }
-
-  private void addUserRoles(CedarNodeMaterializedPermissions permissions, List<CedarUserId> users, ResourceRole role) {
-    for (CedarUserId userId : users) {
-      permissions.setUserRole(userId.getId(), ResourceRole.strongest(permissions.getUserRoles().get(userId.getId()), role));
-    }
-  }
-
-  private void addGroupRoles(CedarNodeMaterializedPermissions permissions, List<CedarGroupId> groups, ResourceRole role) {
-    for (CedarGroupId groupId : groups) {
-      permissions.setGroupRole(groupId.getId(), ResourceRole.strongest(permissions.getGroupRoles().get(groupId.getId()), role));
-    }
-  }
-
-  private List<CedarUserId> getUserIdsWithTransitiveRole(CedarFilesystemResourceId resourceId, ResourceRole role) {
-    return proxies.permission().getUserIdsWithTransitiveRoleOnResource(resourceId, role);
-  }
-
-  private List<CedarGroupId> getGroupIdsWithTransitiveRole(CedarFilesystemResourceId resourceId, ResourceRole role) {
-    return proxies.permission().getGroupIdsWithTransitiveRoleOnResource(resourceId, role);
   }
 
 }

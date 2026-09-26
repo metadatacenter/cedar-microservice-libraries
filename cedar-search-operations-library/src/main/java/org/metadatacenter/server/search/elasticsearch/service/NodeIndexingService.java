@@ -1,6 +1,7 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.bridge.PathInfoBuilder;
 import org.metadatacenter.config.CedarConfig;
@@ -232,6 +233,101 @@ public class NodeIndexingService extends AbstractIndexingService {
     IndexedDocumentId indexed = indexWorker.addToIndex(jsonResource, resource.getId());
     mirrorWrite(jsonResource, resource.getId());
     return indexed;
+  }
+
+  /**
+   * Permission and move events change graph-derived fields, not artifact content. Keep the
+   * existing content extraction in place; reconstruct it only if the canonical document is absent.
+   */
+  public void updatePermissionProjection(FileSystemResource resource, CedarNodeMaterializedPermissions permissions,
+                                        CedarNodeMaterializedCategories categories, CedarRequestContext requestContext)
+      throws CedarProcessingException {
+    var prepared = preparePermissionProjection(resource, permissions, categories, requestContext);
+    ObjectNode patch = prepared.patch();
+    if (!indexWorker.updatePermissionProjection(patch, resource.getId())) {
+      indexDocument(resource, permissions, categories, requestContext);
+      indexWorker.refreshIndex();
+      return;
+    }
+    // A rebuild's target may not have received this resource yet. In that case the mirror
+    // needs a complete document, and must register the live write just like an ordinary save.
+    mirror().ifPresent(worker -> {
+      try {
+        worker.removeLegacyFromIndex(resource.getResourceId());
+        if (!worker.updatePermissionProjection(patch, resource.getId())) {
+          worker.addToIndex(JsonMapper.STRICT_MAPPER.valueToTree(
+              createIndexDocument(resource, permissions, categories, requestContext, false)), resource.getId());
+        }
+        IndexRebuildRegistry.recordLiveWrite(resource.getId());
+      } catch (Exception e) {
+        log.error("The permission projection could not be mirrored into the index being rebuilt. Resource:"
+            + resource.getId(), e);
+      }
+    });
+  }
+
+  public record PermissionProjection(FileSystemResource resource, CedarNodeMaterializedPermissions permissions,
+                                     CedarNodeMaterializedCategories categories, CedarRequestContext context,
+                                     ObjectNode patch) {}
+
+  public PermissionProjection preparePermissionProjection(FileSystemResource resource,
+      CedarNodeMaterializedPermissions permissions, CedarNodeMaterializedCategories categories,
+      CedarRequestContext requestContext) throws CedarProcessingException {
+    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(requestContext);
+    resource.setPathInfo(PathInfoBuilder.getResourcePath(folderSession, resource));
+    IndexingDocumentDocument projection = new IndexingDocumentDocument(resource.getId());
+    projection.setInfo(FolderServerNodeInfo.fromNode(resource));
+    projection.setSummaryText(getSummaryText(resource));
+    projection.setMaterializedPermissions(permissions);
+    projection.setMaterializedCategories(categories);
+    ObjectNode patch = permissionProjectionFields(projection);
+
+    indexWorker.removeLegacyFromIndex(resource.getResourceId());
+    return new PermissionProjection(resource, permissions, categories, requestContext, patch);
+  }
+
+  /** Writes part of a durable batch; normal index refresh makes the accepted updates searchable. */
+  public void updatePermissionProjections(List<PermissionProjection> projections) throws CedarProcessingException {
+    java.util.Map<String, JsonNode> patches = new java.util.LinkedHashMap<>();
+    for (var projection : projections) patches.put(projection.resource().getId(), projection.patch());
+    var missing = indexWorker.updatePermissionProjections(patches);
+    for (var projection : projections) {
+      if (missing.contains(projection.resource().getId())) {
+        indexDocument(projection.resource(), projection.permissions(), projection.categories(), projection.context());
+      }
+    }
+    mirror().ifPresent(worker -> {
+      try {
+        java.util.Map<String, JsonNode> mirrored = new java.util.LinkedHashMap<>(patches);
+        missing.forEach(mirrored::remove); // Full reconstruction above already mirrored these.
+        for (var projection : projections) {
+          if (mirrored.containsKey(projection.resource().getId())) {
+            worker.removeLegacyFromIndex(projection.resource().getResourceId());
+          }
+        }
+        var absent = worker.updatePermissionProjections(mirrored);
+        for (var projection : projections) {
+          String id = projection.resource().getId();
+          if (absent.contains(id)) worker.addToIndex(JsonMapper.STRICT_MAPPER.valueToTree(
+              createIndexDocument(projection.resource(), projection.permissions(), projection.categories(),
+                  projection.context(), false)), id);
+          if (mirrored.containsKey(id)) IndexRebuildRegistry.recordLiveWrite(id);
+        }
+      } catch (Exception e) {
+        log.error("The permission batch could not be mirrored into the index being rebuilt", e);
+      }
+    });
+  }
+
+  static ObjectNode permissionProjectionFields(IndexingDocumentDocument projection) {
+    ObjectNode serialized = JsonMapper.STRICT_MAPPER.valueToTree(projection);
+    ObjectNode patch = JsonMapper.STRICT_MAPPER.createObjectNode();
+    for (String field : List.of("cid", "info", "summaryText", "users", "groups",
+        "computedEverybodyPermission", "categories")) {
+      // Explicit nulls clear old values even if the mapper omits a null property.
+      patch.set(field, serialized.get(field));
+    }
+    return patch;
   }
 
   public void indexBatch(List<IndexingDocumentDocument> currentBatch) throws CedarProcessingException {

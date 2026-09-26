@@ -8,6 +8,10 @@ import org.metadatacenter.search.IndexedDocumentType;
 import org.metadatacenter.search.IndexingDocumentDocument;
 import org.metadatacenter.server.search.IndexedDocumentId;
 import org.metadatacenter.util.json.JsonMapper;
+import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.update.UpdateRequest;
+import org.opensearch.script.Script;
+import org.opensearch.script.ScriptType;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.bulk.BulkResponse;
 import org.opensearch.action.delete.DeleteRequest;
@@ -16,6 +20,8 @@ import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.index.IndexResponse;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.RestHighLevelClient;
+import org.opensearch.client.core.CountRequest;
+import org.opensearch.client.core.CountResponse;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.index.query.QueryBuilders;
@@ -26,6 +32,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import static org.metadatacenter.constant.ElasticsearchConstants.DOCUMENT_CEDAR_ID;
 
@@ -104,6 +111,8 @@ public class ElasticsearchIndexingWorker {
    * by an older build, or by the batch path — is reachable only by a query over the cid field,
    * which sees just the refreshed segments. Doing both removes the resource whichever way it was
    * indexed, and confines the refresh race to documents that no current write path produces.
+   * The generated-id sweep first counts matching legacy documents, avoiding an empty bulk-by-scroll
+   * task on the normal stable-id path. Both legacy queries exclude the canonical id.
    */
   public long removeAllFromIndex(CedarFilesystemResourceId resourceId) throws CedarProcessingException {
     String cedarId = resourceId.getId();
@@ -117,10 +126,7 @@ public class ElasticsearchIndexingWorker {
         removedCount++;
       }
 
-      DeleteByQueryRequest byQueryRequest = new DeleteByQueryRequest(indexName);
-      byQueryRequest.setQuery(QueryBuilders.matchQuery(DOCUMENT_CEDAR_ID, cedarId));
-      BulkByScrollResponse byQueryResponse = client.deleteByQuery(byQueryRequest, RequestOptions.DEFAULT);
-      removedCount += byQueryResponse.getDeleted();
+      removedCount += removeLegacyFromIndex(resourceId);
 
       if (removedCount == 0) {
         // Either the resource was never indexed, or it is held under a backend-generated id
@@ -132,6 +138,107 @@ public class ElasticsearchIndexingWorker {
         log.debug("Removed " + removedCount + " documents of type " + documentType + " cid:" + cedarId + " from the " + indexName + " index");
       }
       return removedCount;
+    } catch (IOException e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
+  /** Removes generated-id copies without deleting the canonical document being updated. */
+  public long removeLegacyFromIndex(CedarFilesystemResourceId resourceId) throws CedarProcessingException {
+    String cedarId = resourceId.getId();
+    try {
+      // Current writers use stable ids. Avoid starting an empty scroll/bulk task on
+      // every event, but never mistake a partial shard response for no legacy copies.
+      var legacyQuery = QueryBuilders.boolQuery()
+          .filter(QueryBuilders.matchQuery(DOCUMENT_CEDAR_ID, cedarId))
+          .mustNot(QueryBuilders.idsQuery().addIds(cedarId));
+      CountResponse legacy = client.count(new CountRequest(indexName).query(legacyQuery), RequestOptions.DEFAULT);
+      if (legacy.getFailedShards() != 0) {
+        throw new CedarProcessingException("Could not inspect every shard for legacy documents of " + cedarId);
+      }
+      if (legacy.getCount() > 0) {
+        DeleteByQueryRequest byQueryRequest = new DeleteByQueryRequest(indexName);
+        byQueryRequest.setQuery(legacyQuery);
+        byQueryRequest.setRefresh(true);
+        BulkByScrollResponse byQueryResponse = client.deleteByQuery(byQueryRequest, RequestOptions.DEFAULT);
+        if (byQueryResponse.isTimedOut() || !byQueryResponse.getBulkFailures().isEmpty()
+            || !byQueryResponse.getSearchFailures().isEmpty() || byQueryResponse.getVersionConflicts() != 0) {
+          throw new CedarProcessingException("Legacy document removal was incomplete for " + cedarId);
+        }
+        return byQueryResponse.getDeleted();
+      }
+
+      return 0;
+    } catch (IOException e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
+  /**
+   * Replaces only graph-derived fields. A script replaces the complete info object rather than
+   * recursively merging it, so properties removed from the graph cannot survive in search.
+   * Returns false only for a missing document, which the caller must fully reconstruct.
+   */
+  public boolean updatePermissionProjection(JsonNode patch, String cedarId) throws CedarProcessingException {
+    try {
+      var response = client.update(permissionUpdate(patch, cedarId)
+              .setRefreshPolicy(org.opensearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE),
+          RequestOptions.DEFAULT);
+      if (response.status() != RestStatus.OK) {
+        throw new CedarProcessingException("Permission projection update failed for " + cedarId);
+      }
+      return true;
+    } catch (OpenSearchStatusException e) {
+      if (e.status() == RestStatus.NOT_FOUND) {
+        return false;
+      }
+      throw new CedarProcessingException(e);
+    } catch (IOException e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
+  private UpdateRequest permissionUpdate(JsonNode patch, String cedarId) {
+    Map<String, Object> fields = JsonMapper.STRICT_MAPPER.convertValue(patch, Map.class);
+    Script script = new Script(ScriptType.INLINE, "painless",
+        "for (entry in params.patch.entrySet()) { ctx._source[entry.getKey()] = entry.getValue(); }",
+        Map.of("patch", fields));
+    return new UpdateRequest(indexName, cedarId).script(script).retryOnConflict(3);
+  }
+
+  /** Returns only missing canonical IDs; every other failed item fails the durable batch. */
+  public java.util.Set<String> updatePermissionProjections(Map<String, JsonNode> patches)
+      throws CedarProcessingException {
+    if (patches.isEmpty()) return java.util.Set.of();
+    // OpenSearch durably accepts each write before acknowledgement. Its periodic refresh
+    // makes batches searchable without stopping the consumer for competing segment flushes.
+    BulkRequest request = new BulkRequest();
+    patches.forEach((id, patch) -> request.add(permissionUpdate(patch, id)));
+    try {
+      BulkResponse response = client.bulk(request, RequestOptions.DEFAULT);
+      if (response.getItems().length != patches.size()) {
+        throw new CedarProcessingException("Incomplete permission bulk response");
+      }
+      java.util.Set<String> missing = new java.util.HashSet<>();
+      for (var item : response.getItems()) {
+        if (item.isFailed()) {
+          if (item.status() == RestStatus.NOT_FOUND) missing.add(item.getId());
+          else throw new CedarProcessingException("Permission projection failed for " + item.getId()
+              + ": " + item.getFailureMessage());
+        }
+      }
+      return missing;
+    } catch (IOException e) {
+      throw new CedarProcessingException(e);
+    }
+  }
+
+  /** Completes visibility after reconstructing a missing permission projection in full. */
+  public void refreshIndex() throws CedarProcessingException {
+    try {
+      var response = client.indices().refresh(
+          new org.opensearch.action.admin.indices.refresh.RefreshRequest(indexName), RequestOptions.DEFAULT);
+      if (response.getFailedShards() != 0) throw new CedarProcessingException("Permission refresh failed for " + indexName);
     } catch (IOException e) {
       throw new CedarProcessingException(e);
     }
