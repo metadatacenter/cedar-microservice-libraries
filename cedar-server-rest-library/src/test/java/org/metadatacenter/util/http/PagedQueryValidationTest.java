@@ -393,6 +393,55 @@ class PagedQueryValidationTest {
     assertEquals(value, error.getErrorPack().getParameters().get(parameter));
   }
 
+  @Test
+  void fixedSizeQueryUsesItsOwnDefaultAndCarriesNoConfiguration() throws Exception {
+    PagedQuery query = new PagedQuery(40, 200);
+
+    query.validate();
+
+    assertEquals(40, query.getLimit());
+    assertEquals(0, query.getOffset());
+    assertNull(query.getPaginationConfig());
+  }
+
+  @Test
+  void fixedSizeQueryRefusesALimitAboveItsMaximum() {
+    PagedQuery query = new PagedQuery(40, 200).limit(Optional.of(201));
+
+    CedarAssertionException error = assertThrows(CedarAssertionException.class, query::validate);
+
+    assertBadRequest(error);
+    assertEquals(201, error.getErrorPack().getParameters().get("limit"));
+  }
+
+  @Test
+  void maximumOffsetAdmitsTheBoundItself() throws Exception {
+    PagedQuery query = new PagedQuery(40, 200).offset(Optional.of(10_000)).maxOffset(10_000);
+
+    query.validate();
+
+    assertEquals(10_000, query.getOffset());
+  }
+
+  @Test
+  void maximumOffsetRefusesAnOffsetBeyondIt() {
+    PagedQuery query = new PagedQuery(40, 200).offset(Optional.of(10_001)).maxOffset(10_000);
+
+    CedarAssertionException error = assertThrows(CedarAssertionException.class, query::validate);
+
+    assertBadRequest(error);
+    assertEquals(10_001, error.getErrorPack().getParameters().get("offset"));
+  }
+
+  @Test
+  void anOffsetIsUnboundedWhenNoMaximumIsSet() throws Exception {
+    PagedQuery query = new PagedQuery(config).offset(Optional.of(1_000_000));
+
+    query.validate();
+
+    assertEquals(1_000_000, query.getOffset());
+  }
+
   private static void assertBadRequest(CedarAssertionException error) {
     assertEquals(CedarResponseStatus.BAD_REQUEST, error.getErrorPack().getStatus());
   }
