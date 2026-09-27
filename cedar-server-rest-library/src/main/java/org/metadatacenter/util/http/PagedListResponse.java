@@ -78,6 +78,7 @@ public abstract class PagedListResponse {
   }
 
   /** The limit and offset a page was served with. */
+  @Schema(description = "The page that was asked for, after defaults were applied")
   public record PageRequest(int limit, int offset) {
   }
 }

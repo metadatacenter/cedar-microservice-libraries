@@ -1,7 +1,8 @@
 package org.metadatacenter.server.search.extraction;
 
+import org.metadatacenter.util.json.JsonMapper;
+
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.server.search.extraction.model.TemplateNode;
@@ -44,7 +45,7 @@ public class TemplateContentExtractor {
   public List<TemplateNode> getTemplateNodes(JsonNode node, CedarResourceType resourceType) throws CedarProcessingException {
     // If it's a field, we nest it in a JsonNode to make the getSchemaNodes method work
     if (resourceType.equals(CedarResourceType.FIELD)) {
-      node = new ObjectMapper().createObjectNode().set("field", node);
+      node = JsonMapper.TOLERANT_MAPPER.createObjectNode().set("field", node);
     }
     return getTemplateNodes(node, null, null);
   }
