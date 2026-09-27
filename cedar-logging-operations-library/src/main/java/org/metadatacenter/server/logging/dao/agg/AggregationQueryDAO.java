@@ -41,13 +41,19 @@ public class AggregationQueryDAO extends AbstractDAO<AggRequestHourly> {
   // ---- endpoints ---------------------------------------------------------------------------------
 
   public List<EndpointStat> endpointBreakdown(Instant from, Instant to, int limit) {
+    return endpointBreakdown(from, to, limit, 0);
+  }
+
+  /** A page of endpoints by request volume. The grouping columns break ties, so pages are stable. */
+  public List<EndpointStat> endpointBreakdown(Instant from, Instant to, int limit, int offset) {
     String sql = "SELECT systemComponentName, className, methodName, httpMethod, "
         + "SUM(reqCount), SUM(errorCount), MAX(maxHandlerNanos), " + SUM_H + " "
         + "FROM agg_request_hourly WHERE hourUtc >= :from AND hourUtc < :to "
         + "GROUP BY systemComponentName, className, methodName, httpMethod "
-        + "ORDER BY SUM(reqCount) DESC LIMIT :lim";
+        + "ORDER BY SUM(reqCount) DESC, systemComponentName, className, methodName, httpMethod "
+        + "LIMIT :lim OFFSET :off";
     List<EndpointStat> out = new ArrayList<>();
-    for (Object[] r : rows(sql, from, to, limit)) {
+    for (Object[] r : rows(sql, from, to, limit, offset)) {
       long[] h = readHist(r, 7);
       out.add(new EndpointStat(str(r[0]), str(r[1]), str(r[2]), str(r[3]), num(r[4]), num(r[5]),
           LatencyHistogram.percentileNanos(h, 0.50), LatencyHistogram.percentileNanos(h, 0.95),
@@ -59,6 +65,11 @@ public class AggregationQueryDAO extends AbstractDAO<AggRequestHourly> {
   // ---- cypher ------------------------------------------------------------------------------------
 
   public List<CypherStat> cypherBreakdown(Instant from, Instant to, int limit) {
+    return cypherBreakdown(from, to, limit, 0);
+  }
+
+  /** A page of Cypher statements by execution count, with the grouping columns breaking ties. */
+  public List<CypherStat> cypherBreakdown(Instant from, Instant to, int limit, int offset) {
     String sql = "SELECT c.operation, c.runnableHash, SUM(c.execCount), MAX(c.maxNanos), "
         + sumHPrefixed("c")
         // MAX, not ANY_VALUE: the log DB is MariaDB, which has never implemented ANY_VALUE.
@@ -68,9 +79,10 @@ public class AggregationQueryDAO extends AbstractDAO<AggRequestHourly> {
         + ", MAX(LEFT(cat.runnableSample, 2000)) "
         + "FROM agg_cypher_hourly c LEFT JOIN agg_cypher_query_catalog cat ON cat.runnableHash = c.runnableHash "
         + "WHERE c.hourUtc >= :from AND c.hourUtc < :to "
-        + "GROUP BY c.operation, c.runnableHash ORDER BY SUM(c.execCount) DESC LIMIT :lim";
+        + "GROUP BY c.operation, c.runnableHash ORDER BY SUM(c.execCount) DESC, c.operation, c.runnableHash "
+        + "LIMIT :lim OFFSET :off";
     List<CypherStat> out = new ArrayList<>();
-    for (Object[] r : rows(sql, from, to, limit)) {
+    for (Object[] r : rows(sql, from, to, limit, offset)) {
       long[] h = readHist(r, 4);
       String sample = str(r[4 + NB]);
       out.add(new CypherStat(str(r[0]), str(r[1]), sample, num(r[2]),
@@ -83,14 +95,40 @@ public class AggregationQueryDAO extends AbstractDAO<AggRequestHourly> {
   // ---- users / keys ------------------------------------------------------------------------------
 
   public List<UserStat> userBreakdown(Instant from, Instant to, int limit) {
+    return userBreakdown(from, to, limit, 0);
+  }
+
+  /** A page of callers by request volume, with the grouping columns breaking ties. */
+  public List<UserStat> userBreakdown(Instant from, Instant to, int limit, int offset) {
     String sql = "SELECT userId, authSource, apiKeyHash, SUM(reqCount), SUM(errorCount) "
         + "FROM agg_request_user_hourly WHERE hourUtc >= :from AND hourUtc < :to "
-        + "GROUP BY userId, authSource, apiKeyHash ORDER BY SUM(reqCount) DESC LIMIT :lim";
+        + "GROUP BY userId, authSource, apiKeyHash ORDER BY SUM(reqCount) DESC, userId, authSource, apiKeyHash "
+        + "LIMIT :lim OFFSET :off";
     List<UserStat> out = new ArrayList<>();
-    for (Object[] r : rows(sql, from, to, limit)) {
+    for (Object[] r : rows(sql, from, to, limit, offset)) {
       out.add(new UserStat(str(r[0]), str(r[1]), str(r[2]), num(r[3]), num(r[4])));
     }
     return out;
+  }
+
+  // ---- counts ------------------------------------------------------------------------------------
+
+  /** How many distinct endpoints the range covers: the total behind {@link #endpointBreakdown}. */
+  public long countEndpoints(Instant from, Instant to) {
+    return count("SELECT COUNT(*) FROM (SELECT 1 FROM agg_request_hourly WHERE hourUtc >= :from AND hourUtc < :to "
+        + "GROUP BY systemComponentName, className, methodName, httpMethod) g", from, to);
+  }
+
+  /** How many distinct Cypher statements the range covers: the total behind {@link #cypherBreakdown}. */
+  public long countCypherStatements(Instant from, Instant to) {
+    return count("SELECT COUNT(*) FROM (SELECT 1 FROM agg_cypher_hourly WHERE hourUtc >= :from AND hourUtc < :to "
+        + "GROUP BY operation, runnableHash) g", from, to);
+  }
+
+  /** How many distinct callers the range covers: the total behind {@link #userBreakdown}. */
+  public long countUsers(Instant from, Instant to) {
+    return count("SELECT COUNT(*) FROM (SELECT 1 FROM agg_request_user_hourly WHERE hourUtc >= :from AND hourUtc < :to "
+        + "GROUP BY userId, authSource, apiKeyHash) g", from, to);
   }
 
   // ---- volume series -----------------------------------------------------------------------------
@@ -123,14 +161,28 @@ public class AggregationQueryDAO extends AbstractDAO<AggRequestHourly> {
 
   // ---- helpers -----------------------------------------------------------------------------------
 
-  @SuppressWarnings("unchecked")
   private List<Object[]> rows(String sql, Instant from, Instant to, int limit) {
+    return rows(sql, from, to, limit, 0);
+  }
+
+  @SuppressWarnings("unchecked")
+  private List<Object[]> rows(String sql, Instant from, Instant to, int limit, int offset) {
     var q = currentSession().createNativeQuery(sql)
         .setParameter("from", Timestamp.from(from)).setParameter("to", Timestamp.from(to));
     if (sql.contains(":lim")) {
       q.setParameter("lim", limit);
     }
+    if (sql.contains(":off")) {
+      q.setParameter("off", offset);
+    }
     return q.getResultList();
+  }
+
+  private long count(String sql, Instant from, Instant to) {
+    Object result = currentSession().createNativeQuery(sql)
+        .setParameter("from", Timestamp.from(from)).setParameter("to", Timestamp.from(to))
+        .getSingleResult();
+    return num(result);
   }
 
   private static String sumHPrefixed(String alias) {

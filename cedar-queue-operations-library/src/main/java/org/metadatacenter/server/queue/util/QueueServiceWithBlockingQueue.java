@@ -71,6 +71,18 @@ public abstract class QueueServiceWithBlockingQueue extends QueueService {
     return List.of();
   }
 
+  /** Claims a bounded, immediately available batch; every payload remains in the processing list. */
+  public List<String> claimAvailableMessages(int limit) {
+    if (limit < 0 || limit > 512) throw new IllegalArgumentException("Claim limit must be between 0 and 512");
+    List<String> messages = new java.util.ArrayList<>();
+    for (int i = 0; i < limit; i++) {
+      String message = moveHeadToTail(blockingQueue, queueName, processingQueueName);
+      if (message == null) break;
+      messages.add(message);
+    }
+    return messages;
+  }
+
   /** A shutdown interrupts this thread, and the interrupt is preserved for the caller's loop. */
   private void awaitNextClaim() {
     try {

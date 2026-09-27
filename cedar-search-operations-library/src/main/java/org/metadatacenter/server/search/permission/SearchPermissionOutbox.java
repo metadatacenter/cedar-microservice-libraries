@@ -13,7 +13,9 @@ interface SearchPermissionOutbox extends AutoCloseable {
 
   List<Entry> pending(int limit);
 
-  void remove(String outboxId);
+  void remove(List<String> outboxIds);
+
+  void quarantineMalformed();
 
   long count();
 

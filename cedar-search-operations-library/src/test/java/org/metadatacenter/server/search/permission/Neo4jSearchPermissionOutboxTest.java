@@ -9,6 +9,8 @@ import org.neo4j.driver.Record;
 import org.neo4j.driver.Values;
 import org.neo4j.harness.Neo4jBuilders;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -36,7 +38,7 @@ class Neo4jSearchPermissionOutboxTest {
         assertEquals(SearchPermissionQueueEventType.RESOURCE_PERMISSION_CHANGED,
             pending.get(0).event().getEventType());
 
-        restarted.remove(outboxId);
+        restarted.remove(List.of(outboxId));
         assertEquals(0, restarted.count());
       }
     }
@@ -63,6 +65,8 @@ class Neo4jSearchPermissionOutboxTest {
             "resource-valid", SearchPermissionQueueEventType.RESOURCE_PERMISSION_CHANGED));
 
         var pending = outbox.pending(100);
+        assertEquals(3, outbox.count(), "relay reads must not run the full quarantine scan");
+        outbox.quarantineMalformed();
 
         assertEquals(1, pending.size());
         assertEquals(validId, pending.get(0).outboxId());
@@ -94,6 +98,44 @@ class Neo4jSearchPermissionOutboxTest {
         assertEquals(2, reasons, "each quarantined entry should explain when and why it was parked");
         assertEquals(1, relayLocks, "relay scans and acknowledgements must share a database mutex");
       }
+    }
+  }
+
+  @Test
+  void batchAcknowledgementPreservesNewEventsAndDoesNotBlockAppendOnTheRelayLock() throws Exception {
+    try (var neo4j = Neo4jBuilders.newInProcessBuilder().withDisabledServer().build();
+         var driver = GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none());
+         var outbox = new Neo4jSearchPermissionOutbox(driver)) {
+      String first = outbox.append(new SearchPermissionQueueEvent(
+          "resource-1", SearchPermissionQueueEventType.RESOURCE_MOVED));
+      String second = outbox.append(new SearchPermissionQueueEvent(
+          "resource-2", SearchPermissionQueueEventType.RESOURCE_MOVED));
+      assertEquals(2, outbox.pending(100).size());
+      try (var session = driver.session()) {
+        session.run("CALL db.awaitIndexes(30)").consume();
+        var indexes = session.run("SHOW INDEXES YIELD name, state WHERE name STARTS WITH "
+            + "'cedar_search_permission_outbox_' RETURN name, state").list();
+        assertTrue(indexes.stream().anyMatch(r -> r.get("name").asString().equals(
+            "cedar_search_permission_outbox_id") && r.get("state").asString().equals("ONLINE")));
+        assertTrue(indexes.stream().anyMatch(r -> r.get("name").asString().equals(
+            "cedar_search_permission_outbox_created_id") && r.get("state").asString().equals("ONLINE")));
+        try (var tx = session.beginTransaction()) {
+          tx.run("MATCH (lock:CedarSearchPermissionOutboxRelayLock) SET lock.version = 42").consume();
+          var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+          try {
+            executor.submit(() -> outbox.append(new SearchPermissionQueueEvent(
+                "resource-new", SearchPermissionQueueEventType.RESOURCE_MOVED)))
+                .get(3, java.util.concurrent.TimeUnit.SECONDS);
+          } finally {
+            executor.shutdownNow();
+          }
+          tx.commit();
+        }
+      }
+      outbox.remove(List.of(first, second));
+      outbox.remove(List.of(first, second)); // Another process may acknowledge the same batch.
+      assertEquals(1, outbox.count());
+      assertEquals("resource-new", outbox.pending(100).get(0).event().getId());
     }
   }
 

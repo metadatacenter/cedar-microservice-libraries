@@ -57,8 +57,11 @@ public final class LinkHeaderUtil {
     URI first = createOnePagingLink(baseUrl, 0, limit);
     ret.put(HttpConstants.HEADER_LINK_TYPE_FIRST, first.toString());
 
-    if (offset - limit >= 0) {
-      URI prev = createOnePagingLink(baseUrl, offset - limit, limit);
+    // Any page but the first has a previous one. It starts a limit earlier, or at the beginning when
+    // this page starts less than a limit in: requiring offset >= limit left an offset of 2 with a
+    // limit of 3 with no way back to offset 0.
+    if (offset > 0) {
+      URI prev = createOnePagingLink(baseUrl, Math.max(0, offset - limit), limit);
       ret.put(HttpConstants.HEADER_LINK_TYPE_PREV, prev.toString());
     }
 

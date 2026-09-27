@@ -20,6 +20,7 @@ import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFilesy
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFilesystemResourcePermission;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
+import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
 import org.metadatacenter.server.security.model.auth.CedarNodeGroupPermission;
 import org.metadatacenter.server.security.model.auth.CedarNodePermissionsWithExtract;
 import org.metadatacenter.server.security.model.auth.CedarNodeUserPermission;
@@ -307,6 +308,31 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
     CypherParameters params = CypherParamBuilderFilesystemResource.matchFilesystemResource(resourceId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetIdList(q, CedarGroupId.class);
+  }
+
+  CedarNodeMaterializedPermissions getMaterializedPermissions(
+      CedarFilesystemResourceId resourceId, NodeSharePermission everybodyPermission) {
+    var permissions = new CedarNodeMaterializedPermissions(
+        resourceId, everybodyPermission);
+    var query = new CypherQueryWithParameters(
+        CypherQueryBuilderFilesystemResourcePermission.getMaterializedNamedRoles(),
+        CypherParamBuilderFilesystemResource.matchFilesystemResource(resourceId));
+    for (Record row : executeInReadTransaction(tx -> run(tx, query).list(), "materializing named permissions")) {
+      ResourceRole role = switch (row.get("role").asString()) {
+        case "CANREAD", "VIEWER_ROLE" -> ResourceRole.VIEWER;
+        case "EDITOR_ROLE" -> ResourceRole.EDITOR;
+        case "OWNS", "CANWRITE", "MANAGER_ROLE" -> ResourceRole.MANAGER;
+        default -> throw new IllegalStateException("Unknown materialized grant role");
+      };
+      if (role == ResourceRole.VIEWER && everybodyPermission != NodeSharePermission.NONE) continue;
+      String id = row.get("id").asString();
+      if (row.get("isGroup").asBoolean()) {
+        permissions.setGroupRole(id, ResourceRole.strongest(permissions.getGroupRoles().get(id), role));
+      } else {
+        permissions.setUserRole(id, ResourceRole.strongest(permissions.getUserRoles().get(id), role));
+      }
+    }
+    return permissions;
   }
 
   public NodeSharePermission getTransitiveEverybodyPermission(CedarFilesystemResourceId resourceId) {

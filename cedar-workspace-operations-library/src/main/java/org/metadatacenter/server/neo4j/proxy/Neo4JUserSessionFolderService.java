@@ -1,5 +1,7 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import org.metadatacenter.server.ArtifactGraphUpdateResult;
+
 import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.*;
@@ -76,7 +78,7 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
+  public ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
       Map<NodeProperty, String> updateFields, String restoreJobId) {
     return proxies.artifact().updateArtifactById(artifactId, updateFields, cu.getResourceId(), restoreJobId);
   }

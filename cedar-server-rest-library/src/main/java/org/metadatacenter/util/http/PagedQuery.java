@@ -12,12 +12,29 @@ public class PagedQuery {
   private Optional<Integer> offsetInput;
 
   private final PaginationConfig config;
+  private final int defaultPageSize;
+  private final int maxPageSize;
+  private Integer maxOffset;
   private int limit;
   private int offset;
 
 
   public PagedQuery(PaginationConfig config) {
     this.config = config;
+    this.defaultPageSize = config.getDefaultPageSize();
+    this.maxPageSize = config.getMaxPageSize();
+    this.limitInput = Optional.empty();
+    this.offsetInput = Optional.empty();
+  }
+
+  /**
+   * A query whose page sizes are fixed by the route rather than read from the shared configuration.
+   * {@link #getPaginationConfig()} answers null for such a query.
+   */
+  public PagedQuery(int defaultPageSize, int maxPageSize) {
+    this.config = null;
+    this.defaultPageSize = defaultPageSize;
+    this.maxPageSize = maxPageSize;
     this.limitInput = Optional.empty();
     this.offsetInput = Optional.empty();
   }
@@ -29,6 +46,12 @@ public class PagedQuery {
 
   public PagedQuery offset(Optional<Integer> offsetInput) {
     this.offsetInput = offsetInput;
+    return this;
+  }
+
+  /** Refuses an offset beyond this one, for a listing whose deep pages are too costly to serve. */
+  public PagedQuery maxOffset(int maxOffset) {
+    this.maxOffset = maxOffset;
     return this;
   }
 
@@ -50,8 +73,8 @@ public class PagedQuery {
   }
 
   protected void validateLimit() throws CedarException {
-    int limitDefault = config.getDefaultPageSize();
-    int limitMax = config.getMaxPageSize();
+    int limitDefault = defaultPageSize;
+    int limitMax = maxPageSize;
     limit = limitDefault;
     if (limitInput.isPresent()) {
       limit = limitInput.get();
@@ -75,6 +98,10 @@ public class PagedQuery {
             .parameter("offset", offsetInput.get()).badRequest();
       }
       offset = offsetInput.get();
+      if (maxOffset != null && offset > maxOffset) {
+        throw new CedarAssertionException("You should specify an offset no larger than " + maxOffset + "!")
+            .parameter("offset", offset).badRequest();
+      }
     }
   }
 

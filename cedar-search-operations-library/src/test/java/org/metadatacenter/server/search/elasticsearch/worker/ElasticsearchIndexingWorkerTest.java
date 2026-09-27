@@ -16,6 +16,8 @@ import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.index.IndexResponse;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.RestHighLevelClient;
+import org.opensearch.client.core.CountRequest;
+import org.opensearch.client.core.CountResponse;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.index.reindex.BulkByScrollResponse;
 import org.opensearch.index.reindex.DeleteByQueryRequest;
@@ -156,6 +158,7 @@ class ElasticsearchIndexingWorkerTest {
     verify(client).delete(request.capture(), any(RequestOptions.class));
     assertEquals("resource-1", request.getValue().id());
     assertEquals(1, removed, "the delete by id counts, even though the query matched nothing");
+    verify(client, never()).deleteByQuery(any(), any());
   }
 
   /** Documents an older build wrote under a generated id are still reachable only by query. */
@@ -167,6 +170,11 @@ class ElasticsearchIndexingWorkerTest {
     long removed = worker.removeAllFromIndex(CedarUntypedFilesystemResourceId.build("resource-1"));
 
     assertEquals(3, removed, "a resource absent under its own id is still swept by the query");
+    ArgumentCaptor<DeleteByQueryRequest> request = ArgumentCaptor.forClass(DeleteByQueryRequest.class);
+    verify(client).deleteByQuery(request.capture(), any());
+    var query = JsonMapper.STRICT_MAPPER.readTree(request.getValue().getSearchRequest().source().query().toString());
+    assertEquals("resource-1", query.path("bool").path("must_not").get(0)
+        .path("ids").path("values").get(0).asText(), "legacy cleanup must exclude the current document");
   }
 
   @Test
@@ -175,6 +183,28 @@ class ElasticsearchIndexingWorkerTest {
     stubDeleteByQueryDeleted(0);
 
     assertEquals(0, worker.removeAllFromIndex(CedarUntypedFilesystemResourceId.build("resource-1")));
+  }
+
+  @Test
+  void failedLegacyInspectionEscapesForRetryInsteadOfSkippingOldPermissions() throws Exception {
+    stubDeleteResponse(RestStatus.OK);
+    CountResponse response = mock(CountResponse.class);
+    when(response.getFailedShards()).thenReturn(1);
+    when(client.count(any(), any())).thenReturn(response);
+    assertThrows(CedarProcessingException.class,
+        () -> worker.removeAllFromIndex(CedarUntypedFilesystemResourceId.build("resource-1")));
+    verify(client, never()).deleteByQuery(any(), any());
+  }
+
+  @Test
+  void incompleteLegacyRemovalEscapesForRetry() throws Exception {
+    stubDeleteResponse(RestStatus.OK);
+    stubDeleteByQueryDeleted(2);
+    BulkByScrollResponse response = mock(BulkByScrollResponse.class);
+    when(response.isTimedOut()).thenReturn(true);
+    when(client.deleteByQuery(any(), any())).thenReturn(response);
+    assertThrows(CedarProcessingException.class,
+        () -> worker.removeAllFromIndex(CedarUntypedFilesystemResourceId.build("resource-1")));
   }
 
   private void stubIndexResponse(RestStatus status, String id) throws IOException {
@@ -191,8 +221,44 @@ class ElasticsearchIndexingWorkerTest {
   }
 
   private void stubDeleteByQueryDeleted(long deleted) throws IOException {
+    CountResponse count = mock(CountResponse.class);
+    when(count.getCount()).thenReturn(deleted);
+    when(client.count(any(CountRequest.class), any(RequestOptions.class))).thenReturn(count);
     BulkByScrollResponse response = mock(BulkByScrollResponse.class);
     when(response.getDeleted()).thenReturn(deleted);
     when(client.deleteByQuery(any(DeleteByQueryRequest.class), any(RequestOptions.class))).thenReturn(response);
   }
+  @Test
+  void permissionBulkRequiresEveryResultAndOnlyTreatsNotFoundAsMissing() throws Exception {
+    var response = mock(BulkResponse.class);
+    var success = mock(org.opensearch.action.bulk.BulkItemResponse.class);
+    var missing = mock(org.opensearch.action.bulk.BulkItemResponse.class);
+    when(missing.isFailed()).thenReturn(true);
+    when(missing.status()).thenReturn(RestStatus.NOT_FOUND);
+    when(missing.getId()).thenReturn("missing");
+    when(response.getItems()).thenReturn(new org.opensearch.action.bulk.BulkItemResponse[]{success, missing});
+    when(client.bulk(any(BulkRequest.class), any(RequestOptions.class))).thenReturn(response);
+    var patch = JsonMapper.STRICT_MAPPER.createObjectNode().put("summaryText", "summary");
+    var patches = java.util.Map.<String, com.fasterxml.jackson.databind.JsonNode>of("present", patch, "missing", patch);
+    assertEquals(java.util.Set.of("missing"), worker.updatePermissionProjections(patches));
+    var sent = ArgumentCaptor.forClass(BulkRequest.class);
+    verify(client).bulk(sent.capture(), any(RequestOptions.class));
+    assertEquals(org.opensearch.action.support.WriteRequest.RefreshPolicy.NONE, sent.getValue().getRefreshPolicy());
+    when(missing.status()).thenReturn(RestStatus.BAD_REQUEST);
+    assertThrows(CedarProcessingException.class, () -> worker.updatePermissionProjections(patches));
+    when(response.getItems()).thenReturn(new org.opensearch.action.bulk.BulkItemResponse[]{success});
+    assertThrows(CedarProcessingException.class, () -> worker.updatePermissionProjections(patches));
+  }
+
+  @Test
+  void singlePermissionUpdateIsSearchableBeforeItIsAcknowledged() throws Exception {
+    var response = mock(org.opensearch.action.update.UpdateResponse.class);
+    when(response.status()).thenReturn(RestStatus.OK);
+    when(client.update(any(), any())).thenReturn(response);
+    assertTrue(worker.updatePermissionProjection(JsonMapper.STRICT_MAPPER.createObjectNode(), "resource"));
+    var sent = ArgumentCaptor.forClass(org.opensearch.action.update.UpdateRequest.class);
+    verify(client).update(sent.capture(), any(RequestOptions.class));
+    assertEquals(org.opensearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE, sent.getValue().getRefreshPolicy());
+  }
+
 }
