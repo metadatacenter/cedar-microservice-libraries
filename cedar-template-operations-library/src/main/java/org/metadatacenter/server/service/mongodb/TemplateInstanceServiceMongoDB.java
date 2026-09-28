@@ -89,4 +89,8 @@ public class TemplateInstanceServiceMongoDB extends GenericTemplateServiceMongoD
     return templateInstanceDao.countReferencingTemplate(templateId);
   }
 
+  @Override
+  public List<String> findReferencingTemplateIds(String templateId) {
+    return templateInstanceDao.findReferencingTemplateIds(templateId);
+  }
 }

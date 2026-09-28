@@ -36,4 +36,7 @@ public interface TemplateInstanceService<K, T> {
   long count();
 
   long countReferencingTemplate(K templateId);
+
+  /** Unfiltered content-store references, including instances absent from the workspace graph. */
+  List<String> findReferencingTemplateIds(K templateId);
 }

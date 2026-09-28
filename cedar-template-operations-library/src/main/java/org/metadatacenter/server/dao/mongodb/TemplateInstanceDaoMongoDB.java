@@ -15,4 +15,11 @@ public class TemplateInstanceDaoMongoDB extends GenericLDDaoMongoDB {
   public long countReferencingTemplate(String templateId) {
     return entityCollection.countDocuments(Filters.eq(SCHEMA_IS_BASED_ON, templateId));
   }
+  public java.util.List<String> findReferencingTemplateIds(String templateId) {
+    java.util.List<String> ids = new java.util.ArrayList<>();
+    entityCollection.find(Filters.eq(SCHEMA_IS_BASED_ON, templateId))
+        .projection(com.mongodb.client.model.Projections.include("@id"))
+        .forEach(document -> ids.add(document.getString("@id")));
+    return ids;
+  }
 }
