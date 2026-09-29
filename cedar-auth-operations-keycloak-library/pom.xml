@@ -64,6 +64,23 @@
     <dependency>
       <groupId>org.keycloak</groupId>
       <artifactId>keycloak-adapter-core</artifactId>
+      <!--
+        The adapter reaches the Keycloak server SPI through keycloak-crypto-default, whose only use
+        of it is BCOCSPProvider, the X.509 revocation check a token verification never loads. No
+        CEDAR service runs inside Keycloak, so every service would otherwise ship about 800 classes
+        of an unsupported Keycloak server that none of them uses. The event listener, which Keycloak
+        does load, declares the SPI itself as provided.
+      -->
+      <exclusions>
+        <exclusion>
+          <groupId>org.keycloak</groupId>
+          <artifactId>keycloak-server-spi</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.keycloak</groupId>
+          <artifactId>keycloak-server-spi-private</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <dependency>
