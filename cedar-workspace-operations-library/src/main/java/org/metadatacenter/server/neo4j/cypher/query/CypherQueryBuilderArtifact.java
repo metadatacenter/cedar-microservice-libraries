@@ -179,7 +179,7 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
   public static String setNotOpen() {
     return "" +
         " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
-        " REMOVE artifact.<PROP.IS_OPEN>" +
+        " SET artifact.<PROP.IS_OPEN> = false" +
         " SET artifact._cedarRevision = coalesce(artifact._cedarRevision, 1) + 1" +
         " RETURN artifact AS resource, artifact._cedarRevision AS revision";
   }

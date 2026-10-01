@@ -53,6 +53,19 @@ class CypherGraphResourceRevisionSemanticsTest {
     assertTrue(CypherQueryBuilderFolder.lockFolderRevision().contains("SET folder._cedarRevision"));
   }
 
+  /**
+   * Removing the flag left a node that was neither open nor closed, and the action policy offers no
+   * OpenView change for a resource with no open state. A closed resource is one whose flag is false.
+   */
+  @Test
+  void makingAResourceNotOpenWritesTheFlagAsFalse() {
+    for (String query : new String[]{
+        CypherQueryBuilderArtifact.setNotOpen(), CypherQueryBuilderFolder.setNotOpen()}) {
+      assertTrue(query.contains(".<PROP.IS_OPEN> = false"), query);
+      assertFalse(query.contains("REMOVE"), query);
+    }
+  }
+
   @Test
   void categoryDeletionChecksContentAndNeverUsesDetachDelete() {
     String blockers = CypherQueryBuilderCategory.getCategoryDeletionBlockers();
