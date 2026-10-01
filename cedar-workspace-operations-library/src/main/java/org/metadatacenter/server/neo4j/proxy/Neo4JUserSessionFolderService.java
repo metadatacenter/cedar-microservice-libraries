@@ -478,31 +478,6 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public boolean unsetLatestVersion(CedarSchemaArtifactId artifactId) {
-    return proxies.artifact().unsetLatestVersion(artifactId);
-  }
-
-  @Override
-  public boolean setLatestVersion(CedarSchemaArtifactId artifactId) {
-    return proxies.artifact().setLatestVersion(artifactId);
-  }
-
-  @Override
-  public boolean setLatestPublishedVersion(CedarSchemaArtifactId artifactId) {
-    return proxies.artifact().setLatestPublishedVersion(artifactId);
-  }
-
-  @Override
-  public boolean unsetLatestPublishedVersion(CedarSchemaArtifactId artifactId) {
-    return proxies.artifact().unsetLatestPublishedVersion(artifactId);
-  }
-
-  @Override
-  public boolean unsetLatestDraftVersion(CedarSchemaArtifactId artifactId) {
-    return proxies.artifact().unsetLatestDraftVersion(artifactId);
-  }
-
-  @Override
   public boolean setOpen(CedarArtifactId artifactId) {
     return proxies.artifact().setOpen(artifactId);
   }

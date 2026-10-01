@@ -105,41 +105,6 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
         " RETURN nr";
   }
 
-  public static String unsetLatestVersion() {
-    return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
-        " SET artifact.<PROP.IS_LATEST_VERSION> = false" +
-        " RETURN artifact";
-  }
-
-  public static String setLatestVersion() {
-    return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
-        " SET artifact.<PROP.IS_LATEST_VERSION> = true" +
-        " RETURN artifact";
-  }
-
-  public static String unsetLatestDraftVersion() {
-    return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
-        " SET artifact.<PROP.IS_LATEST_DRAFT_VERSION> = false" +
-        " RETURN artifact";
-  }
-
-  public static String setLatestPublishedVersion() {
-    return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
-        " SET artifact.<PROP.IS_LATEST_PUBLISHED_VERSION> = true" +
-        " RETURN artifact";
-  }
-
-  public static String unsetLatestPublishedVersion() {
-    return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
-        " SET artifact.<PROP.IS_LATEST_PUBLISHED_VERSION> = false" +
-        " RETURN artifact";
-  }
-
   public static String getIsBasedOnCount() {
     return "" +
         " MATCH (instance:<LABEL.INSTANCE> {<PROP.IS_BASED_ON>:{<PH.ID>}}) " +

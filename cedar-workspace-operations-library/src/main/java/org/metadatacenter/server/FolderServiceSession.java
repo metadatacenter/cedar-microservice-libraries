@@ -164,16 +164,6 @@ public interface FolderServiceSession {
 
   boolean setDerivedFrom(CedarArtifactId newId, CedarArtifactId oldId);
 
-  boolean unsetLatestVersion(CedarSchemaArtifactId id);
-
-  boolean setLatestVersion(CedarSchemaArtifactId id);
-
-  boolean setLatestPublishedVersion(CedarSchemaArtifactId id);
-
-  boolean unsetLatestPublishedVersion(CedarSchemaArtifactId id);
-
-  boolean unsetLatestDraftVersion(CedarSchemaArtifactId id);
-
   boolean setOpen(CedarArtifactId id);
 
   VersionedResource<FolderServerArtifact> setOpen(CedarArtifactId id, RevisionPrecondition precondition);

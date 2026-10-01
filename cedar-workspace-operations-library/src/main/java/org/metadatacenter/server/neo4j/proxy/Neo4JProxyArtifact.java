@@ -224,41 +224,6 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     return executeWrite(q, "setting derivedFrom");
   }
 
-  public boolean unsetLatestVersion(CedarSchemaArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.unsetLatestVersion();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "unsetting isLatestVersion");
-  }
-
-  public boolean setLatestVersion(CedarSchemaArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.setLatestVersion();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "setting isLatestVersion");
-  }
-
-  public boolean unsetLatestDraftVersion(CedarSchemaArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.unsetLatestDraftVersion();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "unsetting isLatestDraftVersion");
-  }
-
-  public boolean setLatestPublishedVersion(CedarSchemaArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.setLatestPublishedVersion();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "setting isLatestPublishedVersion");
-  }
-
-  public boolean unsetLatestPublishedVersion(CedarSchemaArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.unsetLatestPublishedVersion();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "unsetting isLatestPublishedVersion");
-  }
-
   public long getIsBasedOnCount(CedarTemplateId templateId) {
     String cypher = CypherQueryBuilderArtifact.getIsBasedOnCount();
     CypherParameters params = CypherParamBuilderArtifact.matchId(templateId);

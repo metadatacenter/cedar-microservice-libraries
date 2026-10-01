@@ -399,20 +399,10 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
     FolderServerArtifact version2 = createTemplateUnderUser1Home(secondVersion);
     CedarTemplateId version2Id = CedarTemplateId.build(version2.getId());
 
-    // The latest flags are caller-maintained, the way the resource server flips them after
-    // creating a new version
-    Assertions.assertTrue(user1Folders.unsetLatestVersion(version1Id),
-        "Clearing the latest flag on the old version should succeed");
-    Assertions.assertTrue(user1Folders.setLatestVersion(version2Id),
-        "Setting the latest flag on the new version should succeed");
-
-    FolderServerSchemaArtifact fresh1 = user1Folders.findSchemaArtifactById(version1Id);
-    Assertions.assertNotNull(fresh1, "The old version should stay retrievable");
-    Assertions.assertEquals(Boolean.FALSE, fresh1.isLatestVersion(), "The old version should not be flagged latest");
-
+    // The latest flags are not this chain's concern: the resource server recomputes them for the
+    // whole series in one transaction, VersionChainTransaction.reconcile, and reindexes every member.
     FolderServerSchemaArtifact fresh2 = user1Folders.findSchemaArtifactById(version2Id);
     Assertions.assertNotNull(fresh2, "The new version should be retrievable");
-    Assertions.assertEquals(Boolean.TRUE, fresh2.isLatestVersion(), "The new version should be flagged latest");
     Assertions.assertNotNull(fresh2.getPreviousVersion(), "The new version should carry the previousVersion link");
     Assertions.assertEquals(version1.getId(), fresh2.getPreviousVersion().getId(),
         "The previousVersion link should point at the old version");
