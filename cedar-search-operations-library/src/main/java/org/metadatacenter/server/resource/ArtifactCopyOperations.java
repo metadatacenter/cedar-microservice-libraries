@@ -9,6 +9,7 @@ import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarFolderId;
 import org.metadatacenter.id.CedarTemplateId;
 import org.metadatacenter.id.CedarTemplateInstanceId;
+import org.metadatacenter.id.CedarUntypedArtifactId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.BiboStatus;
 import org.metadatacenter.model.CedarResourceType;
@@ -113,7 +114,11 @@ public final class ArtifactCopyOperations {
           .errorKey(CedarErrorKey.RESOURCE_NOT_CREATED);
     }
 
-    folderSession.setDerivedFrom(newId, oldId);
+    // Callers index what this returns, so it must carry the provenance the graph now holds rather
+    // than the node as it stood before the link was written.
+    if (folderSession.setDerivedFrom(newId, oldId)) {
+      createdResource.setDerivedFrom(CedarUntypedArtifactId.build(oldId.getId()));
+    }
     return createdResource;
   }
 

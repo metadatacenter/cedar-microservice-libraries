@@ -129,6 +129,7 @@ public class CloneInstancesExecutorService {
             FolderServerFolder newTargetFolder = folderSession.createFolderAsChildOfId(newFolder,
                 homeFolder.getResourceId(), newTargetFolderId, ownerUser);
             mutated = true;
+            indexClonedInstancesFolder(newTargetFolder);
             for (FolderServerResourceExtract instanceExtract : entry.getValue()) {
               try {
                 copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId.build(instanceExtract.getId()),
@@ -166,6 +167,20 @@ public class CloneInstancesExecutorService {
           .errorKey(CedarErrorKey.RESOURCE_NOT_CREATED)
           .parameter("failedInstanceCount", failedInstanceIds.size())
           .parameter("failedInstanceIds", failedInstanceIds);
+    }
+  }
+
+  /**
+   * Every other folder is indexed when it is created. Without this one the cloned instances are
+   * searchable and the folder holding them is not. A failure leaves the folder out of search and
+   * does not abandon the clones still to be made: the graph holds the folder either way, and an
+   * index rebuild restores its document.
+   */
+  protected void indexClonedInstancesFolder(FolderServerFolder folder) {
+    try {
+      nodeIndexingService.indexDocument(folder, cedarRequestContext);
+    } catch (CedarProcessingException e) {
+      log.error("The folder created for cloned instances could not be indexed:" + folder.getId(), e);
     }
   }
 

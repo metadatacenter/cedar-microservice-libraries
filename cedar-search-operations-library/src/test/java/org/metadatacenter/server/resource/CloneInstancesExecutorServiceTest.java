@@ -2,6 +2,8 @@ package org.metadatacenter.server.resource;
 
 import org.metadatacenter.util.http.ArtifactServiceClient;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarFolderId;
@@ -15,6 +17,8 @@ import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.jsonld.LinkedDataUtil;
+import org.metadatacenter.server.search.elasticsearch.service.NodeIndexingService;
+import org.metadatacenter.server.valuerecommender.ValuerecommenderReindexQueueService;
 import org.metadatacenter.server.url.MicroserviceUrlUtil;
 
 import jakarta.ws.rs.core.Response;
@@ -30,10 +34,94 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CloneInstancesExecutorServiceTest {
+
+  private NodeIndexingService indexing;
+
+  @BeforeEach
+  void injectIndexing() {
+    indexing = mock(NodeIndexingService.class);
+    CloneInstancesExecutorService.injectServices(indexing, mock(ValuerecommenderReindexQueueService.class));
+  }
+
+  @AfterEach
+  void clearIndexing() {
+    CloneInstancesExecutorService.injectServices(null, null);
+  }
+
+  /** Every other folder is indexed when it is created, and so is the one holding an owner's clones. */
+  @Test
+  void theFolderHoldingTheClonesIsIndexed() throws Exception {
+    SingleOwnerClone clone = singleOwnerClone();
+
+    clone.service().handleEvent(clone.event());
+
+    verify(indexing).indexDocument(clone.targetFolder(), clone.context());
+    assertEquals(1, clone.attempts().get());
+  }
+
+  @Test
+  void aFolderThatCannotBeIndexedDoesNotAbandonTheClones() throws Exception {
+    SingleOwnerClone clone = singleOwnerClone();
+    doThrow(new CedarProcessingException("index unreachable"))
+        .when(indexing).indexDocument(clone.targetFolder(), clone.context());
+
+    clone.service().handleEvent(clone.event());
+
+    assertEquals(1, clone.attempts().get());
+  }
+
+  private record SingleOwnerClone(CloneInstancesExecutorService service, CloneInstancesQueueEvent event,
+                                  FolderServerFolder targetFolder, CedarRequestContext context,
+                                  AtomicInteger attempts) {
+  }
+
+  private static SingleOwnerClone singleOwnerClone() {
+    CedarTemplateId oldTemplateId = CedarTemplateId.build("template-old");
+    CedarTemplateId newTemplateId = CedarTemplateId.build("template-new");
+    CedarUserId ownerId = CedarUserId.build("owner-a");
+    CedarFolderId targetFolderId = CedarFolderId.build("target-folder");
+
+    FolderServerResourceExtract instance = instance(1);
+    instance.setOwnedBy(ownerId.getId());
+    FolderServiceSession repository = mock(FolderServiceSession.class);
+    when(repository.getNumberOfInstances(oldTemplateId)).thenReturn(1L);
+    when(repository.searchIsBasedOn(any(), any(), anyInt(), anyInt(), any())).thenReturn(List.of(instance));
+    FolderServerFolder homeFolder = new FolderServerFolder();
+    homeFolder.setId(CedarFolderId.build("home-folder").getId());
+    when(repository.findHomeFolderOfUser(ownerId)).thenReturn(homeFolder);
+    FolderServerTemplate newTemplate = new FolderServerTemplate();
+    newTemplate.setName("New template");
+    newTemplate.setVersion("2.0.0");
+    when(repository.findResourceById(newTemplateId)).thenReturn(newTemplate);
+    FolderServerFolder targetFolder = new FolderServerFolder();
+    targetFolder.setId(targetFolderId.getId());
+    when(repository.createFolderAsChildOfId(any(FolderServerFolder.class), any(CedarFolderId.class),
+        any(CedarFolderId.class), any(CedarUserId.class))).thenReturn(targetFolder);
+    LinkedDataUtil linkedDataUtil = mock(LinkedDataUtil.class);
+    when(linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class)).thenReturn(targetFolderId);
+
+    CedarRequestContext context = mock(CedarRequestContext.class);
+    AtomicInteger attempts = new AtomicInteger();
+    CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository, context,
+        mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class)) {
+      @Override
+      protected Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId ignoredOldInstanceId,
+                                                             CedarTemplateId ignoredNewTemplateId,
+                                                             CedarFolderId ignoredDestinationFolderId,
+                                                             CedarUserId ignoredUserId) {
+        attempts.incrementAndGet();
+        return Response.ok().build();
+      }
+    };
+    return new SingleOwnerClone(service, new CloneInstancesQueueEvent(oldTemplateId, newTemplateId, null),
+        targetFolder, context, attempts);
+  }
 
   @Test
   void loadsEveryInstanceAcrossRepositoryPageBoundariesInStableOrder() {
