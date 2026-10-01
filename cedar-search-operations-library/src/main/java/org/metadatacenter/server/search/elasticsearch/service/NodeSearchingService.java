@@ -20,6 +20,9 @@ import org.metadatacenter.model.request.NodeListRequest;
 import org.metadatacenter.model.response.FolderServerNodeListResponse;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.search.IndexedDocumentDocument;
+import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
+import org.metadatacenter.server.search.elasticsearch.permission.CurrentUserPermissionUpdaterForSearchResource;
+import org.metadatacenter.server.search.elasticsearch.permission.CurrentUserPermissionUpdaterForSearchFolder;
 import org.metadatacenter.search.IndexedDocumentType;
 import org.metadatacenter.server.CategoryServiceSession;
 import org.metadatacenter.server.search.IndexedDocumentId;
@@ -60,6 +63,7 @@ public class NodeSearchingService extends AbstractSearchingService {
   private static final Logger log = LoggerFactory.getLogger(NodeSearchingService.class);
 
   private final RestHighLevelClient client;
+  private final CedarConfig cedarConfig;
   private final OpensearchConfig config;
   private final TrustedFoldersConfig trustedFoldersConfig;
   private final ElasticsearchPermissionEnabledContentSearchingWorker permissionEnabledSearchWorker;
@@ -67,6 +71,7 @@ public class NodeSearchingService extends AbstractSearchingService {
 
   NodeSearchingService(CedarConfig cedarConfig, RestHighLevelClient client) {
     this.client = client;
+    this.cedarConfig = cedarConfig;
     this.config = cedarConfig.getElasticsearchConfig();
     this.trustedFoldersConfig = cedarConfig.getTrustedFolders();
     permissionEnabledSearchWorker = new ElasticsearchPermissionEnabledContentSearchingWorker(cedarConfig.getElasticsearchConfig(), client);
@@ -224,6 +229,19 @@ public class NodeSearchingService extends AbstractSearchingService {
     }
   }
 
+  /**
+   * What the searching user may do with one result, read from its indexed document the way a folder
+   * listing reads it from the graph. A result without it offers no action at all, so every
+   * action-gated menu entry in a search view was disabled.
+   */
+  private CurrentUserResourcePermissions currentUserPermissions(IndexedDocumentDocument document, CedarUser user) {
+    CurrentUserResourcePermissions permissions = new CurrentUserResourcePermissions();
+    (document.getInfo().getType() == CedarResourceType.FOLDER
+        ? CurrentUserPermissionUpdaterForSearchFolder.get(document, user, cedarConfig)
+        : CurrentUserPermissionUpdaterForSearchResource.get(document, user, cedarConfig)).update(permissions);
+    return permissions;
+  }
+
   private FolderServerNodeListResponse assembleResponse(CedarRequestContext rctx, SearchResponseResult searchResult, String query, String id,
                                                         List<String> resourceTypes, ResourceVersionFilter version,
                                                         ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList
@@ -240,6 +258,9 @@ public class NodeSearchingService extends AbstractSearchingService {
         FolderServerNodeInfo info = indexedDocument.getInfo();
         FolderServerResourceExtract folderServerNodeExtract = FolderServerResourceExtract.fromNodeInfo(info);
         TrustedByUtil.decorateWithTrustedBy(folderServerNodeExtract, info.getParentFolderId(), trustedFoldersConfig.getFoldersMap());
+        if (rctx.getCedarUser() != null) {
+          folderServerNodeExtract.setCurrentUserPermissions(currentUserPermissions(indexedDocument, rctx.getCedarUser()));
+        }
         resources.add(folderServerNodeExtract);
       } catch (IOException e) {
         log.error("Error while deserializing the search result document", e);
