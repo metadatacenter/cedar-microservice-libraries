@@ -266,6 +266,13 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     return executeReadGetLong(q);
   }
 
+  public boolean enqueueInstanceReindex(CedarTemplateId templateId) {
+    String cypher = CypherQueryBuilderArtifact.enqueueInstanceReindex();
+    CypherParameters params = CypherParamBuilderArtifact.matchId(templateId);
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeWrite(q, "marking a template's instances for reindexing");
+  }
+
   public List<FolderServerArtifactExtract> getVersionHistory(CedarSchemaArtifactId artifactId) {
     String cypher = CypherQueryBuilderArtifact.getVersionHistory();
     CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);

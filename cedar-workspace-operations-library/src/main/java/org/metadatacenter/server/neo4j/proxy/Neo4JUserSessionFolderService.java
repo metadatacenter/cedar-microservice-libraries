@@ -552,6 +552,11 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public boolean enqueueInstanceReindex(CedarTemplateId templateId) {
+    return proxies.artifact().enqueueInstanceReindex(templateId);
+  }
+
+  @Override
   public FolderServerArtifactExtract findResourceExtractById(CedarArtifactId artifactId) {
     return proxies.artifact().findResourceExtractById(artifactId);
   }

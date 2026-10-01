@@ -146,6 +146,19 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
         " RETURN COUNT(instance)";
   }
 
+  /**
+   * Marks every instance of a template for a full reindex by the version projection relay. An
+   * instance's indexed field names and labels are read from its template, so they go stale when the
+   * template changes although the instance itself does not.
+   */
+  public static String enqueueInstanceReindex() {
+    return "" +
+        " MATCH (instance:<LABEL.INSTANCE> {<PROP.IS_BASED_ON>:{<PH.ID>}})" +
+        " MERGE (projection:CedarVersionProjection {resourceId:instance.<PROP.ID>})" +
+        " SET projection.syncPrevious = coalesce(projection.syncPrevious, false)," +
+        " projection.updatedAt = timestamp()";
+  }
+
   public static String getVersionHistory() {
     return "" +
         " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +

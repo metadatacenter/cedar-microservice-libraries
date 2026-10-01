@@ -192,6 +192,9 @@ public interface FolderServiceSession {
 
   long getNumberOfInstances(CedarTemplateId templateId);
 
+  /** Marks every instance of the template for a full reindex; see the version projection relay. */
+  boolean enqueueInstanceReindex(CedarTemplateId templateId);
+
   FolderServerArtifactExtract findResourceExtractById(CedarArtifactId id);
 
   List<FolderServerArtifactExtract> getVersionHistory(CedarSchemaArtifactId id);
