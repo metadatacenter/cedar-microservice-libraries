@@ -14,8 +14,10 @@ import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public interface FolderServiceSession {
 
@@ -204,6 +206,9 @@ public interface FolderServiceSession {
   CedarResourceType getResourceType(CedarResourceId resourceId);
 
   boolean isArtifactOpenImplicitly(CedarArtifactId artifactId);
+
+  /** The identifiers, among those given, of resources inside an open folder at any depth. */
+  Set<String> findResourcesOpenThroughAFolder(Collection<String> resourceIds);
 
   long getFolderCount();
 

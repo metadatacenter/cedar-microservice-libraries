@@ -8,6 +8,7 @@ public enum ParameterPlaceholder implements CypherQueryParameter {
   MODIFIED_BEFORE("modifiedBefore"),
 
   ID("_id"),
+  ID_LIST("idList"),
   FOLDER_ID("folderId"),
   PARENT_FOLDER_ID("parentFolderId"),
   RESOURCE_ID("resourceId"),

@@ -549,6 +549,24 @@ public abstract class AbstractNeo4JProxy {
     return folderServerIdList;
   }
 
+  /** The single string column of every row, for a query that returns identifiers rather than nodes. */
+  protected List<String> executeReadGetStringList(CypherQuery q) {
+    List<String> values = new ArrayList<>();
+    try (Session session = driver.session()) {
+      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q);
+      if (records != null) {
+        for (org.neo4j.driver.Record r : records) {
+          if (r.size() == 1 && r.get(0).type().equals(driver.defaultTypeSystem().STRING())) {
+            values.add(r.get(0).asString());
+          }
+        }
+      }
+    } catch (ClientException ex) {
+      reportQueryError(ex, q);
+    }
+    return values;
+  }
+
   protected <T extends ResultTuple> List<T> executeReadGetToupleList(CypherQuery q, Class<T> type) {
     List<T> tupleList = new ArrayList<>();
     try (Session session = driver.session()) {

@@ -126,6 +126,21 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
         " RETURN resource";
   }
 
+  /**
+   * The identifiers, among those given, of resources inside an open folder at any depth. A resource's
+   * own flag does not count, which is how a folder listing decides the same thing for its entries.
+   */
+  public static String findResourcesOpenThroughAFolder() {
+    return """
+        UNWIND {<PH.ID_LIST>} AS id
+        MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:id})
+        WHERE EXISTS {
+          MATCH (:<LABEL.FOLDER> {<PROP.IS_OPEN>:true})-[:<REL.CONTAINS>*1..]->(resource)
+        }
+        RETURN resource.<PROP.ID>
+        """;
+  }
+
   public static String isFileSystemResourceOpenImplicitly() {
     return """
         MATCH (root:<LABEL.FOLDER> {<PROP.NAME>:{<PH.NAME>}}),

@@ -26,8 +26,10 @@ import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 import org.metadatacenter.util.CedarUserNameUtil;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession implements FolderServiceSession {
 
@@ -576,6 +578,11 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   @Override
   public boolean isArtifactOpenImplicitly(CedarArtifactId artifactId) {
     return proxies.resource().isFileSystemResourceOpenImplicitly(artifactId);
+  }
+
+  @Override
+  public Set<String> findResourcesOpenThroughAFolder(Collection<String> resourceIds) {
+    return proxies.resource().findResourcesOpenThroughAFolder(resourceIds);
   }
 
   @Override
