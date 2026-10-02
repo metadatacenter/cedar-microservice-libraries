@@ -24,7 +24,18 @@ public final class ArtifactCreateCleanupService implements AutoCloseable {
   }
 
   public String prepare(CedarResourceType type, String operation) { return outbox.prepare(type, operation); }
-  public void created(String job, String id, String etag) { outbox.created(job,id,etag); }
+  public void created(String job, String id, String etag) {
+    // Jetty can suffix the response validator (for example, "1--gzip"). Persist the exact
+    // datastore revision, using the same parser as conditional writes, never a wildcard.
+    String condition = null;
+    if (etag != null) {
+      var parsed = org.metadatacenter.util.http.RevisionPreconditionParser.parse(etag);
+      if (!parsed.anyCurrentRevision() && parsed.revisions().size() == 1) {
+        condition = org.metadatacenter.util.http.RevisionPreconditionParser.format(parsed.revisions().iterator().next());
+      }
+    }
+    outbox.created(job,id,condition);
+  }
   public void rejected(String job, int status) { outbox.rejected(job,status); }
 
   public void cleanupNow(String job, CedarRequestContext context) {
