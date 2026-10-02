@@ -55,6 +55,33 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     return executeWriteGetOne(q, FolderServerArtifact.class);
   }
 
+  FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
+                                                      CedarFolderId parentId, CedarUserId expectedOwner) {
+    return executeInWriteTransaction(tx -> {
+      // Ownership transfers take these same node locks. Check after locking, and hold them through
+      // registration so a transfer cannot land between the ownership check and the new OWNS arc.
+      for (String id : java.util.stream.Stream.of(sourceId.getId(), parentId.getId()).sorted().toList()) {
+        var locked = tx.run("MATCH (n {_id:$id}) SET n._cedarAclRevision=coalesce(n._cedarAclRevision,1) "
+            + "RETURN n._cedarAclRevision AS revision", Map.of("id", id));
+        if (readLockedRevision(locked).isEmpty()) return null;
+      }
+      var owners = tx.run("MATCH (u:User {_id:$owner})-[:OWNS]->(s:Artifact {_id:$source}), "
+          + "(u)-[:OWNS]->(p:Folder {_id:$parent}) RETURN s",
+          Map.of("owner", expectedOwner.getId(), "source", sourceId.getId(), "parent", parentId.getId()));
+      if (!owners.hasNext()) return null;
+      var created = runInTransactionGetOne(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderArtifact.createResourceAsChildOfId(clone),
+          CypherParamBuilderArtifact.createArtifact(clone, parentId)), FolderServerArtifact.class);
+      if (created != null) {
+        var query = new CypherQueryWithParameters(CypherQueryBuilderArtifact.setDerivedFrom(),
+            CypherParamBuilderResource.matchSourceAndTarget(created.getResourceId(), sourceId));
+        tx.run(query.getRunnableQuery(), query.getParameterMap()).consume();
+        created.setDerivedFrom(CedarUntypedArtifactId.build(sourceId.getId()));
+      }
+      return created;
+    }, "registering a clone for its unchanged owner");
+  }
+
   FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentId, boolean propagateSharing) {
     initializeVersioning();
     return executeInWriteTransaction(tx -> {

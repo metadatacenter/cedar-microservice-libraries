@@ -76,8 +76,9 @@ class CloneInstancesExecutorServiceTest {
     assertEquals(1, clone.attempts().get());
   }
 
-  @Test
-  void aCloneWhoseDestinationDisappearsDiscardsOnlyItsCreatedRevision() throws Exception {
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+  void aCloneWhoseDestinationDisappearsOrOwnershipChangesDiscardsOnlyItsCreatedRevision(boolean transferred) throws Exception {
     var folders = mock(FolderServiceSession.class);
     var context = mock(CedarRequestContext.class);
     var urls = mock(MicroserviceUrlUtil.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
@@ -106,11 +107,26 @@ class CloneInstancesExecutorServiceTest {
         .thenReturn(created);
     when(client.delete("clone", context, "\"7\"")).thenReturn(
         new org.apache.hc.core5.http.message.BasicClassicHttpResponse(204));
+    var destination = CedarFolderId.build("destination");
+    var owner = CedarUserId.build("owner");
+    if (transferred) {
+      var folder = new FolderServerFolder(); folder.setId(destination.getId());
+      var original = new org.metadatacenter.model.folderserver.basic.FolderServerInstance();
+      original.setId(old.getId()); original.setIsBasedOn(template);
+      when(folders.findFolderById(destination)).thenReturn(folder);
+      when(folders.findArtifactById(old)).thenReturn(original);
+      // Reads succeeded, but the graph's atomic registration rejects the now-stale owner.
+      when(folders.createInstanceCloneAsChildOfId(any(), org.mockito.ArgumentMatchers.eq(old),
+          org.mockito.ArgumentMatchers.eq(destination), org.mockito.ArgumentMatchers.eq(owner))).thenReturn(null);
+    }
     var service = new CloneInstancesExecutorService(folders, context, urls, mock(LinkedDataUtil.class), client);
 
     assertThrows(CedarProcessingException.class, () -> service.copyInstanceToFolderWithNewTemplate(old,
-        template, CedarFolderId.build("missing-destination"), CedarUserId.build("owner")));
+        template, destination, owner));
 
+    if (transferred) verify(folders).createInstanceCloneAsChildOfId(any(),
+        org.mockito.ArgumentMatchers.eq(old), org.mockito.ArgumentMatchers.eq(destination),
+        org.mockito.ArgumentMatchers.eq(owner));
     verify(client).delete("clone", context, "\"7\"");
     org.mockito.Mockito.verifyNoInteractions(indexing);
   }

@@ -51,6 +51,10 @@ public interface FolderServiceSession {
 
   FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentFolderId, CedarUserId userId);
 
+  /** Background clones must still belong to the enumerated owner when registered. */
+  FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
+                                                      CedarFolderId parentId, CedarUserId expectedOwner);
+
   FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentFolderId, boolean propagateSharing);
 
   FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields);

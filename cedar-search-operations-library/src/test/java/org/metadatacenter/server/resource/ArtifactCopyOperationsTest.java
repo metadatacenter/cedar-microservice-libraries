@@ -54,16 +54,15 @@ class ArtifactCopyOperationsTest {
     oldInstance.setIsBasedOn(CedarTemplateId.build("template-original"));
     when(folderSession.findFolderById(folderId)).thenReturn(folder(folderId));
     when(folderSession.findArtifactById(oldId)).thenReturn(oldInstance);
-    when(folderSession.createResourceAsChildOfId(any(FolderServerInstance.class), any(CedarFolderId.class),
-        any(CedarUserId.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(folderSession.createInstanceCloneAsChildOfId(any(FolderServerInstance.class), any(CedarTemplateInstanceId.class),
+        any(CedarFolderId.class), any(CedarUserId.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
     FolderServerInstance clone = (FolderServerInstance) ArtifactCopyOperations.registerCopy(folderSession,
         oldId, newId, folderId, CedarResourceType.INSTANCE, "clone", "description", null,
         newTemplateId, ownerId);
 
     assertEquals(newTemplateId, clone.getIsBasedOn());
-    verify(folderSession).createResourceAsChildOfId(clone, folderId, ownerId);
-    verify(folderSession).setDerivedFrom(newId, oldId);
+    verify(folderSession).createInstanceCloneAsChildOfId(clone, oldId, folderId, ownerId);
   }
 
   /**

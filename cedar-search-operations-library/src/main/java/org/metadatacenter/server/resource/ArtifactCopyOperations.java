@@ -106,7 +106,7 @@ public final class ArtifactCopyOperations {
 
     FolderServerArtifact createdResource = ownerOverride == null
         ? folderSession.createResourceAsChildOfId(newResource, targetFolderId)
-        : folderSession.createResourceAsChildOfId(newResource, targetFolderId, ownerOverride);
+        : folderSession.createInstanceCloneAsChildOfId(newResource, oldId, targetFolderId, ownerOverride);
     if (createdResource == null) {
       throw new CedarProcessingException("The artifact was not created!")
           .parameter("@id", oldId)
@@ -116,7 +116,7 @@ public final class ArtifactCopyOperations {
 
     // Callers index what this returns, so it must carry the provenance the graph now holds rather
     // than the node as it stood before the link was written.
-    if (folderSession.setDerivedFrom(newId, oldId)) {
+    if (ownerOverride == null && folderSession.setDerivedFrom(newId, oldId)) {
       createdResource.setDerivedFrom(CedarUntypedArtifactId.build(oldId.getId()));
     }
     return createdResource;

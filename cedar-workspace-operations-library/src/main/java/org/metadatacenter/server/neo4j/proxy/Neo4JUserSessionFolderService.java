@@ -56,6 +56,13 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
+                                                             CedarFolderId parentId, CedarUserId expectedOwner) {
+    clone.setCreatedByTotal(expectedOwner);
+    return proxies.artifact().createInstanceCloneAsChildOfId(clone, sourceId, parentId, expectedOwner);
+  }
+
+  @Override
   public FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields) {
     return proxies.folder().updateFolderById(folderId, updateFields, cu.getResourceId());
   }
