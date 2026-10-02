@@ -48,6 +48,14 @@ class ElasticsearchIndexingWorkerTest {
   }
 
   @Test
+  void durableIndexingReleasesTheCallerAfterOneFailedNetworkAttempt() throws Exception {
+    when(client.index(any(IndexRequest.class), any(RequestOptions.class))).thenThrow(new IOException("offline"));
+    assertThrows(CedarProcessingException.class,
+        () -> worker.addToIndex(JsonMapper.STRICT_MAPPER.createObjectNode(), "resource-1", 0));
+    verify(client).index(any(IndexRequest.class), any(RequestOptions.class));
+  }
+
+  @Test
   void successfulBatchSendsEveryConcreteIndexDocument() throws Exception {
     BulkResponse response = mock(BulkResponse.class);
     when(client.bulk(any(BulkRequest.class), any(RequestOptions.class))).thenReturn(response);

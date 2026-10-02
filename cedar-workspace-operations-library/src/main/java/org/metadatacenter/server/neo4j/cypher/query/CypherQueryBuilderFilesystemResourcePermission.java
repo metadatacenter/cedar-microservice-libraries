@@ -38,7 +38,8 @@ public class CypherQueryBuilderFilesystemResourcePermission extends AbstractCyph
         DELETE ownership
         FOREACH (grant IN newOwnerGrants | DELETE grant)
         CREATE (newOwner)-[:<REL.OWNS>]->(resource)
-        SET resource._cedarAclRevision = {<PH.CURRENT_REVISION>} + 1
+        SET resource.<PROP.OWNED_BY> = {<PH.USER_ID>},
+            resource._cedarAclRevision = {<PH.CURRENT_REVISION>} + 1
         WITH resource
         OPTIONAL MATCH (owner:<LABEL.USER>)-[:<REL.OWNS>]->(resource)
         OPTIONAL MATCH (principal)-[grant:CANREAD|CANWRITE|EDITOR_ROLE|VIEWER_ROLE|MANAGER_ROLE]->(resource)

@@ -28,7 +28,9 @@ import org.metadatacenter.server.security.model.permission.resource.ResourcePerm
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionsRequest;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Direct tests of folder reparenting through FolderServiceSession.moveFolder, against an
@@ -98,6 +100,36 @@ public class WorkspaceFolderMoveIntegrationTest {
     FolderServerArtifact created = foldersOf(user1Context).createResourceAsChildOfId(template, parentId);
     Assertions.assertNotNull(created, "The template '" + name + "' should be created");
     return created;
+  }
+
+  /**
+   * Search asks once per page which of its results sit inside an open folder, the question a folder
+   * listing answers from the path above its entries. A resource's own flag does not count, and the
+   * answer follows the resource when it moves.
+   */
+  @Test
+  public void aResourceIsOpenThroughAFolderOnlyWhileAFolderAboveItIsOpen() {
+    FolderServiceSession user1Folders = foldersOf(user1Context);
+    FolderServerFolder open = createFolderUnder(user1HomeId, "Open Through Root");
+    FolderServerFolder nested = createFolderUnder(open.getResourceId(), "Open Through Nested");
+    FolderServerArtifact deep = createTemplateUnder(nested.getResourceId(), "Open Through Deep");
+    FolderServerFolder closed = createFolderUnder(user1HomeId, "Open Through Closed");
+    FolderServerArtifact outside = createTemplateUnder(closed.getResourceId(), "Open Through Outside");
+    List<String> page = List.of(open.getId(), nested.getId(), deep.getId(), closed.getId(), outside.getId());
+    Assertions.assertEquals(Set.of(), user1Folders.findResourcesOpenThroughAFolder(page));
+
+    Assertions.assertTrue(user1Folders.setOpen(open.getResourceId()));
+    Assertions.assertEquals(Set.of(nested.getId(), deep.getId()), user1Folders.findResourcesOpenThroughAFolder(page),
+        "everything below the open folder, and not the folder itself");
+
+    Assertions.assertTrue(user1Folders.moveResource(CedarArtifactId.build(deep.getId(), CedarResourceType.TEMPLATE),
+        closed.getResourceId()));
+    Assertions.assertEquals(Set.of(nested.getId()), user1Folders.findResourcesOpenThroughAFolder(page),
+        "a resource moved out of the open folder is no longer open through it");
+
+    Assertions.assertTrue(user1Folders.setNotOpen(open.getResourceId()));
+    Assertions.assertEquals(Set.of(), user1Folders.findResourcesOpenThroughAFolder(page));
+    Assertions.assertEquals(Set.of(), user1Folders.findResourcesOpenThroughAFolder(List.of()));
   }
 
   @Test

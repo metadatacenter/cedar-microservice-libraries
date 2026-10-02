@@ -1,5 +1,7 @@
 package org.metadatacenter.cedar.util.dw;
 
+import org.metadatacenter.util.json.JsonMapper;
+
 import com.codahale.metrics.annotation.Timed;
 import com.codahale.metrics.health.HealthCheck;
 import com.codahale.metrics.health.HealthCheckRegistry;
@@ -53,7 +55,7 @@ import static org.metadatacenter.rest.assertion.GenericAssertions.LoggedIn;
 @SecurityRequirement(name = "api_key")
 public class CedarHealthCheckResource extends CedarMicroserviceResource {
 
-  private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new HealthCheckModule());
+  private static final ObjectMapper MAPPER = JsonMapper.TOLERANT_MAPPER.copy().registerModule(new HealthCheckModule());
 
   private final HealthCheckRegistry healthChecks;
 

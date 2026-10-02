@@ -15,6 +15,7 @@ import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFilesystem
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFolderContent;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderResource;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
+import org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder;
 import org.metadatacenter.server.security.model.auth.NodeSharePermission;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
@@ -23,6 +24,7 @@ import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.metadatacenter.server.security.model.auth.CedarPermission.READ_NOT_READABLE_NODE;
 
@@ -358,6 +360,17 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
     CypherParameters params = CypherParamBuilderResource.matchId(resourceId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeWrite(q, "removing owner");
+  }
+
+  public Set<String> findResourcesOpenThroughAFolder(Collection<String> resourceIds) {
+    if (resourceIds.isEmpty()) {
+      return Set.of();
+    }
+    CypherParameters params = new CypherParameters();
+    params.put(ParameterPlaceholder.ID_LIST, List.copyOf(resourceIds));
+    CypherQuery q = new CypherQueryWithParameters(CypherQueryBuilderFilesystemResource.findResourcesOpenThroughAFolder(),
+        params);
+    return Set.copyOf(executeReadGetStringList(q));
   }
 
   public boolean isFileSystemResourceOpenImplicitly(CedarFilesystemResourceId cedarFilesystemResourceIdId) {

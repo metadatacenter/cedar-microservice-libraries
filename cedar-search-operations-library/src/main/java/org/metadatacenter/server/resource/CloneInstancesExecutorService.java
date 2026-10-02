@@ -46,7 +46,7 @@ import java.util.Map;
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_IS_BASED_ON;
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_ORG_IDENTIFIER;
 
-public class CloneInstancesExecutorService {
+public class CloneInstancesExecutorService implements AutoCloseable {
 
   private static final Logger log = LoggerFactory.getLogger(CloneInstancesExecutorService.class);
 
@@ -55,6 +55,7 @@ public class CloneInstancesExecutorService {
   protected final MicroserviceUrlUtil microserviceUrlUtil;
   protected final LinkedDataUtil linkedDataUtil;
   private final ArtifactServiceClient artifactClient;
+  private final ArtifactCreateCleanupService cleanupService;
 
   protected static NodeIndexingService nodeIndexingService;
   protected static ValuerecommenderReindexQueueService valuerecommenderReindexQueueService;
@@ -62,6 +63,7 @@ public class CloneInstancesExecutorService {
   public CloneInstancesExecutorService(CedarConfig cedarConfig) {
     artifactClient = new ArtifactServiceClient(cedarConfig);
     UserService userService = CedarDataServices.getInstance().getNeoUserService();
+    cleanupService = new ArtifactCreateCleanupService(cedarConfig, userService);
 
     cedarRequestContext = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
     folderSession = CedarDataServices.getInstance().getFolderServiceSession(cedarRequestContext);
@@ -72,7 +74,8 @@ public class CloneInstancesExecutorService {
   CloneInstancesExecutorService(FolderServiceSession folderSession,
                                 CedarRequestContext cedarRequestContext,
                                 MicroserviceUrlUtil microserviceUrlUtil,
-                                LinkedDataUtil linkedDataUtil, ArtifactServiceClient artifactClient) {
+                                LinkedDataUtil linkedDataUtil, ArtifactServiceClient artifactClient, ArtifactCreateCleanupService cleanupService) {
+    this.cleanupService = cleanupService;
     this.artifactClient = artifactClient;
     this.folderSession = folderSession;
     this.cedarRequestContext = cedarRequestContext;
@@ -85,6 +88,9 @@ public class CloneInstancesExecutorService {
     CloneInstancesExecutorService.nodeIndexingService = nodeIndexingService;
     CloneInstancesExecutorService.valuerecommenderReindexQueueService = valuerecommenderReindexQueueService;
   }
+
+  public void start() { cleanupService.start(); }
+  @Override public void close() { cleanupService.close(); }
 
   // Main entry point
   public void handleEvent(CloneInstancesQueueEvent event) throws CedarException {
@@ -129,6 +135,7 @@ public class CloneInstancesExecutorService {
             FolderServerFolder newTargetFolder = folderSession.createFolderAsChildOfId(newFolder,
                 homeFolder.getResourceId(), newTargetFolderId, ownerUser);
             mutated = true;
+            indexClonedInstancesFolder(newTargetFolder);
             for (FolderServerResourceExtract instanceExtract : entry.getValue()) {
               try {
                 copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId.build(instanceExtract.getId()),
@@ -169,6 +176,20 @@ public class CloneInstancesExecutorService {
     }
   }
 
+  /**
+   * Every other folder is indexed when it is created. Without this one the cloned instances are
+   * searchable and the folder holding them is not. A failure leaves the folder out of search and
+   * does not abandon the clones still to be made: the graph holds the folder either way, and an
+   * index rebuild restores its document.
+   */
+  protected void indexClonedInstancesFolder(FolderServerFolder folder) {
+    try {
+      nodeIndexingService.indexDocument(folder, cedarRequestContext);
+    } catch (CedarProcessingException e) {
+      log.error("The folder created for cloned instances could not be indexed:" + folder.getId(), e);
+    }
+  }
+
   static List<FolderServerResourceExtract> findAllInstances(FolderServiceSession folderSession,
                                                             CedarTemplateId templateId) {
     final int pageSize = 1000;
@@ -205,7 +226,7 @@ public class CloneInstancesExecutorService {
                                                          CedarUserId userId) throws CedarException {
     CedarRequestContext c = this.cedarRequestContext;
 
-    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(c);
+    FolderServiceSession folderSession = this.folderSession;
     CedarResourceType resourceType = CedarResourceType.INSTANCE;
 
     String originalDocument = null;
@@ -236,6 +257,7 @@ public class CloneInstancesExecutorService {
       throw new CedarProcessingException(e);
     }
 
+    String cleanupJob = cleanupService.prepare(resourceType, "worker-clone");
     try {
       String url = microserviceUrlUtil.getArtifact().getResourceType(resourceType);
 
@@ -243,7 +265,7 @@ public class CloneInstancesExecutorService {
 
       int statusCode = templateProxyResponse.getCode();
       if (statusCode != HttpStatus.SC_CREATED) {
-        // artifact was not created
+        cleanupService.rejected(cleanupJob, statusCode);
         throw new CedarProcessingException("Error when creating artifact from template: " + statusCode);
       } else {
         // artifact was created
@@ -253,6 +275,8 @@ public class CloneInstancesExecutorService {
         JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(entityContent);
         String createdId = jsonNode.get("@id").asText();
         CedarArtifactId newInstanceId = CedarArtifactId.build(createdId, resourceType);
+        Header validator = templateProxyResponse.getFirstHeader(HttpHeaders.ETAG);
+        cleanupService.created(cleanupJob, createdId, validator == null ? null : validator.getValue());
 
         FolderServerArtifact folderServerCreatedResource =
             ArtifactCopyOperations.registerCopy(folderSession, oldInstanceId, newInstanceId,
@@ -261,8 +285,11 @@ public class CloneInstancesExecutorService {
                 ModelUtil.extractDescriptionFromResource(resourceType, jsonNode).getValue(),
                 ModelUtil.extractIdentifierFromResource(resourceType, jsonNode).getValue(),
                 newTemplateId,
-                userId);
+                userId, cleanupJob);
 
+        if (folderServerCreatedResource == null) {
+          throw new CedarProcessingException("The cloned instance could not be registered in its destination");
+        }
         if (templateProxyResponse.getEntity() != null) {
           // index the artifact that has been created
           ArtifactCopyOperations.indexCreatedArtifact(nodeIndexingService, folderServerCreatedResource, c);
@@ -276,6 +303,8 @@ public class CloneInstancesExecutorService {
       }
     } catch (Exception e) {
       throw new CedarProcessingException(e);
+    } finally {
+      cleanupService.cleanupNow(cleanupJob, c);
     }
   }
 

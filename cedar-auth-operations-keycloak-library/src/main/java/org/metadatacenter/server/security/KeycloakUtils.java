@@ -1,5 +1,7 @@
 package org.metadatacenter.server.security;
 
+import org.metadatacenter.util.json.JsonMapper;
+
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
@@ -119,7 +121,7 @@ public class KeycloakUtils {
   }
 
   private static JacksonJsonProvider getCustomizedJacksonJsonProvider() {
-    ObjectMapper m = new ObjectMapper();
+    ObjectMapper m = JsonMapper.TOLERANT_MAPPER.copy();
     JacksonJsonProvider jacksonJsonProvider = new JacksonXmlBindJsonProvider();
     jacksonJsonProvider.setMapper(m);
 

@@ -10,6 +10,19 @@ public interface TemplateInstanceService<K, T> {
 
   T createTemplateInstance(T templateInstance) throws IOException;
 
+  default ArtifactWithRevision<T> createTemplateInstanceWithRevision(T templateInstance) throws IOException {
+    throw new UnsupportedOperationException("The implementation must return the revision assigned by insertion");
+  }
+
+  default ArtifactWithRevision<T> createTemplateInstanceWithRevision(T instance, Long templateRevision) throws IOException {
+    throw new UnsupportedOperationException("The instance write must fence its validated template revision");
+  }
+
+  default T updateTemplateInstance(K id, T content, long expectedRevision, Long templateRevision)
+      throws ArtifactServerResourceNotFoundException, IOException {
+    throw new UnsupportedOperationException("The instance write must fence its validated template revision");
+  }
+
   List<T> findAllTemplateInstances() throws IOException;
 
   List<T> findAllTemplateInstances(List<String> fieldNames, FieldNameInEx includeExclude) throws IOException;
@@ -36,4 +49,7 @@ public interface TemplateInstanceService<K, T> {
   long count();
 
   long countReferencingTemplate(K templateId);
+
+  /** Unfiltered content-store references, including instances absent from the workspace graph. */
+  List<String> findReferencingTemplateIds(K templateId);
 }

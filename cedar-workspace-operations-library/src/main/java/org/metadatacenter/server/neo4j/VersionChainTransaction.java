@@ -99,6 +99,18 @@ public final class VersionChainTransaction {
         Map.of("id",id,"previous",previousChanged)).consume();
   }
 
+  /** The snapshot belongs to the graph commit, never to a delayed request's later callback. */
+  public static void enqueueContent(Transaction tx, String id, String content) {
+    enqueue(tx, id, false);
+    tx.run("MATCH (j:CedarVersionProjection {resourceId:$id}) SET j.content=$content",
+        Map.of("id", id, "content", content)).consume();
+    // Instance reindex intent must survive a crash immediately after the template graph commit.
+    tx.run("MATCH (t:Template {_id:$id}), (i:Instance {schema_isBasedOn:$id}) "
+        + "MERGE (j:CedarVersionProjection {resourceId:i._id}) "
+        + "SET j.syncPrevious=coalesce(j.syncPrevious,false), j.updatedAt=timestamp()",
+        Map.of("id", id)).consume();
+  }
+
   /** Reconnect both the property and relationship before removing the node, all in one commit. */
   public static void delete(Transaction tx, String id) {
     lock(tx);

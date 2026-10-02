@@ -5,14 +5,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.model.folderserver.extract.FolderServerFolderExtract;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.model.folderserver.extract.FolderServerTemplateExtract;
+import org.metadatacenter.model.folderserver.extract.FolderServerTemplateInstanceExtract;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
+import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
+import org.metadatacenter.server.security.model.permission.resource.ResourceAction;
 import org.metadatacenter.server.security.model.permission.resource.ResourceCapability;
 import org.metadatacenter.server.security.model.permission.resource.ResourceAuthority;
 import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
@@ -20,10 +24,14 @@ import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -218,6 +226,104 @@ class PathInfoBuilderTest {
         folder.getCurrentUserPermissions().getCapabilities());
   }
 
+  /**
+   * A folder listing offered no actions at all: it carried the capabilities and never asked the
+   * action policy. Every action-gated menu entry was disabled, so a resource made not open could not
+   * be made open again from the listing.
+   */
+  static Stream<Arguments> listedOpenStates() {
+    return Stream.of(
+        Arguments.of(true, ResourceAction.DISABLE_OPENVIEW),
+        Arguments.of(false, ResourceAction.ENABLE_OPENVIEW),
+        // What a make-not-open left before it wrote the flag as false: no flag at all.
+        Arguments.of(null, ResourceAction.ENABLE_OPENVIEW));
+  }
+
+  @ParameterizedTest
+  @MethodSource("listedOpenStates")
+  void aListedResourceOffersTheOpenViewChangeItsStateAllows(Boolean open, ResourceAction offered) {
+    FolderServerTemplateInstanceExtract instance = instance("instance", open);
+    when(permissionSession.getResourceAuthority(instance.getResourceId())).thenReturn(new ResourceAuthority(null, true));
+
+    PathInfoBuilder.addCurrentUserPermissions(permissionSession, instance);
+
+    Set<ResourceAction> actions = instance.getCurrentUserPermissions().getAvailableActions();
+    assertTrue(actions.contains(offered), actions.toString());
+    assertFalse(actions.contains(offered == ResourceAction.ENABLE_OPENVIEW
+        ? ResourceAction.DISABLE_OPENVIEW : ResourceAction.ENABLE_OPENVIEW), actions.toString());
+  }
+
+  @Test
+  void aListedResourceWithoutOpenViewAuthorityOffersNeitherChange() {
+    FolderServerTemplateInstanceExtract instance = instance("instance", false);
+    when(permissionSession.getResourceAuthority(instance.getResourceId()))
+        .thenReturn(new ResourceAuthority(ResourceRole.VIEWER, false));
+
+    PathInfoBuilder.addCurrentUserPermissions(permissionSession, instance);
+
+    Set<ResourceAction> actions = instance.getCurrentUserPermissions().getAvailableActions();
+    assertFalse(actions.contains(ResourceAction.ENABLE_OPENVIEW), actions.toString());
+    assertFalse(actions.contains(ResourceAction.DISABLE_OPENVIEW), actions.toString());
+  }
+
+  @Test
+  void aListedTemplateOffersCopyAndPopulate() {
+    FolderServerTemplateExtract template = template("template");
+    when(permissionSession.getResourceAuthority(template.getResourceId()))
+        .thenReturn(new ResourceAuthority(ResourceRole.VIEWER, false));
+
+    PathInfoBuilder.addCurrentUserPermissions(permissionSession, template);
+
+    Set<ResourceAction> actions = template.getCurrentUserPermissions().getAvailableActions();
+    assertTrue(actions.containsAll(Set.of(ResourceAction.COPY_FROM_RESOURCE, ResourceAction.POPULATE)),
+        actions.toString());
+  }
+
+  static Stream<Arguments> listedVersionStates() {
+    return Stream.of(
+        Arguments.of(true, "bibo:draft", true, Set.of(ResourceAction.PUBLISH), null, CedarErrorKey.CREATE_DRAFT_ONLY_FROM_PUBLISHED),
+        Arguments.of(true, "bibo:published", true, Set.of(ResourceAction.CREATE_DRAFT), CedarErrorKey.PUBLISH_ONLY_DRAFT, null),
+        Arguments.of(true, "bibo:published", false, Set.of(), CedarErrorKey.PUBLISH_ONLY_DRAFT, CedarErrorKey.VERSIONING_ONLY_ON_LATEST),
+        Arguments.of(true, "bibo:draft", false, Set.of(), CedarErrorKey.VERSIONING_ONLY_ON_LATEST, CedarErrorKey.CREATE_DRAFT_ONLY_FROM_PUBLISHED),
+        Arguments.of(false, "bibo:draft", true, Set.of(), CedarErrorKey.VERSIONING_ONLY_BY_OWNER, CedarErrorKey.VERSIONING_ONLY_BY_OWNER));
+  }
+
+  @ParameterizedTest
+  @MethodSource("listedVersionStates")
+  void aListedTemplateOffersTheVersioningItsStateAllows(boolean owner, String status, boolean latest,
+                                                        Set<ResourceAction> offered, CedarErrorKey publishError,
+                                                        CedarErrorKey draftError) {
+    FolderServerTemplateExtract template = template("template");
+    template.setPublicationStatus(status);
+    template.setLatestVersion(latest);
+    when(permissionSession.getResourceAuthority(template.getResourceId()))
+        .thenReturn(new ResourceAuthority(owner ? null : ResourceRole.EDITOR, owner));
+
+    PathInfoBuilder.addCurrentUserPermissions(permissionSession, template);
+
+    CurrentUserResourcePermissions permissions = template.getCurrentUserPermissions();
+    Set<ResourceAction> versioning = permissions.getAvailableActions().stream()
+        .filter(a -> a == ResourceAction.PUBLISH || a == ResourceAction.CREATE_DRAFT)
+        .collect(Collectors.toSet());
+    assertEquals(offered, versioning);
+    assertEquals(publishError, permissions.getPublishErrorKey());
+    assertEquals(draftError, permissions.getCreateDraftErrorKey());
+  }
+
+  @Test
+  void aListedInstanceIsNotVersioned() {
+    FolderServerTemplateInstanceExtract instance = instance("instance", false);
+    when(permissionSession.getResourceAuthority(instance.getResourceId())).thenReturn(new ResourceAuthority(null, true));
+
+    PathInfoBuilder.addCurrentUserPermissions(permissionSession, instance);
+
+    CurrentUserResourcePermissions permissions = instance.getCurrentUserPermissions();
+    assertFalse(permissions.getAvailableActions().contains(ResourceAction.PUBLISH));
+    assertFalse(permissions.getAvailableActions().contains(ResourceAction.CREATE_DRAFT));
+    assertEquals(CedarErrorKey.NON_VERSIONED_ARTIFACT_TYPE, permissions.getPublishErrorKey());
+    assertEquals(CedarErrorKey.NON_VERSIONED_ARTIFACT_TYPE, permissions.getCreateDraftErrorKey());
+  }
+
   @Test
   void theUndecoratedPathIsWhatTheGraphReturned() {
     List<FolderServerResourceExtract> path = List.of(folder("root", false), folder("parent", false));
@@ -248,6 +354,13 @@ class PathInfoBuilderTest {
   private static FolderServerTemplateExtract template(String id) {
     FolderServerTemplateExtract extract = new FolderServerTemplateExtract();
     extract.setId(id);
+    return extract;
+  }
+
+  private static FolderServerTemplateInstanceExtract instance(String id, Boolean open) {
+    FolderServerTemplateInstanceExtract extract = new FolderServerTemplateInstanceExtract();
+    extract.setId(id);
+    extract.setIsOpen(open);
     return extract;
   }
 }

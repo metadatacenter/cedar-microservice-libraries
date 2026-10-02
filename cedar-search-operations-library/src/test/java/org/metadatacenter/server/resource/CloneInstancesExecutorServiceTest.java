@@ -2,6 +2,8 @@ package org.metadatacenter.server.resource;
 
 import org.metadatacenter.util.http.ArtifactServiceClient;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarFolderId;
@@ -15,6 +17,8 @@ import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.jsonld.LinkedDataUtil;
+import org.metadatacenter.server.search.elasticsearch.service.NodeIndexingService;
+import org.metadatacenter.server.valuerecommender.ValuerecommenderReindexQueueService;
 import org.metadatacenter.server.url.MicroserviceUrlUtil;
 
 import jakarta.ws.rs.core.Response;
@@ -30,10 +34,157 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CloneInstancesExecutorServiceTest {
+
+  private NodeIndexingService indexing;
+  private ArtifactCreateCleanupService cleanup;
+
+  @BeforeEach
+  void injectIndexing() {
+    indexing = mock(NodeIndexingService.class);
+    cleanup = mock(ArtifactCreateCleanupService.class);
+    when(cleanup.prepare(any(), any())).thenReturn("cleanup-job");
+    CloneInstancesExecutorService.injectServices(indexing, mock(ValuerecommenderReindexQueueService.class));
+  }
+
+  @AfterEach
+  void clearIndexing() {
+    CloneInstancesExecutorService.injectServices(null, null);
+  }
+
+  /** Every other folder is indexed when it is created, and so is the one holding an owner's clones. */
+  @Test
+  void theFolderHoldingTheClonesIsIndexed() throws Exception {
+    SingleOwnerClone clone = singleOwnerClone();
+
+    clone.service().handleEvent(clone.event());
+
+    verify(indexing).indexDocument(clone.targetFolder(), clone.context());
+    assertEquals(1, clone.attempts().get());
+  }
+
+  @Test
+  void aFolderThatCannotBeIndexedDoesNotAbandonTheClones() throws Exception {
+    SingleOwnerClone clone = singleOwnerClone();
+    doThrow(new CedarProcessingException("index unreachable"))
+        .when(indexing).indexDocument(clone.targetFolder(), clone.context());
+
+    clone.service().handleEvent(clone.event());
+
+    assertEquals(1, clone.attempts().get());
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+  void aCloneWhoseDestinationDisappearsOrOwnershipChangesDiscardsOnlyItsCreatedRevision(boolean transferred) throws Exception {
+    var folders = mock(FolderServiceSession.class);
+    var context = mock(CedarRequestContext.class);
+    var urls = mock(MicroserviceUrlUtil.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
+    var client = mock(ArtifactServiceClient.class);
+    var old = CedarTemplateInstanceId.build("https://repo.metadatacenter.org/template-instances/old");
+    var template = CedarTemplateId.build("https://repo.metadatacenter.org/templates/target");
+    var createdId = org.metadatacenter.id.CedarArtifactId.build(
+        "https://repo.metadatacenter.org/template-instances/clone", CedarResourceType.INSTANCE);
+    var source = new org.apache.hc.core5.http.message.BasicClassicHttpResponse(200);
+    source.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(
+        "{\"@id\":\"" + old.getId() + "\",\"schema:name\":\"Example\"}"));
+    var schema = new org.apache.hc.core5.http.message.BasicClassicHttpResponse(200);
+    schema.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity("{\"properties\":{}}"));
+    var created = new org.apache.hc.core5.http.message.BasicClassicHttpResponse(201);
+    created.setHeader("ETag", "\"7\"");
+    created.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(
+        "{\"@id\":\"" + createdId.getId() + "\",\"schema:name\":\"Example\"}"));
+    when(urls.getArtifact().getArtifactTypeWithId(CedarResourceType.INSTANCE, old)).thenReturn("source");
+    when(urls.getArtifact().getArtifactTypeWithId(CedarResourceType.TEMPLATE, template)).thenReturn("template");
+    when(urls.getArtifact().getResourceType(CedarResourceType.INSTANCE)).thenReturn("instances");
+    when(urls.getArtifact().getArtifactTypeWithId(CedarResourceType.INSTANCE, createdId)).thenReturn("clone");
+    when(client.get(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(context),
+        org.mockito.ArgumentMatchers.eq(org.metadatacenter.util.http.HttpTimeouts.BATCH))).thenReturn(source, schema);
+    when(client.post(org.mockito.ArgumentMatchers.eq("instances"), org.mockito.ArgumentMatchers.eq(context),
+        org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(org.metadatacenter.util.http.HttpTimeouts.BATCH)))
+        .thenReturn(created);
+    when(client.delete("clone", context, "\"7\"")).thenReturn(
+        new org.apache.hc.core5.http.message.BasicClassicHttpResponse(204));
+    var destination = CedarFolderId.build("destination");
+    var owner = CedarUserId.build("owner");
+    if (transferred) {
+      var folder = new FolderServerFolder(); folder.setId(destination.getId());
+      var original = new org.metadatacenter.model.folderserver.basic.FolderServerInstance();
+      original.setId(old.getId()); original.setIsBasedOn(template);
+      when(folders.findFolderById(destination)).thenReturn(folder);
+      when(folders.findArtifactById(old)).thenReturn(original);
+      // Reads succeeded, but the graph's atomic registration rejects the now-stale owner.
+      when(folders.createInstanceCloneWithCleanup(any(), org.mockito.ArgumentMatchers.eq(old),
+          org.mockito.ArgumentMatchers.eq(destination), org.mockito.ArgumentMatchers.eq(owner), org.mockito.ArgumentMatchers.eq("cleanup-job"))).thenReturn(null);
+    }
+    var service = new CloneInstancesExecutorService(folders, context, urls, mock(LinkedDataUtil.class), client, cleanup);
+
+    assertThrows(CedarProcessingException.class, () -> service.copyInstanceToFolderWithNewTemplate(old,
+        template, destination, owner));
+
+    if (transferred) verify(folders).createInstanceCloneWithCleanup(any(),
+        org.mockito.ArgumentMatchers.eq(old), org.mockito.ArgumentMatchers.eq(destination),
+        org.mockito.ArgumentMatchers.eq(owner), org.mockito.ArgumentMatchers.eq("cleanup-job"));
+    var order = org.mockito.Mockito.inOrder(cleanup, client);
+    order.verify(cleanup).prepare(CedarResourceType.INSTANCE, "worker-clone");
+    order.verify(client).post(org.mockito.ArgumentMatchers.eq("instances"), org.mockito.ArgumentMatchers.eq(context),
+        org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(org.metadatacenter.util.http.HttpTimeouts.BATCH));
+    order.verify(cleanup).created("cleanup-job", createdId.getId(), "\"7\"");
+    order.verify(cleanup).cleanupNow("cleanup-job", context);
+    org.mockito.Mockito.verifyNoInteractions(indexing);
+  }
+
+  private record SingleOwnerClone(CloneInstancesExecutorService service, CloneInstancesQueueEvent event,
+                                  FolderServerFolder targetFolder, CedarRequestContext context,
+                                  AtomicInteger attempts) {
+  }
+
+  private SingleOwnerClone singleOwnerClone() {
+    CedarTemplateId oldTemplateId = CedarTemplateId.build("template-old");
+    CedarTemplateId newTemplateId = CedarTemplateId.build("template-new");
+    CedarUserId ownerId = CedarUserId.build("owner-a");
+    CedarFolderId targetFolderId = CedarFolderId.build("target-folder");
+
+    FolderServerResourceExtract instance = instance(1);
+    instance.setOwnedBy(ownerId.getId());
+    FolderServiceSession repository = mock(FolderServiceSession.class);
+    when(repository.getNumberOfInstances(oldTemplateId)).thenReturn(1L);
+    when(repository.searchIsBasedOn(any(), any(), anyInt(), anyInt(), any())).thenReturn(List.of(instance));
+    FolderServerFolder homeFolder = new FolderServerFolder();
+    homeFolder.setId(CedarFolderId.build("home-folder").getId());
+    when(repository.findHomeFolderOfUser(ownerId)).thenReturn(homeFolder);
+    FolderServerTemplate newTemplate = new FolderServerTemplate();
+    newTemplate.setName("New template");
+    newTemplate.setVersion("2.0.0");
+    when(repository.findResourceById(newTemplateId)).thenReturn(newTemplate);
+    FolderServerFolder targetFolder = new FolderServerFolder();
+    targetFolder.setId(targetFolderId.getId());
+    when(repository.createFolderAsChildOfId(any(FolderServerFolder.class), any(CedarFolderId.class),
+        any(CedarFolderId.class), any(CedarUserId.class))).thenReturn(targetFolder);
+    LinkedDataUtil linkedDataUtil = mock(LinkedDataUtil.class);
+    when(linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class)).thenReturn(targetFolderId);
+
+    CedarRequestContext context = mock(CedarRequestContext.class);
+    AtomicInteger attempts = new AtomicInteger();
+    CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository, context,
+        mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class), cleanup) {
+      @Override
+      protected Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId ignoredOldInstanceId,
+                                                             CedarTemplateId ignoredNewTemplateId,
+                                                             CedarFolderId ignoredDestinationFolderId,
+                                                             CedarUserId ignoredUserId) {
+        attempts.incrementAndGet();
+        return Response.ok().build();
+      }
+    };
+    return new SingleOwnerClone(service, new CloneInstancesQueueEvent(oldTemplateId, newTemplateId, null),
+        targetFolder, context, attempts);
+  }
 
   @Test
   void loadsEveryInstanceAcrossRepositoryPageBoundariesInStableOrder() {
@@ -109,7 +260,7 @@ class CloneInstancesExecutorServiceTest {
     when(linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class)).thenReturn(targetFolderId);
     AtomicInteger attempts = new AtomicInteger();
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class)) {
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class), cleanup) {
       @Override
       protected Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId oldInstanceId,
                                                              CedarTemplateId ignoredNewTemplateId,
@@ -158,7 +309,7 @@ class CloneInstancesExecutorServiceTest {
         .thenReturn(CedarFolderId.build("target-folder"));
 
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class));
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class), cleanup);
 
     CedarProcessingException error = assertThrows(CedarProcessingException.class,
         () -> service.handleEvent(new CloneInstancesQueueEvent(oldTemplateId, newTemplateId, null)));
@@ -197,7 +348,7 @@ class CloneInstancesExecutorServiceTest {
         .thenReturn(CedarFolderId.build("target-folder"));
 
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class)) {
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class), cleanup) {
       @Override
       protected Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId ignoredOldInstanceId,
                                                              CedarTemplateId ignoredNewTemplateId,
@@ -223,7 +374,7 @@ class CloneInstancesExecutorServiceTest {
     when(repository.searchIsBasedOn(any(), any(), anyInt(), anyInt(), any())).thenReturn(List.of(ownerless));
 
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), mock(LinkedDataUtil.class), mock(ArtifactServiceClient.class));
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), mock(LinkedDataUtil.class), mock(ArtifactServiceClient.class), cleanup);
 
     // Deterministic per-instance failures: a retry reproduces them, so the job dead-letters once.
     CloneInstancesNotRetryableException error = assertThrows(CloneInstancesNotRetryableException.class,

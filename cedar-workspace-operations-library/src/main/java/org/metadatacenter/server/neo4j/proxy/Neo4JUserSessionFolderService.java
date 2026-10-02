@@ -26,8 +26,10 @@ import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 import org.metadatacenter.util.CedarUserNameUtil;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession implements FolderServiceSession {
 
@@ -51,6 +53,33 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
                                                         CedarFolderId parentFolderId, CedarUserId userId) {
     newResource.setCreatedByTotal(userId);
     return proxies.artifact().createResourceAsChildOfId(newResource, parentFolderId);
+  }
+
+  @Override
+  public FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
+                                                             CedarFolderId parentId, CedarUserId expectedOwner) {
+    clone.setCreatedByTotal(expectedOwner);
+    return proxies.artifact().createInstanceCloneAsChildOfId(clone, sourceId, parentId, expectedOwner);
+  }
+
+  @Override
+  public FolderServerArtifact createResourceWithCleanup(FolderServerArtifact artifact, CedarFolderId parentId, String jobId) {
+    artifact.setCreatedByTotal(cu.getResourceId());
+    return proxies.artifact().createResourceAsChildOfId(artifact, parentId, jobId);
+  }
+
+  @Override
+  public FolderServerArtifact createDraftWithCleanup(FolderServerArtifact draft, CedarFolderId parentId,
+                                                     boolean sharing, String jobId) {
+    draft.setCreatedByTotal(cu.getResourceId());
+    return proxies.artifact().createDraftAsChildOfId(draft, parentId, sharing, jobId);
+  }
+
+  @Override
+  public FolderServerArtifact createInstanceCloneWithCleanup(FolderServerArtifact clone, CedarArtifactId sourceId,
+      CedarFolderId parentId, CedarUserId owner, String jobId) {
+    clone.setCreatedByTotal(owner);
+    return proxies.artifact().createInstanceCloneAsChildOfId(clone, sourceId, parentId, owner, jobId);
   }
 
   @Override
@@ -81,6 +110,12 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   public ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
       Map<NodeProperty, String> updateFields, String restoreJobId) {
     return proxies.artifact().updateArtifactById(artifactId, updateFields, cu.getResourceId(), restoreJobId);
+  }
+
+  @Override
+  public ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
+      Map<NodeProperty, String> updateFields, String restoreJobId, String projectionContent) {
+    return proxies.artifact().updateArtifactById(artifactId, updateFields, cu.getResourceId(), restoreJobId, projectionContent);
   }
 
   @Override
@@ -478,31 +513,6 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public boolean unsetLatestVersion(CedarSchemaArtifactId artifactId) {
-    return proxies.artifact().unsetLatestVersion(artifactId);
-  }
-
-  @Override
-  public boolean setLatestVersion(CedarSchemaArtifactId artifactId) {
-    return proxies.artifact().setLatestVersion(artifactId);
-  }
-
-  @Override
-  public boolean setLatestPublishedVersion(CedarSchemaArtifactId artifactId) {
-    return proxies.artifact().setLatestPublishedVersion(artifactId);
-  }
-
-  @Override
-  public boolean unsetLatestPublishedVersion(CedarSchemaArtifactId artifactId) {
-    return proxies.artifact().unsetLatestPublishedVersion(artifactId);
-  }
-
-  @Override
-  public boolean unsetLatestDraftVersion(CedarSchemaArtifactId artifactId) {
-    return proxies.artifact().unsetLatestDraftVersion(artifactId);
-  }
-
-  @Override
   public boolean setOpen(CedarArtifactId artifactId) {
     return proxies.artifact().setOpen(artifactId);
   }
@@ -552,6 +562,11 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public boolean enqueueInstanceReindex(CedarTemplateId templateId) {
+    return proxies.artifact().enqueueInstanceReindex(templateId);
+  }
+
+  @Override
   public FolderServerArtifactExtract findResourceExtractById(CedarArtifactId artifactId) {
     return proxies.artifact().findResourceExtractById(artifactId);
   }
@@ -596,6 +611,11 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   @Override
   public boolean isArtifactOpenImplicitly(CedarArtifactId artifactId) {
     return proxies.resource().isFileSystemResourceOpenImplicitly(artifactId);
+  }
+
+  @Override
+  public Set<String> findResourcesOpenThroughAFolder(Collection<String> resourceIds) {
+    return proxies.resource().findResourcesOpenThroughAFolder(resourceIds);
   }
 
   @Override

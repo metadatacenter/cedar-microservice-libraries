@@ -25,6 +25,11 @@ public class TemplateElementServiceMongoDB extends GenericTemplateServiceMongoDB
   }
 
   @Override
+  public ArtifactWithRevision<JsonNode> createTemplateElementWithRevision(JsonNode templateElement) throws IOException {
+    return templateElementDao.createWithRevision(templateElement);
+  }
+
+  @Override
   public List<JsonNode> findAllTemplateElements() throws IOException {
     return templateElementDao.findAll();
   }

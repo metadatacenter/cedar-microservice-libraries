@@ -105,45 +105,23 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
         " RETURN nr";
   }
 
-  public static String unsetLatestVersion() {
-    return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
-        " SET artifact.<PROP.IS_LATEST_VERSION> = false" +
-        " RETURN artifact";
-  }
-
-  public static String setLatestVersion() {
-    return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
-        " SET artifact.<PROP.IS_LATEST_VERSION> = true" +
-        " RETURN artifact";
-  }
-
-  public static String unsetLatestDraftVersion() {
-    return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
-        " SET artifact.<PROP.IS_LATEST_DRAFT_VERSION> = false" +
-        " RETURN artifact";
-  }
-
-  public static String setLatestPublishedVersion() {
-    return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
-        " SET artifact.<PROP.IS_LATEST_PUBLISHED_VERSION> = true" +
-        " RETURN artifact";
-  }
-
-  public static String unsetLatestPublishedVersion() {
-    return "" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ID>}})" +
-        " SET artifact.<PROP.IS_LATEST_PUBLISHED_VERSION> = false" +
-        " RETURN artifact";
-  }
-
   public static String getIsBasedOnCount() {
     return "" +
         " MATCH (instance:<LABEL.INSTANCE> {<PROP.IS_BASED_ON>:{<PH.ID>}}) " +
         " RETURN COUNT(instance)";
+  }
+
+  /**
+   * Marks every instance of a template for a full reindex by the version projection relay. An
+   * instance's indexed field names and labels are read from its template, so they go stale when the
+   * template changes although the instance itself does not.
+   */
+  public static String enqueueInstanceReindex() {
+    return "" +
+        " MATCH (instance:<LABEL.INSTANCE> {<PROP.IS_BASED_ON>:{<PH.ID>}})" +
+        " MERGE (projection:CedarVersionProjection {resourceId:instance.<PROP.ID>})" +
+        " SET projection.syncPrevious = coalesce(projection.syncPrevious, false)," +
+        " projection.updatedAt = timestamp()";
   }
 
   public static String getVersionHistory() {
@@ -179,7 +157,7 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
   public static String setNotOpen() {
     return "" +
         " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
-        " REMOVE artifact.<PROP.IS_OPEN>" +
+        " SET artifact.<PROP.IS_OPEN> = false" +
         " SET artifact._cedarRevision = coalesce(artifact._cedarRevision, 1) + 1" +
         " RETURN artifact AS resource, artifact._cedarRevision AS revision";
   }

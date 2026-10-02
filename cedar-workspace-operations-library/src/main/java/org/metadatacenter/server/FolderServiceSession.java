@@ -14,8 +14,10 @@ import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public interface FolderServiceSession {
 
@@ -49,7 +51,19 @@ public interface FolderServiceSession {
 
   FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentFolderId, CedarUserId userId);
 
+  /** Background clones must still belong to the enumerated owner when registered. */
+  FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
+                                                      CedarFolderId parentId, CedarUserId expectedOwner);
+
   FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentFolderId, boolean propagateSharing);
+
+  FolderServerArtifact createResourceWithCleanup(FolderServerArtifact artifact, CedarFolderId parentId, String jobId);
+
+  FolderServerArtifact createDraftWithCleanup(FolderServerArtifact draft, CedarFolderId parentId,
+                                               boolean propagateSharing, String jobId);
+
+  FolderServerArtifact createInstanceCloneWithCleanup(FolderServerArtifact clone, CedarArtifactId sourceId,
+                                                      CedarFolderId parentId, CedarUserId owner, String jobId);
 
   FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields);
 
@@ -61,6 +75,10 @@ public interface FolderServiceSession {
 
   ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
       Map<NodeProperty, String> updateFields, String restoreJobId);
+
+  /** Commits the document-derived work with the graph update, including on the compensation fallback path. */
+  ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
+      Map<NodeProperty, String> updateFields, String restoreJobId, String projectionContent);
 
   boolean deleteFolderById(CedarFolderId folderId);
 
@@ -164,16 +182,6 @@ public interface FolderServiceSession {
 
   boolean setDerivedFrom(CedarArtifactId newId, CedarArtifactId oldId);
 
-  boolean unsetLatestVersion(CedarSchemaArtifactId id);
-
-  boolean setLatestVersion(CedarSchemaArtifactId id);
-
-  boolean setLatestPublishedVersion(CedarSchemaArtifactId id);
-
-  boolean unsetLatestPublishedVersion(CedarSchemaArtifactId id);
-
-  boolean unsetLatestDraftVersion(CedarSchemaArtifactId id);
-
   boolean setOpen(CedarArtifactId id);
 
   VersionedResource<FolderServerArtifact> setOpen(CedarArtifactId id, RevisionPrecondition precondition);
@@ -191,6 +199,9 @@ public interface FolderServiceSession {
   VersionedResource<FolderServerFolder> setNotOpen(CedarFolderId id, RevisionPrecondition precondition);
 
   long getNumberOfInstances(CedarTemplateId templateId);
+
+  /** Marks every instance of the template for a full reindex; see the version projection relay. */
+  boolean enqueueInstanceReindex(CedarTemplateId templateId);
 
   FolderServerArtifactExtract findResourceExtractById(CedarArtifactId id);
 
@@ -211,6 +222,9 @@ public interface FolderServiceSession {
   CedarResourceType getResourceType(CedarResourceId resourceId);
 
   boolean isArtifactOpenImplicitly(CedarArtifactId artifactId);
+
+  /** The identifiers, among those given, of resources inside an open folder at any depth. */
+  Set<String> findResourcesOpenThroughAFolder(Collection<String> resourceIds);
 
   long getFolderCount();
 

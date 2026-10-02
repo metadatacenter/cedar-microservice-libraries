@@ -203,6 +203,16 @@ public class NodeIndexingService extends AbstractIndexingService {
   }
 
   public IndexedDocumentId indexDocument(FileSystemResource resource, CedarRequestContext requestContext) throws CedarProcessingException {
+    return indexDocument(resource, requestContext, false);
+  }
+
+  /** One network attempt per target; the durable graph job owns retries, including a rebuild mirror. */
+  public IndexedDocumentId indexDocumentForProjection(FileSystemResource resource, CedarRequestContext requestContext) throws CedarProcessingException {
+    return indexDocument(resource, requestContext, true);
+  }
+
+  private IndexedDocumentId indexDocument(FileSystemResource resource, CedarRequestContext requestContext,
+                                         boolean durableProjection) throws CedarProcessingException {
     log.debug("Indexing resource (id = " + resource.getId() + ")");
     ResourcePermissionServiceSession permissionSession =
         CedarDataServices.getInstance().getResourcePermissionServiceSession(requestContext);
@@ -214,12 +224,18 @@ public class NodeIndexingService extends AbstractIndexingService {
       categories = categorySession.getArtifactMaterializedCategories(CedarArtifactId.build(resource.getId(),
           resource.getType()));
     }
-    return indexDocument(resource, permissions, categories, requestContext);
+    return indexDocument(resource, permissions, categories, requestContext, false, durableProjection);
   }
 
   public IndexedDocumentId indexDocument(FileSystemResource resource, CedarNodeMaterializedPermissions permissions,
                                          CedarNodeMaterializedCategories categories, CedarRequestContext requestContext,
                                          boolean isIndexRegenerationTask) throws CedarProcessingException {
+    return indexDocument(resource, permissions, categories, requestContext, isIndexRegenerationTask, false);
+  }
+
+  IndexedDocumentId indexDocument(FileSystemResource resource, CedarNodeMaterializedPermissions permissions,
+                                  CedarNodeMaterializedCategories categories, CedarRequestContext requestContext,
+                                  boolean isIndexRegenerationTask, boolean durableProjection) throws CedarProcessingException {
     // A caller that could not find the resource has nothing to index. Say so, rather than
     // dereferencing null several frames deeper and reporting it as a NullPointerException.
     if (resource == null) {
@@ -230,8 +246,18 @@ public class NodeIndexingService extends AbstractIndexingService {
         isIndexRegenerationTask);
     JsonNode jsonResource = JsonMapper.STRICT_MAPPER.convertValue(ir, JsonNode.class);
     // Index under the CEDAR id, so re-indexing replaces the resource's document in place
-    IndexedDocumentId indexed = indexWorker.addToIndex(jsonResource, resource.getId());
-    mirrorWrite(jsonResource, resource.getId());
+    IndexedDocumentId indexed = indexWorker.addToIndex(jsonResource, resource.getId(), durableProjection ? 0 : 20);
+    if (durableProjection) {
+      indexWorker.removeLegacyFromIndex(resource.getResourceId());
+      var mirror = mirror();
+      if (mirror.isPresent()) {
+        mirror.get().addToIndex(jsonResource, resource.getId(), 0);
+        mirror.get().removeLegacyFromIndex(resource.getResourceId());
+        IndexRebuildRegistry.recordLiveWrite(resource.getId());
+      }
+    } else {
+      mirrorWrite(jsonResource, resource.getId());
+    }
     return indexed;
   }
 

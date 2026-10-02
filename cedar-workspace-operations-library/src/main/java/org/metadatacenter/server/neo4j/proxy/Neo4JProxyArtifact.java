@@ -3,6 +3,7 @@ package org.metadatacenter.server.neo4j.proxy;
 import org.metadatacenter.server.ArtifactGraphUpdateResult;
 
 import org.metadatacenter.server.neo4j.ArtifactRestoreTransaction;
+import org.metadatacenter.server.neo4j.ArtifactCreateCleanupOutbox;
 import org.metadatacenter.server.neo4j.VersionChainTransaction;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
@@ -41,7 +42,7 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
 
   private volatile boolean versioningInitialized;
 
-  private synchronized void initializeVersioning() {
+  protected synchronized void initializeVersioning() {
     if (!versioningInitialized) {
       VersionChainTransaction.initialize(driver);
       versioningInitialized = true;
@@ -49,16 +50,68 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
   }
 
   FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentId) {
-    String cypher = CypherQueryBuilderArtifact.createResourceAsChildOfId(newResource);
-    CypherParameters params = CypherParamBuilderArtifact.createArtifact(newResource, parentId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWriteGetOne(q, FolderServerArtifact.class);
+    return createResourceAsChildOfId(newResource, parentId, null);
   }
 
-  FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentId, boolean propagateSharing) {
+  FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentId, String jobId) {
     initializeVersioning();
     return executeInWriteTransaction(tx -> {
       VersionChainTransaction.lock(tx);
+      ArtifactCreateCleanupOutbox.requireRegistration(tx, jobId, newResource.getId());
+      var created = runInTransactionGetOne(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderArtifact.createResourceAsChildOfId(newResource),
+          CypherParamBuilderArtifact.createArtifact(newResource, parentId)), FolderServerArtifact.class);
+      if (created != null) ArtifactCreateCleanupOutbox.registered(tx, jobId);
+      return created;
+    }, "registering an artifact and retiring failed-create cleanup");
+  }
+
+  FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
+                                                      CedarFolderId parentId, CedarUserId expectedOwner) {
+    return createInstanceCloneAsChildOfId(clone, sourceId, parentId, expectedOwner, null);
+  }
+
+  FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
+      CedarFolderId parentId, CedarUserId expectedOwner, String jobId) {
+    initializeVersioning();
+    return executeInWriteTransaction(tx -> {
+      VersionChainTransaction.lock(tx);
+      ArtifactCreateCleanupOutbox.requireRegistration(tx, jobId, clone.getId());
+      // Ownership transfers take these same node locks. Check after locking, and hold them through
+      // registration so a transfer cannot land between the ownership check and the new OWNS arc.
+      for (String id : java.util.stream.Stream.of(sourceId.getId(), parentId.getId()).sorted().toList()) {
+        var locked = tx.run("MATCH (n {_id:$id}) SET n._cedarAclRevision=coalesce(n._cedarAclRevision,1) "
+            + "RETURN n._cedarAclRevision AS revision", Map.of("id", id));
+        if (readLockedRevision(locked).isEmpty()) return null;
+      }
+      var owners = tx.run("MATCH (u:User {_id:$owner})-[:OWNS]->(s:Artifact {_id:$source}), "
+          + "(u)-[:OWNS]->(p:Folder {_id:$parent}) RETURN s",
+          Map.of("owner", expectedOwner.getId(), "source", sourceId.getId(), "parent", parentId.getId()));
+      if (!owners.hasNext()) return null;
+      var created = runInTransactionGetOne(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderArtifact.createResourceAsChildOfId(clone),
+          CypherParamBuilderArtifact.createArtifact(clone, parentId)), FolderServerArtifact.class);
+      if (created != null) {
+        var query = new CypherQueryWithParameters(CypherQueryBuilderArtifact.setDerivedFrom(),
+            CypherParamBuilderResource.matchSourceAndTarget(created.getResourceId(), sourceId));
+        tx.run(query.getRunnableQuery(), query.getParameterMap()).consume();
+        created.setDerivedFrom(CedarUntypedArtifactId.build(sourceId.getId()));
+        ArtifactCreateCleanupOutbox.registered(tx, jobId);
+      }
+      return created;
+    }, "registering a clone for its unchanged owner");
+  }
+
+  FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentId, boolean propagateSharing) {
+    return createDraftAsChildOfId(draft, parentId, propagateSharing, null);
+  }
+
+  FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentId,
+      boolean propagateSharing, String jobId) {
+    initializeVersioning();
+    return executeInWriteTransaction(tx -> {
+      VersionChainTransaction.lock(tx);
+      ArtifactCreateCleanupOutbox.requireRegistration(tx, jobId, draft.getId());
       var schema = (FolderServerSchemaArtifact) draft;
       VersionChainTransaction.requireDraftSource(tx, schema.getPreviousVersion().getId(), schema.getVersion().getValue());
       var created = runInTransactionGetOne(tx, new CypherQueryWithParameters(
@@ -75,39 +128,30 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
               + "SET d.everybodyPermission=s.everybodyPermission",args).consume();
         }
         VersionChainTransaction.reconcile(tx,created.getId());
+        ArtifactCreateCleanupOutbox.registered(tx, jobId);
       }
       return created;
     }, "creating the sole successor draft");
   }
 
   FolderServerArtifact updateArtifactById(CedarArtifactId artifactId, Map<NodeProperty, String> updateFields, CedarUserId updatedBy) {
-    String cypher = CypherQueryBuilderArtifact.updateResourceById(updateFields);
-    CypherParameters params = CypherParamBuilderArtifact.updateArtifactById(artifactId, updateFields, updatedBy);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    if (updateFields.containsKey(NodeProperty.PUBLICATION_STATUS)) {
-      initializeVersioning();
-      return executeInWriteTransaction(tx -> {
-        VersionChainTransaction.lock(tx);
-        if (!VersionChainTransaction.requirePublish(tx, artifactId.getId(), updateFields.get(NodeProperty.VERSION))) return null;
-        var result = runInTransactionGetOne(tx,q,FolderServerArtifact.class);
-        if (result != null) VersionChainTransaction.reconcile(tx,artifactId.getId());
-        return result;
-      }, "publishing a version and maintaining its series");
-    }
-    return executeWriteGetOne(q, FolderServerArtifact.class);
+    return updateArtifactById(artifactId, updateFields, updatedBy, null, null).resource();
   }
 
   ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, Map<NodeProperty, String> updateFields,
       CedarUserId updatedBy, String restoreJobId) {
-    if (restoreJobId == null) {
-      return ArtifactGraphUpdateResult.updated(updateArtifactById(artifactId, updateFields, updatedBy));
-    }
-    if (updateFields.containsKey(NodeProperty.PUBLICATION_STATUS)) initializeVersioning();
+    return updateArtifactById(artifactId, updateFields, updatedBy, restoreJobId, null);
+  }
+
+  ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, Map<NodeProperty, String> updateFields,
+      CedarUserId updatedBy, String restoreJobId, String projectionContent) {
+    initializeVersioning();
     return executeInWriteTransaction(tx -> {
-      if (updateFields.containsKey(NodeProperty.PUBLICATION_STATUS)) {
-        VersionChainTransaction.lock(tx);
-      }
-      var decision = ArtifactRestoreTransaction.graphDecision(tx, artifactId.getId(), restoreJobId);
+      // Use the relay's lock before touching graph state: an in-flight projection cannot be
+      // overtaken by a save, publication or deletion, including across resource-server processes.
+      VersionChainTransaction.lock(tx);
+      var decision = restoreJobId == null ? ArtifactRestoreTransaction.GraphDecision.READY
+          : ArtifactRestoreTransaction.graphDecision(tx, artifactId.getId(), restoreJobId);
       if (decision != ArtifactRestoreTransaction.GraphDecision.READY) {
         var outcome = switch (decision) {
           case SUPERSEDED -> ArtifactGraphUpdateResult.Outcome.SUPERSEDED;
@@ -126,17 +170,15 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
           FolderServerArtifact.class);
       if (result != null) {
         if (updateFields.containsKey(NodeProperty.PUBLICATION_STATUS)) VersionChainTransaction.reconcile(tx,artifactId.getId());
-        ArtifactRestoreTransaction.remove(tx, restoreJobId);
+        if (projectionContent == null) VersionChainTransaction.enqueue(tx, artifactId.getId(), false);
+        else VersionChainTransaction.enqueueContent(tx, artifactId.getId(), projectionContent);
+        if (restoreJobId != null) ArtifactRestoreTransaction.remove(tx, restoreJobId);
       }
       return ArtifactGraphUpdateResult.updated(result);
     }, "updating an artifact and completing its compensation record");
   }
 
   boolean deleteArtifactById(CedarArtifactId artifactId) {
-    if (!(artifactId instanceof CedarSchemaArtifactId)) {
-      return executeWrite(new CypherQueryWithParameters(CypherQueryBuilderArtifact.deleteArtifactById(),
-          CypherParamBuilderArtifact.matchId(artifactId)), "deleting an instance");
-    }
     initializeVersioning();
     return executeInWriteTransaction(tx -> {
       VersionChainTransaction.delete(tx,artifactId.getId());
@@ -224,46 +266,18 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     return executeWrite(q, "setting derivedFrom");
   }
 
-  public boolean unsetLatestVersion(CedarSchemaArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.unsetLatestVersion();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "unsetting isLatestVersion");
-  }
-
-  public boolean setLatestVersion(CedarSchemaArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.setLatestVersion();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "setting isLatestVersion");
-  }
-
-  public boolean unsetLatestDraftVersion(CedarSchemaArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.unsetLatestDraftVersion();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "unsetting isLatestDraftVersion");
-  }
-
-  public boolean setLatestPublishedVersion(CedarSchemaArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.setLatestPublishedVersion();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "setting isLatestPublishedVersion");
-  }
-
-  public boolean unsetLatestPublishedVersion(CedarSchemaArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.unsetLatestPublishedVersion();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "unsetting isLatestPublishedVersion");
-  }
-
   public long getIsBasedOnCount(CedarTemplateId templateId) {
     String cypher = CypherQueryBuilderArtifact.getIsBasedOnCount();
     CypherParameters params = CypherParamBuilderArtifact.matchId(templateId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetLong(q);
+  }
+
+  public boolean enqueueInstanceReindex(CedarTemplateId templateId) {
+    String cypher = CypherQueryBuilderArtifact.enqueueInstanceReindex();
+    CypherParameters params = CypherParamBuilderArtifact.matchId(templateId);
+    CypherQuery q = new CypherQueryWithParameters(cypher, params);
+    return executeWrite(q, "marking a template's instances for reindexing");
   }
 
   public List<FolderServerArtifactExtract> getVersionHistory(CedarSchemaArtifactId artifactId) {
@@ -321,7 +335,9 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
   private VersionedResource<FolderServerArtifact> setArtifactOpenState(CedarArtifactId artifactId,
                                                                         RevisionPrecondition precondition,
                                                                         boolean open) {
+    initializeVersioning();
     return executeInWriteTransaction(tx -> {
+      VersionChainTransaction.lock(tx);
       CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
       Result locked = run(tx, new CypherQueryWithParameters(
           CypherQueryBuilderArtifact.lockArtifactRevision(), params));
@@ -333,8 +349,10 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
         throw new RevisionConflictException(currentRevision);
       }
       String cypher = open ? CypherQueryBuilderArtifact.setOpen() : CypherQueryBuilderArtifact.setNotOpen();
-      return readVersionedResource(run(tx, new CypherQueryWithParameters(cypher, params)),
+      var updated = readVersionedResource(run(tx, new CypherQueryWithParameters(cypher, params)),
           FolderServerArtifact.class);
+      if (updated != null) VersionChainTransaction.enqueue(tx, artifactId.getId(), false);
+      return updated;
     }, open ? "making an artifact open" : "making an artifact not open");
   }
 

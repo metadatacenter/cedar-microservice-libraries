@@ -6,6 +6,7 @@ import org.metadatacenter.id.CedarTemplateId;
 import org.metadatacenter.id.CedarTemplateInstanceId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.CedarResourceType;
+import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.model.folderserver.basic.FolderServerInstance;
 import org.metadatacenter.server.FolderServiceSession;
@@ -53,16 +54,40 @@ class ArtifactCopyOperationsTest {
     oldInstance.setIsBasedOn(CedarTemplateId.build("template-original"));
     when(folderSession.findFolderById(folderId)).thenReturn(folder(folderId));
     when(folderSession.findArtifactById(oldId)).thenReturn(oldInstance);
-    when(folderSession.createResourceAsChildOfId(any(FolderServerInstance.class), any(CedarFolderId.class),
-        any(CedarUserId.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(folderSession.createInstanceCloneAsChildOfId(any(FolderServerInstance.class), any(CedarTemplateInstanceId.class),
+        any(CedarFolderId.class), any(CedarUserId.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
     FolderServerInstance clone = (FolderServerInstance) ArtifactCopyOperations.registerCopy(folderSession,
         oldId, newId, folderId, CedarResourceType.INSTANCE, "clone", "description", null,
         newTemplateId, ownerId);
 
     assertEquals(newTemplateId, clone.getIsBasedOn());
-    verify(folderSession).createResourceAsChildOfId(clone, folderId, ownerId);
-    verify(folderSession).setDerivedFrom(newId, oldId);
+    verify(folderSession).createInstanceCloneAsChildOfId(clone, oldId, folderId, ownerId);
+  }
+
+  /**
+   * Callers index the copy this returns. It was the node as read before the derived-from link was
+   * written, so every copy entered the index without its provenance.
+   */
+  @Test
+  void theRegisteredCopyCarriesItsProvenance() throws Exception {
+    FolderServiceSession folderSession = mock(FolderServiceSession.class);
+    CedarTemplateInstanceId oldId = CedarTemplateInstanceId.build("instance-old");
+    CedarTemplateInstanceId newId = CedarTemplateInstanceId.build("instance-new");
+    CedarFolderId folderId = CedarFolderId.build("target-folder");
+    FolderServerInstance oldInstance = new FolderServerInstance();
+    oldInstance.setId(oldId.getId());
+    oldInstance.setIsBasedOn(CedarTemplateId.build("template-original"));
+    when(folderSession.findFolderById(folderId)).thenReturn(folder(folderId));
+    when(folderSession.findArtifactById(oldId)).thenReturn(oldInstance);
+    when(folderSession.createResourceAsChildOfId(any(FolderServerInstance.class), any(CedarFolderId.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(folderSession.setDerivedFrom(newId, oldId)).thenReturn(true);
+
+    FolderServerArtifact copy = ArtifactCopyOperations.registerCopy(folderSession,
+        oldId, newId, folderId, CedarResourceType.INSTANCE, "copy", "description", null, null, null);
+
+    assertEquals(oldId.getId(), copy.getDerivedFrom().getId());
   }
 
   private static FolderServerFolder folder(CedarFolderId folderId) {

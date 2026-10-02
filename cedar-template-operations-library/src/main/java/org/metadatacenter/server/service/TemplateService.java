@@ -10,6 +10,10 @@ public interface TemplateService<K, T> {
 
   T createTemplate(T template) throws IOException;
 
+  default ArtifactWithRevision<T> createTemplateWithRevision(T template) throws IOException {
+    throw new UnsupportedOperationException("The implementation must return the revision assigned by insertion");
+  }
+
   List<T> findAllTemplates() throws IOException;
 
   List<T> findAllTemplates(List<String> fieldNames, FieldNameInEx includeExclude) throws IOException;
@@ -25,6 +29,11 @@ public interface TemplateService<K, T> {
 
   T updateTemplate(K templateId, T content, long expectedRevision)
       throws ArtifactServerResourceNotFoundException, IOException;
+
+  default T updateTemplateIfUnreferenced(K templateId, T content, long expectedRevision)
+      throws ArtifactServerResourceNotFoundException, IOException {
+    throw new UnsupportedOperationException("This operation requires storage-level reference fencing");
+  }
 
   void deleteTemplate(K templateId) throws ArtifactServerResourceNotFoundException, IOException;
 
