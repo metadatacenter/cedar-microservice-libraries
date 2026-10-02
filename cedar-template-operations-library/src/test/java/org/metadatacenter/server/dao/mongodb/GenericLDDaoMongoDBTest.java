@@ -37,6 +37,11 @@ class GenericLDDaoMongoDBTest {
     FindIterable<Document> laterRead = mock(FindIterable.class);
     when(client.getDatabase("test-db")).thenReturn(database);
     when(database.getCollection("artifacts")).thenReturn(collection);
+    MongoCollection<Document> history = mock(MongoCollection.class);
+    when(database.getCollection("artifacts_revision_history")).thenReturn(history);
+    when(history.findOneAndUpdate(any(Bson.class), any(Bson.class),
+        any(com.mongodb.client.model.FindOneAndUpdateOptions.class)))
+        .thenReturn(new Document("revision", 1L));
     when(collection.replaceOne(any(Bson.class), any(Document.class)))
         .thenReturn(UpdateResult.acknowledged(1L, 1L, null));
     when(collection.find(any(Bson.class))).thenReturn(laterRead);
@@ -65,6 +70,11 @@ class GenericLDDaoMongoDBTest {
     FindIterable<Document> currentRead = mock(FindIterable.class);
     when(client.getDatabase("test-db")).thenReturn(database);
     when(database.getCollection("artifacts")).thenReturn(collection);
+    MongoCollection<Document> history = mock(MongoCollection.class);
+    when(database.getCollection("artifacts_revision_history")).thenReturn(history);
+    when(history.findOneAndUpdate(any(Bson.class), any(Bson.class),
+        any(com.mongodb.client.model.FindOneAndUpdateOptions.class)))
+        .thenReturn(new Document("revision", 1L));
     when(collection.deleteOne(any(Bson.class))).thenReturn(DeleteResult.acknowledged(0L));
     when(collection.find(any(Bson.class))).thenReturn(currentRead);
     when(currentRead.first()).thenReturn(new Document("@id", "artifact-id")
@@ -85,6 +95,11 @@ class GenericLDDaoMongoDBTest {
     MongoCollection<Document> collection = mock(MongoCollection.class);
     when(client.getDatabase("test-db")).thenReturn(database);
     when(database.getCollection("artifacts")).thenReturn(collection);
+    MongoCollection<Document> history = mock(MongoCollection.class);
+    when(database.getCollection("artifacts_revision_history")).thenReturn(history);
+    when(history.findOneAndUpdate(any(Bson.class), any(Bson.class),
+        any(com.mongodb.client.model.FindOneAndUpdateOptions.class)))
+        .thenReturn(new Document("revision", 1L));
     when(collection.insertOne(any(Document.class))).thenThrow(new MongoWriteException(
         new WriteError(11000, "E11000 duplicate key error collection: test-db.artifacts index: @id_1",
             new BsonDocument()), new ServerAddress()));
@@ -107,6 +122,11 @@ class GenericLDDaoMongoDBTest {
     MongoCollection<Document> collection = mock(MongoCollection.class);
     when(client.getDatabase("test-db")).thenReturn(database);
     when(database.getCollection("artifacts")).thenReturn(collection);
+    MongoCollection<Document> history = mock(MongoCollection.class);
+    when(database.getCollection("artifacts_revision_history")).thenReturn(history);
+    when(history.findOneAndUpdate(any(Bson.class), any(Bson.class),
+        any(com.mongodb.client.model.FindOneAndUpdateOptions.class)))
+        .thenReturn(new Document("revision", 1L));
     when(collection.insertOne(any(Document.class))).thenThrow(new MongoWriteException(
         new WriteError(121, "Document failed validation", new BsonDocument()), new ServerAddress()));
 

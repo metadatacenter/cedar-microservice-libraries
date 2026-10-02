@@ -5,6 +5,7 @@ import com.mongodb.client.MongoClient;
 import org.metadatacenter.exception.ArtifactServerResourceNotFoundException;
 import org.metadatacenter.server.dao.ArtifactWithRevision;
 import org.metadatacenter.server.dao.mongodb.TemplateInstanceDaoMongoDB;
+import org.metadatacenter.server.dao.mongodb.TemplateReferenceGuard;
 import org.metadatacenter.server.service.FieldNameInEx;
 import org.metadatacenter.server.service.TemplateInstanceService;
 
@@ -14,14 +15,30 @@ import java.util.List;
 public class TemplateInstanceServiceMongoDB extends GenericTemplateServiceMongoDB<String, JsonNode> implements TemplateInstanceService<String, JsonNode> {
 
   private final TemplateInstanceDaoMongoDB templateInstanceDao;
+  private TemplateReferenceGuard referenceGuard;
 
   public TemplateInstanceServiceMongoDB(MongoClient mongoClient, String db, String templateInstancesCollection) {
     this.templateInstanceDao = new TemplateInstanceDaoMongoDB(mongoClient, db, templateInstancesCollection);
   }
 
+  public TemplateInstanceServiceMongoDB(MongoClient client, String db, String instances, String templates) {
+    this(client, db, instances);
+    referenceGuard = new TemplateReferenceGuard(client, db, templates, instances);
+  }
+
   @Override
-  public JsonNode createTemplateInstance(JsonNode templateInstance) throws IOException {
-    return templateInstanceDao.create(templateInstance);
+  public JsonNode createTemplateInstance(JsonNode instance) throws IOException {
+    return createTemplateInstanceWithRevision(instance).content();
+  }
+
+  @Override
+  public ArtifactWithRevision<JsonNode> createTemplateInstanceWithRevision(JsonNode instance) throws IOException {
+    if (referenceGuard == null) return templateInstanceDao.createWithRevision(instance);
+    try {
+      return referenceGuard.write(instance, -1, () -> templateInstanceDao.createWithRevision(instance));
+    } catch (ArtifactServerResourceNotFoundException e) {
+      throw new IOException(e);
+    }
   }
 
   @Override
@@ -59,7 +76,9 @@ public class TemplateInstanceServiceMongoDB extends GenericTemplateServiceMongoD
   @Override
   public JsonNode updateTemplateInstance(String templateInstanceId, JsonNode content, long expectedRevision) throws
       ArtifactServerResourceNotFoundException, IOException {
-    return templateInstanceDao.update(templateInstanceId, content, expectedRevision);
+    return referenceGuard == null ? templateInstanceDao.update(templateInstanceId, content, expectedRevision)
+        : referenceGuard.write(content, expectedRevision,
+            () -> templateInstanceDao.update(templateInstanceId, content, expectedRevision));
   }
 
   @Override

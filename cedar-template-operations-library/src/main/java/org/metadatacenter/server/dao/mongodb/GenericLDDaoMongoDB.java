@@ -8,6 +8,10 @@ import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.model.Projections;
+import com.mongodb.client.model.FindOneAndUpdateOptions;
+import com.mongodb.client.model.ReturnDocument;
+import com.mongodb.client.model.UpdateOptions;
+import com.mongodb.client.model.Updates;
 import com.mongodb.client.result.DeleteResult;
 import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
@@ -37,10 +41,12 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
   static final String INTERNAL_REVISION_FIELD = "_cedarRevision";
 
   protected final MongoCollection<Document> entityCollection;
+  private final MongoCollection<Document> revisionCollection;
   private final JsonUtils jsonUtils;
 
   public GenericLDDaoMongoDB(MongoClient mongoClient, String dbName, String collectionName) {
     entityCollection = mongoClient.getDatabase(dbName).getCollection(collectionName);
+    revisionCollection = mongoClient.getDatabase(dbName).getCollection(collectionName + "_revision_history");
     jsonUtils = new JsonUtils();
   }
 
@@ -61,11 +67,16 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
    */
   @Override
   public JsonNode create(JsonNode element) throws IOException {
+    return createWithRevision(element).content();
+  }
+
+  public ArtifactWithRevision<JsonNode> createWithRevision(JsonNode element) throws IOException {
     // Adapts all keys not accepted by MongoDB
     JsonNode fixedElement = jsonUtils.fixMongoDB(element, FixMongoDirection.WRITE_TO_MONGO);
     Map<String, Object> elementMap = JsonMapper.STRICT_MAPPER.convertValue(fixedElement, Map.class);
     Document elementDoc = new Document(elementMap);
-    elementDoc.put(INTERNAL_REVISION_FIELD, 1L);
+    elementDoc.remove(TemplateReferenceGuard.DELETION_TOKEN);
+    elementDoc.put(INTERNAL_REVISION_FIELD, nextIncarnationRevision(String.valueOf(elementDoc.get("@id"))));
     try {
       entityCollection.insertOne(elementDoc);
     } catch (MongoWriteException e) {
@@ -75,7 +86,7 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
       throw e;
     }
     // Returns the document created (all keys adapted for MongoDB are restored)
-    return toPublicJson(elementDoc);
+    return new ArtifactWithRevision<>(toPublicJson(elementDoc), elementDoc.get(INTERNAL_REVISION_FIELD, Number.class).longValue());
   }
 
   /**
@@ -186,7 +197,10 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     content = jsonUtils.fixMongoDB(content, FixMongoDirection.WRITE_TO_MONGO);
     Map<String, Object> contentMap = JsonMapper.STRICT_MAPPER.convertValue(content, Map.class);
     Document contentDocument = new Document(contentMap);
-    contentDocument.put(INTERNAL_REVISION_FIELD, Math.addExact(expectedRevision, 1L));
+    contentDocument.remove(TemplateReferenceGuard.DELETION_TOKEN);
+    long replacementRevision = Math.addExact(expectedRevision, 1L);
+    rememberRevision(id, replacementRevision);
+    contentDocument.put(INTERNAL_REVISION_FIELD, replacementRevision);
     Bson revisionFilter = expectedRevision == 0L
         ? com.mongodb.client.model.Filters.exists(INTERNAL_REVISION_FIELD, false)
         : eq(INTERNAL_REVISION_FIELD, expectedRevision);
@@ -204,6 +218,7 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
   private JsonNode toPublicJson(Document storedDocument) throws IOException {
     Document publicDocument = new Document(storedDocument);
     publicDocument.remove(INTERNAL_REVISION_FIELD);
+    publicDocument.remove(TemplateReferenceGuard.DELETION_TOKEN);
     return jsonUtils.fixMongoDB(JsonMapper.STRICT_MAPPER.readTree(publicDocument.toJson()),
         FixMongoDirection.READ_FROM_MONGO);
   }
@@ -221,6 +236,7 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     if ((id == null) || (id.length() == 0)) {
       throw new IllegalArgumentException();
     }
+    rememberRevision(id, getRevision(id));
     DeleteResult deleteResult = entityCollection.deleteOne(eq("@id", id));
     if (deleteResult.getDeletedCount() == 0) {
       throw new ArtifactServerResourceNotFoundException();
@@ -234,13 +250,19 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
   @Override
   public void delete(String id, long expectedRevision)
       throws ArtifactServerResourceNotFoundException, IOException {
+    deleteMatching(id, expectedRevision, new Document());
+  }
+
+  void deleteMatching(String id, long expectedRevision, Bson condition)
+      throws ArtifactServerResourceNotFoundException, IOException {
     if ((id == null) || id.isEmpty()) {
       throw new IllegalArgumentException();
     }
+    rememberRevision(id, expectedRevision);
     Bson revisionFilter = expectedRevision == 0L
         ? com.mongodb.client.model.Filters.exists(INTERNAL_REVISION_FIELD, false)
         : eq(INTERNAL_REVISION_FIELD, expectedRevision);
-    DeleteResult deleteResult = entityCollection.deleteOne(and(eq("@id", id), revisionFilter));
+    DeleteResult deleteResult = entityCollection.deleteOne(and(eq("@id", id), revisionFilter, condition));
     if (deleteResult.getDeletedCount() == 1) {
       return;
     }
@@ -267,7 +289,33 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
    */
   @Override
   public void deleteAll() {
+    // Keep the revision ledger: even bulk deletion must not make an old validator current again.
+    try (var cursor = entityCollection.find().projection(Projections.include("@id", INTERNAL_REVISION_FIELD)).iterator()) {
+      while (cursor.hasNext()) {
+        Document document = cursor.next();
+        Number revision = document.get(INTERNAL_REVISION_FIELD, Number.class);
+        rememberRevision(document.getString("@id"), revision == null ? 0 : revision.longValue());
+      }
+    }
     entityCollection.drop();
+  }
+
+  private long nextIncarnationRevision(String id) {
+    return revisionCollection.findOneAndUpdate(eq("_id", id), Updates.inc("revision", 1L),
+        new FindOneAndUpdateOptions().upsert(true).returnDocument(ReturnDocument.AFTER))
+        .get("revision", Number.class).longValue();
+  }
+
+  /** Record the high-water mark before the document mutation, including for legacy documents. */
+  private void rememberRevision(String id, long revision) {
+    try {
+      revisionCollection.updateOne(eq("_id", id), Updates.max("revision", revision),
+          new UpdateOptions().upsert(true));
+    } catch (MongoWriteException e) {
+      if (e.getError().getCategory() != ErrorCategory.DUPLICATE_KEY) throw e;
+      // Another process provisioned this legacy identifier's ledger concurrently.
+      revisionCollection.updateOne(eq("_id", id), Updates.max("revision", revision));
+    }
   }
 
   @Override

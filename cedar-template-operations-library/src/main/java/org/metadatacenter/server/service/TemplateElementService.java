@@ -10,6 +10,10 @@ public interface TemplateElementService<K, T> {
 
   T createTemplateElement(T templateElement) throws IOException;
 
+  default ArtifactWithRevision<T> createTemplateElementWithRevision(T templateElement) throws IOException {
+    throw new UnsupportedOperationException("The implementation must return the revision assigned by insertion");
+  }
+
   List<T> findAllTemplateElements() throws IOException;
 
   List<T> findAllTemplateElements(List<String> fieldName, FieldNameInEx includeExclude) throws IOException;

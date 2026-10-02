@@ -50,12 +50,14 @@ public abstract class CedarMicroserviceApplicationWithMongo<T extends CedarMicro
     templateService = new TemplateServiceMongoDB(
         mongoClientForDocuments,
         artifactServerConfig.getDatabaseName(),
-        artifactServerConfig.getMongoCollectionName(CedarResourceType.TEMPLATE));
+        artifactServerConfig.getMongoCollectionName(CedarResourceType.TEMPLATE),
+        artifactServerConfig.getMongoCollectionName(CedarResourceType.INSTANCE));
 
     templateInstanceService = new TemplateInstanceServiceMongoDB(
         mongoClientForDocuments,
         artifactServerConfig.getDatabaseName(),
-        artifactServerConfig.getMongoCollectionName(CedarResourceType.INSTANCE));
+        artifactServerConfig.getMongoCollectionName(CedarResourceType.INSTANCE),
+        artifactServerConfig.getMongoCollectionName(CedarResourceType.TEMPLATE));
 
     mongoHealthCheck = new MongoDocumentStoreHealthCheck(
         new DiagnosticsServiceMongoDB(mongoClientForDocuments, artifactServerConfig.getDatabaseName()));

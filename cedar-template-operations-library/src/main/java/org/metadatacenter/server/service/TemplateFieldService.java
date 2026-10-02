@@ -10,6 +10,10 @@ public interface TemplateFieldService<K, T> {
 
   T createTemplateField(T templateField) throws IOException;
 
+  default ArtifactWithRevision<T> createTemplateFieldWithRevision(T templateField) throws IOException {
+    throw new UnsupportedOperationException("The implementation must return the revision assigned by insertion");
+  }
+
   List<T> findAllTemplateFields(Integer limit, Integer offset, List<String> fieldName, FieldNameInEx includeExclude)
       throws IOException;
 

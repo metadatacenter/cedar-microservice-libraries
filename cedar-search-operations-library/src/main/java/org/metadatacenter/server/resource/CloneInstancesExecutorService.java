@@ -220,7 +220,7 @@ public class CloneInstancesExecutorService {
                                                          CedarUserId userId) throws CedarException {
     CedarRequestContext c = this.cedarRequestContext;
 
-    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(c);
+    FolderServiceSession folderSession = this.folderSession;
     CedarResourceType resourceType = CedarResourceType.INSTANCE;
 
     String originalDocument = null;
@@ -251,6 +251,9 @@ public class CloneInstancesExecutorService {
       throw new CedarProcessingException(e);
     }
 
+    CedarArtifactId createdIdForCleanup = null;
+    String createdEtag = null;
+    boolean registered = false;
     try {
       String url = microserviceUrlUtil.getArtifact().getResourceType(resourceType);
 
@@ -268,6 +271,9 @@ public class CloneInstancesExecutorService {
         JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(entityContent);
         String createdId = jsonNode.get("@id").asText();
         CedarArtifactId newInstanceId = CedarArtifactId.build(createdId, resourceType);
+        createdIdForCleanup = newInstanceId;
+        Header validator = templateProxyResponse.getFirstHeader(HttpHeaders.ETAG);
+        createdEtag = validator == null ? null : validator.getValue();
 
         FolderServerArtifact folderServerCreatedResource =
             ArtifactCopyOperations.registerCopy(folderSession, oldInstanceId, newInstanceId,
@@ -278,6 +284,10 @@ public class CloneInstancesExecutorService {
                 newTemplateId,
                 userId);
 
+        if (folderServerCreatedResource == null) {
+          throw new CedarProcessingException("The cloned instance could not be registered in its destination");
+        }
+        registered = true;
         if (templateProxyResponse.getEntity() != null) {
           // index the artifact that has been created
           ArtifactCopyOperations.indexCreatedArtifact(nodeIndexingService, folderServerCreatedResource, c);
@@ -291,6 +301,22 @@ public class CloneInstancesExecutorService {
       }
     } catch (Exception e) {
       throw new CedarProcessingException(e);
+    } finally {
+      if (createdIdForCleanup != null && !registered) {
+        if (createdEtag == null) {
+          log.error("Unregistered clone {} has no response validator; cleanup requires inspection", createdIdForCleanup);
+        } else {
+          try (ClassicHttpResponse discarded = artifactClient.delete(
+              microserviceUrlUtil.getArtifact().getArtifactTypeWithId(resourceType, createdIdForCleanup), c, createdEtag)) {
+            int status = discarded.getCode();
+            if (status != 204 && status != 200 && status != 404) {
+              log.error("Unregistered clone {} could not be discarded: status {}", createdIdForCleanup, status);
+            }
+          } catch (Exception cleanupFailure) {
+            log.error("Unregistered clone {} could not be discarded", createdIdForCleanup, cleanupFailure);
+          }
+        }
+      }
     }
   }
 

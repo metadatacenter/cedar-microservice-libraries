@@ -76,6 +76,45 @@ class CloneInstancesExecutorServiceTest {
     assertEquals(1, clone.attempts().get());
   }
 
+  @Test
+  void aCloneWhoseDestinationDisappearsDiscardsOnlyItsCreatedRevision() throws Exception {
+    var folders = mock(FolderServiceSession.class);
+    var context = mock(CedarRequestContext.class);
+    var urls = mock(MicroserviceUrlUtil.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
+    var client = mock(ArtifactServiceClient.class);
+    var old = CedarTemplateInstanceId.build("https://repo.metadatacenter.org/template-instances/old");
+    var template = CedarTemplateId.build("https://repo.metadatacenter.org/templates/target");
+    var createdId = org.metadatacenter.id.CedarArtifactId.build(
+        "https://repo.metadatacenter.org/template-instances/clone", CedarResourceType.INSTANCE);
+    var source = new org.apache.hc.core5.http.message.BasicClassicHttpResponse(200);
+    source.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(
+        "{\"@id\":\"" + old.getId() + "\",\"schema:name\":\"Example\"}"));
+    var schema = new org.apache.hc.core5.http.message.BasicClassicHttpResponse(200);
+    schema.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity("{\"properties\":{}}"));
+    var created = new org.apache.hc.core5.http.message.BasicClassicHttpResponse(201);
+    created.setHeader("ETag", "\"7\"");
+    created.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(
+        "{\"@id\":\"" + createdId.getId() + "\",\"schema:name\":\"Example\"}"));
+    when(urls.getArtifact().getArtifactTypeWithId(CedarResourceType.INSTANCE, old)).thenReturn("source");
+    when(urls.getArtifact().getArtifactTypeWithId(CedarResourceType.TEMPLATE, template)).thenReturn("template");
+    when(urls.getArtifact().getResourceType(CedarResourceType.INSTANCE)).thenReturn("instances");
+    when(urls.getArtifact().getArtifactTypeWithId(CedarResourceType.INSTANCE, createdId)).thenReturn("clone");
+    when(client.get(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(context),
+        org.mockito.ArgumentMatchers.eq(org.metadatacenter.util.http.HttpTimeouts.BATCH))).thenReturn(source, schema);
+    when(client.post(org.mockito.ArgumentMatchers.eq("instances"), org.mockito.ArgumentMatchers.eq(context),
+        org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(org.metadatacenter.util.http.HttpTimeouts.BATCH)))
+        .thenReturn(created);
+    when(client.delete("clone", context, "\"7\"")).thenReturn(
+        new org.apache.hc.core5.http.message.BasicClassicHttpResponse(204));
+    var service = new CloneInstancesExecutorService(folders, context, urls, mock(LinkedDataUtil.class), client);
+
+    assertThrows(CedarProcessingException.class, () -> service.copyInstanceToFolderWithNewTemplate(old,
+        template, CedarFolderId.build("missing-destination"), CedarUserId.build("owner")));
+
+    verify(client).delete("clone", context, "\"7\"");
+    org.mockito.Mockito.verifyNoInteractions(indexing);
+  }
+
   private record SingleOwnerClone(CloneInstancesExecutorService service, CloneInstancesQueueEvent event,
                                   FolderServerFolder targetFolder, CedarRequestContext context,
                                   AtomicInteger attempts) {

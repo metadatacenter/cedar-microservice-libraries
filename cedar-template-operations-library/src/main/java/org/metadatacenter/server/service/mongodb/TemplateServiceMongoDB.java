@@ -5,6 +5,7 @@ import com.mongodb.client.MongoClient;
 import org.metadatacenter.exception.ArtifactServerResourceNotFoundException;
 import org.metadatacenter.server.dao.ArtifactWithRevision;
 import org.metadatacenter.server.dao.mongodb.TemplateDaoMongoDB;
+import org.metadatacenter.server.dao.mongodb.TemplateReferenceGuard;
 import org.metadatacenter.server.service.FieldNameInEx;
 import org.metadatacenter.server.service.TemplateService;
 
@@ -14,14 +15,25 @@ import java.util.List;
 public class TemplateServiceMongoDB extends GenericTemplateServiceMongoDB<String, JsonNode> implements TemplateService<String, JsonNode> {
 
   private final TemplateDaoMongoDB templateDao;
+  private TemplateReferenceGuard referenceGuard;
 
   public TemplateServiceMongoDB(MongoClient mongoClient, String db, String templatesCollection) {
     this.templateDao = new TemplateDaoMongoDB(mongoClient, db, templatesCollection);
   }
 
+  public TemplateServiceMongoDB(MongoClient client, String db, String templates, String instances) {
+    this(client, db, templates);
+    referenceGuard = new TemplateReferenceGuard(client, db, templates, instances);
+  }
+
   @Override
   public JsonNode createTemplate(JsonNode template) throws IOException {
     return templateDao.create(template);
+  }
+
+  @Override
+  public ArtifactWithRevision<JsonNode> createTemplateWithRevision(JsonNode template) throws IOException {
+    return templateDao.createWithRevision(template);
   }
 
   @Override
@@ -64,13 +76,15 @@ public class TemplateServiceMongoDB extends GenericTemplateServiceMongoDB<String
 
   @Override
   public void deleteTemplate(String templateId) throws ArtifactServerResourceNotFoundException, IOException {
-    templateDao.delete(templateId);
+    if (referenceGuard == null) templateDao.delete(templateId);
+    else referenceGuard.delete(templateId, templateDao.getRevision(templateId), templateDao);
   }
 
   @Override
   public void deleteTemplate(String templateId, long expectedRevision)
       throws ArtifactServerResourceNotFoundException, IOException {
-    templateDao.delete(templateId, expectedRevision);
+    if (referenceGuard == null) templateDao.delete(templateId, expectedRevision);
+    else referenceGuard.delete(templateId, expectedRevision, templateDao);
   }
 
   @Override

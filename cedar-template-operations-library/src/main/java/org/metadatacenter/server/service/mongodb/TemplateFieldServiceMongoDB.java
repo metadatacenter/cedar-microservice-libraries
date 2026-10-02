@@ -25,6 +25,11 @@ public class TemplateFieldServiceMongoDB extends GenericTemplateServiceMongoDB<S
   }
 
   @Override
+  public ArtifactWithRevision<JsonNode> createTemplateFieldWithRevision(JsonNode templateField) throws IOException {
+    return templateFieldDao.createWithRevision(templateField);
+  }
+
+  @Override
   public List<JsonNode> findAllTemplateFields(Integer limit, Integer offset, List<String> fieldNames, FieldNameInEx
       includeExclude) throws IOException {
     return templateFieldDao.findAll(limit, offset, fieldNames, includeExclude);
