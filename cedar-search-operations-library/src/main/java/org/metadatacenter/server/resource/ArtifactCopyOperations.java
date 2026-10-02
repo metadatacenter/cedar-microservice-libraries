@@ -66,6 +66,14 @@ public final class ArtifactCopyOperations {
                                                   String identifier,
                                                   CedarTemplateId instanceTemplateOverride,
                                                   CedarUserId ownerOverride) throws CedarException {
+    return registerCopy(folderSession, oldId, newId, targetFolderId, resourceType, name, description,
+        identifier, instanceTemplateOverride, ownerOverride, null);
+  }
+
+  public static FolderServerArtifact registerCopy(FolderServiceSession folderSession, CedarArtifactId oldId,
+      CedarArtifactId newId, CedarFolderId targetFolderId, CedarResourceType resourceType, String name,
+      String description, String identifier, CedarTemplateId instanceTemplateOverride, CedarUserId ownerOverride,
+      String cleanupJobId) throws CedarException {
     if (CedarResourceTypeUtil.isNotValidForRestCall(resourceType)) {
       throw new CedarProcessingException("You passed an illegal resourceType:'" + resourceType.getValue() +
           "'. The allowed values are:" + CedarResourceTypeUtil.getValidResourceTypesForRestCalls()).badRequest()
@@ -104,9 +112,11 @@ public final class ArtifactCopyOperations {
       instance.setIsBasedOn(templateId);
     }
 
-    FolderServerArtifact createdResource = ownerOverride == null
-        ? folderSession.createResourceAsChildOfId(newResource, targetFolderId)
-        : folderSession.createInstanceCloneAsChildOfId(newResource, oldId, targetFolderId, ownerOverride);
+    FolderServerArtifact createdResource = cleanupJobId == null
+        ? (ownerOverride == null ? folderSession.createResourceAsChildOfId(newResource, targetFolderId)
+            : folderSession.createInstanceCloneAsChildOfId(newResource, oldId, targetFolderId, ownerOverride))
+        : (ownerOverride == null ? folderSession.createResourceWithCleanup(newResource, targetFolderId, cleanupJobId)
+            : folderSession.createInstanceCloneWithCleanup(newResource, oldId, targetFolderId, ownerOverride, cleanupJobId));
     if (createdResource == null) {
       throw new CedarProcessingException("The artifact was not created!")
           .parameter("@id", oldId)

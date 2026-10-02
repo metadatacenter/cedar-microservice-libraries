@@ -44,6 +44,7 @@ class InstanceCloneOwnershipTest {
   static class Repository extends Neo4JProxyArtifact {
     final CountDownLatch entered = new CountDownLatch(1);
     Repository() { super(mock(Neo4JProxies.class), mock(CedarConfig.class)); }
+    @Override protected void initializeVersioning() { org.metadatacenter.server.neo4j.VersionChainTransaction.initialize(database); }
     @Override protected <T> T executeInWriteTransaction(Function<Transaction,T> work, String description) {
       entered.countDown();
       try (var session = database.session()) { return session.writeTransaction(work::apply); }
@@ -71,6 +72,34 @@ class InstanceCloneOwnershipTest {
       return session.run("MATCH (n:Artifact {_id:'clone'}) RETURN count(n) AS n").single().get("n").asLong();
     }
   }
+  @ParameterizedTest @ValueSource(booleans = {false, true})
+  void cloneRegistrationRetiresCleanupOnlyIfOwnershipStillAllowsIt(boolean transferred) {
+    try (var outbox = new org.metadatacenter.server.neo4j.ArtifactCreateCleanupOutbox(
+        GraphDatabase.driver(neo.boltURI(), AuthTokens.none()), 0)) {
+      String job = outbox.prepare(org.metadatacenter.model.CedarResourceType.INSTANCE, "worker-clone");
+      outbox.created(job, "clone", "\"7\"");
+      if (transferred) {
+        try (var session = database.session()) {
+          session.writeTransaction(tx -> { transfer(tx, "destination"); return null; });
+        }
+      }
+      var copy = new FolderServerInstance();
+      copy.setId("clone"); copy.setName("Cloned instance"); copy.setCreatedByTotal(OWNER);
+      copy.setIsBasedOn(CedarTemplateId.build("new-template"));
+      var result = new Repository().createInstanceCloneAsChildOfId(copy, SOURCE, DESTINATION, OWNER, job);
+      if (transferred) {
+        assertNull(result);
+        assertEquals(java.util.List.of(job), outbox.pending(10));
+        outbox.attempt(job, pending -> { assertEquals("\"7\"", pending.etag()); return 204; });
+      } else {
+        assertNotNull(result);
+        outbox.attempt(job, pending -> fail("Registered clones must never be compensated"));
+      }
+      assertTrue(outbox.pending(10).isEmpty());
+      assertEquals(transferred ? 0 : 1, copies());
+    }
+  }
+
   @ParameterizedTest @ValueSource(strings = {"source", "destination"})
   void transferAfterEnumerationPreventsACloneForTheFormerOwner(String id) {
     try (var session = database.session()) { session.writeTransaction(tx -> { transfer(tx,id); return null; }); }

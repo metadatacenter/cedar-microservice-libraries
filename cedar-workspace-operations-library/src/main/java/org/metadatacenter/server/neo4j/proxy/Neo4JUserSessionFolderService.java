@@ -63,6 +63,26 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public FolderServerArtifact createResourceWithCleanup(FolderServerArtifact artifact, CedarFolderId parentId, String jobId) {
+    artifact.setCreatedByTotal(cu.getResourceId());
+    return proxies.artifact().createResourceAsChildOfId(artifact, parentId, jobId);
+  }
+
+  @Override
+  public FolderServerArtifact createDraftWithCleanup(FolderServerArtifact draft, CedarFolderId parentId,
+                                                     boolean sharing, String jobId) {
+    draft.setCreatedByTotal(cu.getResourceId());
+    return proxies.artifact().createDraftAsChildOfId(draft, parentId, sharing, jobId);
+  }
+
+  @Override
+  public FolderServerArtifact createInstanceCloneWithCleanup(FolderServerArtifact clone, CedarArtifactId sourceId,
+      CedarFolderId parentId, CedarUserId owner, String jobId) {
+    clone.setCreatedByTotal(owner);
+    return proxies.artifact().createInstanceCloneAsChildOfId(clone, sourceId, parentId, owner, jobId);
+  }
+
+  @Override
   public FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields) {
     return proxies.folder().updateFolderById(folderId, updateFields, cu.getResourceId());
   }

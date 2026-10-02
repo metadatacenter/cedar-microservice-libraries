@@ -42,10 +42,13 @@ import static org.mockito.Mockito.when;
 class CloneInstancesExecutorServiceTest {
 
   private NodeIndexingService indexing;
+  private ArtifactCreateCleanupService cleanup;
 
   @BeforeEach
   void injectIndexing() {
     indexing = mock(NodeIndexingService.class);
+    cleanup = mock(ArtifactCreateCleanupService.class);
+    when(cleanup.prepare(any(), any())).thenReturn("cleanup-job");
     CloneInstancesExecutorService.injectServices(indexing, mock(ValuerecommenderReindexQueueService.class));
   }
 
@@ -116,18 +119,23 @@ class CloneInstancesExecutorServiceTest {
       when(folders.findFolderById(destination)).thenReturn(folder);
       when(folders.findArtifactById(old)).thenReturn(original);
       // Reads succeeded, but the graph's atomic registration rejects the now-stale owner.
-      when(folders.createInstanceCloneAsChildOfId(any(), org.mockito.ArgumentMatchers.eq(old),
-          org.mockito.ArgumentMatchers.eq(destination), org.mockito.ArgumentMatchers.eq(owner))).thenReturn(null);
+      when(folders.createInstanceCloneWithCleanup(any(), org.mockito.ArgumentMatchers.eq(old),
+          org.mockito.ArgumentMatchers.eq(destination), org.mockito.ArgumentMatchers.eq(owner), org.mockito.ArgumentMatchers.eq("cleanup-job"))).thenReturn(null);
     }
-    var service = new CloneInstancesExecutorService(folders, context, urls, mock(LinkedDataUtil.class), client);
+    var service = new CloneInstancesExecutorService(folders, context, urls, mock(LinkedDataUtil.class), client, cleanup);
 
     assertThrows(CedarProcessingException.class, () -> service.copyInstanceToFolderWithNewTemplate(old,
         template, destination, owner));
 
-    if (transferred) verify(folders).createInstanceCloneAsChildOfId(any(),
+    if (transferred) verify(folders).createInstanceCloneWithCleanup(any(),
         org.mockito.ArgumentMatchers.eq(old), org.mockito.ArgumentMatchers.eq(destination),
-        org.mockito.ArgumentMatchers.eq(owner));
-    verify(client).delete("clone", context, "\"7\"");
+        org.mockito.ArgumentMatchers.eq(owner), org.mockito.ArgumentMatchers.eq("cleanup-job"));
+    var order = org.mockito.Mockito.inOrder(cleanup, client);
+    order.verify(cleanup).prepare(CedarResourceType.INSTANCE, "worker-clone");
+    order.verify(client).post(org.mockito.ArgumentMatchers.eq("instances"), org.mockito.ArgumentMatchers.eq(context),
+        org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(org.metadatacenter.util.http.HttpTimeouts.BATCH));
+    order.verify(cleanup).created("cleanup-job", createdId.getId(), "\"7\"");
+    order.verify(cleanup).cleanupNow("cleanup-job", context);
     org.mockito.Mockito.verifyNoInteractions(indexing);
   }
 
@@ -136,7 +144,7 @@ class CloneInstancesExecutorServiceTest {
                                   AtomicInteger attempts) {
   }
 
-  private static SingleOwnerClone singleOwnerClone() {
+  private SingleOwnerClone singleOwnerClone() {
     CedarTemplateId oldTemplateId = CedarTemplateId.build("template-old");
     CedarTemplateId newTemplateId = CedarTemplateId.build("template-new");
     CedarUserId ownerId = CedarUserId.build("owner-a");
@@ -164,7 +172,7 @@ class CloneInstancesExecutorServiceTest {
     CedarRequestContext context = mock(CedarRequestContext.class);
     AtomicInteger attempts = new AtomicInteger();
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository, context,
-        mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class)) {
+        mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class), cleanup) {
       @Override
       protected Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId ignoredOldInstanceId,
                                                              CedarTemplateId ignoredNewTemplateId,
@@ -252,7 +260,7 @@ class CloneInstancesExecutorServiceTest {
     when(linkedDataUtil.buildNewLinkedDataIdObject(CedarFolderId.class)).thenReturn(targetFolderId);
     AtomicInteger attempts = new AtomicInteger();
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class)) {
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class), cleanup) {
       @Override
       protected Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId oldInstanceId,
                                                              CedarTemplateId ignoredNewTemplateId,
@@ -301,7 +309,7 @@ class CloneInstancesExecutorServiceTest {
         .thenReturn(CedarFolderId.build("target-folder"));
 
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class));
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class), cleanup);
 
     CedarProcessingException error = assertThrows(CedarProcessingException.class,
         () -> service.handleEvent(new CloneInstancesQueueEvent(oldTemplateId, newTemplateId, null)));
@@ -340,7 +348,7 @@ class CloneInstancesExecutorServiceTest {
         .thenReturn(CedarFolderId.build("target-folder"));
 
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class)) {
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), linkedDataUtil, mock(ArtifactServiceClient.class), cleanup) {
       @Override
       protected Response copyInstanceToFolderWithNewTemplate(CedarTemplateInstanceId ignoredOldInstanceId,
                                                              CedarTemplateId ignoredNewTemplateId,
@@ -366,7 +374,7 @@ class CloneInstancesExecutorServiceTest {
     when(repository.searchIsBasedOn(any(), any(), anyInt(), anyInt(), any())).thenReturn(List.of(ownerless));
 
     CloneInstancesExecutorService service = new CloneInstancesExecutorService(repository,
-        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), mock(LinkedDataUtil.class), mock(ArtifactServiceClient.class));
+        mock(CedarRequestContext.class), mock(MicroserviceUrlUtil.class), mock(LinkedDataUtil.class), mock(ArtifactServiceClient.class), cleanup);
 
     // Deterministic per-instance failures: a retry reproduces them, so the job dead-letters once.
     CloneInstancesNotRetryableException error = assertThrows(CloneInstancesNotRetryableException.class,

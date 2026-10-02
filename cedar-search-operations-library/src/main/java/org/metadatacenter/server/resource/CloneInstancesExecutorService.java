@@ -46,7 +46,7 @@ import java.util.Map;
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_IS_BASED_ON;
 import static org.metadatacenter.model.ModelNodeNames.SCHEMA_ORG_IDENTIFIER;
 
-public class CloneInstancesExecutorService {
+public class CloneInstancesExecutorService implements AutoCloseable {
 
   private static final Logger log = LoggerFactory.getLogger(CloneInstancesExecutorService.class);
 
@@ -55,6 +55,7 @@ public class CloneInstancesExecutorService {
   protected final MicroserviceUrlUtil microserviceUrlUtil;
   protected final LinkedDataUtil linkedDataUtil;
   private final ArtifactServiceClient artifactClient;
+  private final ArtifactCreateCleanupService cleanupService;
 
   protected static NodeIndexingService nodeIndexingService;
   protected static ValuerecommenderReindexQueueService valuerecommenderReindexQueueService;
@@ -62,6 +63,7 @@ public class CloneInstancesExecutorService {
   public CloneInstancesExecutorService(CedarConfig cedarConfig) {
     artifactClient = new ArtifactServiceClient(cedarConfig);
     UserService userService = CedarDataServices.getInstance().getNeoUserService();
+    cleanupService = new ArtifactCreateCleanupService(cedarConfig, userService);
 
     cedarRequestContext = CedarRequestContextFactory.fromAdminUser(cedarConfig, userService);
     folderSession = CedarDataServices.getInstance().getFolderServiceSession(cedarRequestContext);
@@ -72,7 +74,8 @@ public class CloneInstancesExecutorService {
   CloneInstancesExecutorService(FolderServiceSession folderSession,
                                 CedarRequestContext cedarRequestContext,
                                 MicroserviceUrlUtil microserviceUrlUtil,
-                                LinkedDataUtil linkedDataUtil, ArtifactServiceClient artifactClient) {
+                                LinkedDataUtil linkedDataUtil, ArtifactServiceClient artifactClient, ArtifactCreateCleanupService cleanupService) {
+    this.cleanupService = cleanupService;
     this.artifactClient = artifactClient;
     this.folderSession = folderSession;
     this.cedarRequestContext = cedarRequestContext;
@@ -85,6 +88,9 @@ public class CloneInstancesExecutorService {
     CloneInstancesExecutorService.nodeIndexingService = nodeIndexingService;
     CloneInstancesExecutorService.valuerecommenderReindexQueueService = valuerecommenderReindexQueueService;
   }
+
+  public void start() { cleanupService.start(); }
+  @Override public void close() { cleanupService.close(); }
 
   // Main entry point
   public void handleEvent(CloneInstancesQueueEvent event) throws CedarException {
@@ -251,9 +257,7 @@ public class CloneInstancesExecutorService {
       throw new CedarProcessingException(e);
     }
 
-    CedarArtifactId createdIdForCleanup = null;
-    String createdEtag = null;
-    boolean registered = false;
+    String cleanupJob = cleanupService.prepare(resourceType, "worker-clone");
     try {
       String url = microserviceUrlUtil.getArtifact().getResourceType(resourceType);
 
@@ -261,7 +265,7 @@ public class CloneInstancesExecutorService {
 
       int statusCode = templateProxyResponse.getCode();
       if (statusCode != HttpStatus.SC_CREATED) {
-        // artifact was not created
+        cleanupService.rejected(cleanupJob, statusCode);
         throw new CedarProcessingException("Error when creating artifact from template: " + statusCode);
       } else {
         // artifact was created
@@ -271,9 +275,8 @@ public class CloneInstancesExecutorService {
         JsonNode jsonNode = JsonMapper.STRICT_MAPPER.readTree(entityContent);
         String createdId = jsonNode.get("@id").asText();
         CedarArtifactId newInstanceId = CedarArtifactId.build(createdId, resourceType);
-        createdIdForCleanup = newInstanceId;
         Header validator = templateProxyResponse.getFirstHeader(HttpHeaders.ETAG);
-        createdEtag = validator == null ? null : validator.getValue();
+        cleanupService.created(cleanupJob, createdId, validator == null ? null : validator.getValue());
 
         FolderServerArtifact folderServerCreatedResource =
             ArtifactCopyOperations.registerCopy(folderSession, oldInstanceId, newInstanceId,
@@ -282,12 +285,11 @@ public class CloneInstancesExecutorService {
                 ModelUtil.extractDescriptionFromResource(resourceType, jsonNode).getValue(),
                 ModelUtil.extractIdentifierFromResource(resourceType, jsonNode).getValue(),
                 newTemplateId,
-                userId);
+                userId, cleanupJob);
 
         if (folderServerCreatedResource == null) {
           throw new CedarProcessingException("The cloned instance could not be registered in its destination");
         }
-        registered = true;
         if (templateProxyResponse.getEntity() != null) {
           // index the artifact that has been created
           ArtifactCopyOperations.indexCreatedArtifact(nodeIndexingService, folderServerCreatedResource, c);
@@ -302,21 +304,7 @@ public class CloneInstancesExecutorService {
     } catch (Exception e) {
       throw new CedarProcessingException(e);
     } finally {
-      if (createdIdForCleanup != null && !registered) {
-        if (createdEtag == null) {
-          log.error("Unregistered clone {} has no response validator; cleanup requires inspection", createdIdForCleanup);
-        } else {
-          try (ClassicHttpResponse discarded = artifactClient.delete(
-              microserviceUrlUtil.getArtifact().getArtifactTypeWithId(resourceType, createdIdForCleanup), c, createdEtag)) {
-            int status = discarded.getCode();
-            if (status != 204 && status != 200 && status != 404) {
-              log.error("Unregistered clone {} could not be discarded: status {}", createdIdForCleanup, status);
-            }
-          } catch (Exception cleanupFailure) {
-            log.error("Unregistered clone {} could not be discarded", createdIdForCleanup, cleanupFailure);
-          }
-        }
-      }
+      cleanupService.cleanupNow(cleanupJob, c);
     }
   }
 

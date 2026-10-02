@@ -3,6 +3,7 @@ package org.metadatacenter.server.neo4j.proxy;
 import org.metadatacenter.server.ArtifactGraphUpdateResult;
 
 import org.metadatacenter.server.neo4j.ArtifactRestoreTransaction;
+import org.metadatacenter.server.neo4j.ArtifactCreateCleanupOutbox;
 import org.metadatacenter.server.neo4j.VersionChainTransaction;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
@@ -41,7 +42,7 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
 
   private volatile boolean versioningInitialized;
 
-  private synchronized void initializeVersioning() {
+  protected synchronized void initializeVersioning() {
     if (!versioningInitialized) {
       VersionChainTransaction.initialize(driver);
       versioningInitialized = true;
@@ -49,15 +50,33 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
   }
 
   FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentId) {
-    String cypher = CypherQueryBuilderArtifact.createResourceAsChildOfId(newResource);
-    CypherParameters params = CypherParamBuilderArtifact.createArtifact(newResource, parentId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWriteGetOne(q, FolderServerArtifact.class);
+    return createResourceAsChildOfId(newResource, parentId, null);
+  }
+
+  FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentId, String jobId) {
+    initializeVersioning();
+    return executeInWriteTransaction(tx -> {
+      VersionChainTransaction.lock(tx);
+      ArtifactCreateCleanupOutbox.requireRegistration(tx, jobId, newResource.getId());
+      var created = runInTransactionGetOne(tx, new CypherQueryWithParameters(
+          CypherQueryBuilderArtifact.createResourceAsChildOfId(newResource),
+          CypherParamBuilderArtifact.createArtifact(newResource, parentId)), FolderServerArtifact.class);
+      if (created != null) ArtifactCreateCleanupOutbox.registered(tx, jobId);
+      return created;
+    }, "registering an artifact and retiring failed-create cleanup");
   }
 
   FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
                                                       CedarFolderId parentId, CedarUserId expectedOwner) {
+    return createInstanceCloneAsChildOfId(clone, sourceId, parentId, expectedOwner, null);
+  }
+
+  FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
+      CedarFolderId parentId, CedarUserId expectedOwner, String jobId) {
+    initializeVersioning();
     return executeInWriteTransaction(tx -> {
+      VersionChainTransaction.lock(tx);
+      ArtifactCreateCleanupOutbox.requireRegistration(tx, jobId, clone.getId());
       // Ownership transfers take these same node locks. Check after locking, and hold them through
       // registration so a transfer cannot land between the ownership check and the new OWNS arc.
       for (String id : java.util.stream.Stream.of(sourceId.getId(), parentId.getId()).sorted().toList()) {
@@ -77,15 +96,22 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
             CypherParamBuilderResource.matchSourceAndTarget(created.getResourceId(), sourceId));
         tx.run(query.getRunnableQuery(), query.getParameterMap()).consume();
         created.setDerivedFrom(CedarUntypedArtifactId.build(sourceId.getId()));
+        ArtifactCreateCleanupOutbox.registered(tx, jobId);
       }
       return created;
     }, "registering a clone for its unchanged owner");
   }
 
   FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentId, boolean propagateSharing) {
+    return createDraftAsChildOfId(draft, parentId, propagateSharing, null);
+  }
+
+  FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentId,
+      boolean propagateSharing, String jobId) {
     initializeVersioning();
     return executeInWriteTransaction(tx -> {
       VersionChainTransaction.lock(tx);
+      ArtifactCreateCleanupOutbox.requireRegistration(tx, jobId, draft.getId());
       var schema = (FolderServerSchemaArtifact) draft;
       VersionChainTransaction.requireDraftSource(tx, schema.getPreviousVersion().getId(), schema.getVersion().getValue());
       var created = runInTransactionGetOne(tx, new CypherQueryWithParameters(
@@ -102,6 +128,7 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
               + "SET d.everybodyPermission=s.everybodyPermission",args).consume();
         }
         VersionChainTransaction.reconcile(tx,created.getId());
+        ArtifactCreateCleanupOutbox.registered(tx, jobId);
       }
       return created;
     }, "creating the sole successor draft");

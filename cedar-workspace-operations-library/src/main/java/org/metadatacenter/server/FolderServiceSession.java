@@ -57,6 +57,14 @@ public interface FolderServiceSession {
 
   FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentFolderId, boolean propagateSharing);
 
+  FolderServerArtifact createResourceWithCleanup(FolderServerArtifact artifact, CedarFolderId parentId, String jobId);
+
+  FolderServerArtifact createDraftWithCleanup(FolderServerArtifact draft, CedarFolderId parentId,
+                                               boolean propagateSharing, String jobId);
+
+  FolderServerArtifact createInstanceCloneWithCleanup(FolderServerArtifact clone, CedarArtifactId sourceId,
+                                                      CedarFolderId parentId, CedarUserId owner, String jobId);
+
   FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields);
 
   VersionedResource<FolderServerFolder> updateFolderById(CedarFolderId folderId,
