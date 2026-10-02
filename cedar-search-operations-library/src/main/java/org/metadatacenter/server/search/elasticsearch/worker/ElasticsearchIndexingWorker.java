@@ -66,10 +66,14 @@ public class ElasticsearchIndexingWorker {
    * A null documentId falls back to a backend-generated id.
    */
   public IndexedDocumentId addToIndex(JsonNode json, String documentId) throws CedarProcessingException {
+    return addToIndex(json, documentId, 20);
+  }
+
+  /** Durable callers retain retry intent themselves and pass zero retries to release their lock promptly. */
+  public IndexedDocumentId addToIndex(JsonNode json, String documentId, int maxAttempts) throws CedarProcessingException {
     IndexedDocumentId newId = null;
     try {
       boolean again = true;
-      int maxAttempts = 20;
       int count = 0;
       while (again) {
         try {

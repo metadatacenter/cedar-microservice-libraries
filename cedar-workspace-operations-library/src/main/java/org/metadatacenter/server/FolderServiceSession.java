@@ -68,6 +68,10 @@ public interface FolderServiceSession {
   ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
       Map<NodeProperty, String> updateFields, String restoreJobId);
 
+  /** Commits the document-derived work with the graph update, including on the compensation fallback path. */
+  ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
+      Map<NodeProperty, String> updateFields, String restoreJobId, String projectionContent);
+
   boolean deleteFolderById(CedarFolderId folderId);
 
   boolean deleteFolderById(CedarFolderId folderId, RevisionPrecondition precondition);

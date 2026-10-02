@@ -1,5 +1,7 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import org.metadatacenter.server.neo4j.VersionChainTransaction;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarArtifactId;
@@ -173,12 +175,26 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
     return executeReadGetOne(q, FolderServerUser.class);
   }
 
+  private boolean projectionsInitialized;
+
+  private synchronized void initializeProjections() {
+    if (!projectionsInitialized) {
+      VersionChainTransaction.initialize(driver);
+      projectionsInitialized = true;
+    }
+  }
+
   public boolean attachCategoryToArtifact(CedarCategoryId categoryId, CedarArtifactId artifactId) {
     String cypher = CypherQueryBuilderCategory.attachCategoryToArtifact();
     CypherParameters params = CypherParamBuilderCategory.categoryIdAndArtifactId(categoryId, artifactId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    FolderServerCategory category = executeWriteGetOne(q, FolderServerCategory.class);
-    return category != null;
+    initializeProjections();
+    return executeInWriteTransaction(tx -> {
+      VersionChainTransaction.lock(tx);
+      var category = runInTransactionGetOne(tx, q, FolderServerCategory.class);
+      if (category != null) VersionChainTransaction.enqueue(tx, artifactId.getId(), false);
+      return category != null;
+    }, "changing artifact categories and recording reindex work");
   }
 
   public boolean attachCategoriesToArtifact(List<CedarCategoryId> categoryIds, CedarArtifactId artifactId) {
@@ -192,12 +208,16 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
     String cypher = CypherQueryBuilderCategory.attachCategoriesToArtifact();
     CypherParameters params = CypherParamBuilderCategory.categoryIdsAndArtifactId(distinctCategoryIds, artifactId);
     CypherQueryWithParameters query = new CypherQueryWithParameters(cypher, params);
+    initializeProjections();
     return executeInWriteTransaction(tx -> {
+      VersionChainTransaction.lock(tx);
       Result result = run(tx, query);
       if (!result.hasNext()) {
         return false;
       }
-      return result.next().get("attachedCount").asLong() == distinctCategoryIds.size();
+      boolean attached = result.next().get("attachedCount").asLong() == distinctCategoryIds.size();
+      if (attached) VersionChainTransaction.enqueue(tx, artifactId.getId(), false);
+      return attached;
     }, "attaching categories to artifact");
   }
 
@@ -205,8 +225,13 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
     String cypher = CypherQueryBuilderCategory.detachCategoryFromArtifact();
     CypherParameters params = CypherParamBuilderCategory.categoryIdAndArtifactId(categoryId, artifactId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    FolderServerCategory category = executeWriteGetOne(q, FolderServerCategory.class);
-    return category != null;
+    initializeProjections();
+    return executeInWriteTransaction(tx -> {
+      VersionChainTransaction.lock(tx);
+      var category = runInTransactionGetOne(tx, q, FolderServerCategory.class);
+      if (category != null) VersionChainTransaction.enqueue(tx, artifactId.getId(), false);
+      return category != null;
+    }, "changing artifact categories and recording reindex work");
   }
 
   public List<FolderServerCategory> getCategoryPaths(CedarArtifactId artifactId) {
