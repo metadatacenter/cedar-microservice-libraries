@@ -72,20 +72,13 @@ public class ValuerecommenderReindexExecutorService {
         log.debug("Too many currently processing threads (" + processingIds.size() + " vs " +
             valuerecommenderConfig.getMaxReindexingThreadCount());
         addBackMessages(uniqueTemplateIdMap.get(templateId));
-        try {
-          Thread.sleep(valuerecommenderConfig.getSleepMillisAfterTooManyProcessing());
-        } catch (InterruptedException e) {
-          log.error("Error while sleeping", e);
-        }
+        pause(valuerecommenderConfig.getSleepMillisAfterTooManyProcessing());
+        continue;
       }
-      if (processingIds.contains(templateId)) {
+      if (processingIds.contains(templateId.getId())) {
         log.debug("TemplateId currently reindexing:" + templateId);
         addBackMessages(uniqueTemplateIdMap.get(templateId));
-        try {
-          Thread.sleep(valuerecommenderConfig.getSleepMillisAfterCurrentIdProcessing());
-        } catch (InterruptedException e) {
-          log.error("Error while sleeping", e);
-        }
+        pause(valuerecommenderConfig.getSleepMillisAfterCurrentIdProcessing());
       } else {
         log.debug("Will start reindexing templateId:" + templateId.getId());
         launchReindex(templateId);
@@ -102,23 +95,30 @@ public class ValuerecommenderReindexExecutorService {
     try {
       Request request = Request.get(url)
           .addHeader(HTTP_HEADER_AUTHORIZATION, authString);
-      ClassicHttpResponse response = HttpTimeouts.BATCH.execute(request);
-      int statusCode = response.getCode();
-      if (statusCode == HttpStatus.SC_OK) {
+      try (ClassicHttpResponse response = HttpTimeouts.BATCH.execute(request)) {
+        int statusCode = response.getCode();
+        if (statusCode != HttpStatus.SC_OK) {
+          throw new IllegalStateException("Rules-generation status returned HTTP " + statusCode);
+        }
         List<RulesGenerationStatus> list = JsonMapper.STRICT_MAPPER
             .readValue(response.getEntity().getContent(), new TypeReference<List<RulesGenerationStatus>>() {
             });
+        if (list == null) throw new IllegalStateException("Rules-generation status was null");
         for (RulesGenerationStatus status : list) {
+          if (status == null || status.getStatus() == null || status.getTemplateId() == null
+              || status.getTemplateId().isBlank()) {
+            throw new IllegalStateException("Rules-generation status contained an incomplete entry");
+          }
           if (status.getStatus() == RulesGenerationStatus.Status.PROCESSING) {
             idSet.add(status.getTemplateId());
           }
         }
         log.info("Currently executing reindexes:" + idSet);
-      } else {
-        log.error("Error while requesting reindexing rule set. HTTP status code: " + statusCode);
       }
     } catch (Exception e) {
-      log.error("Error while requesting reindexing rule set", e);
+      // Unknown capacity is not an idle server. Let the claim/acknowledge consumer retain
+      // the batch for retry instead of launching blindly and acknowledging lost work.
+      throw new IllegalStateException("Could not read rules-generation status", e);
     }
 
     return idSet;
@@ -127,7 +127,18 @@ public class ValuerecommenderReindexExecutorService {
   private void addBackMessages(List<ValuerecommenderReindexMessage> messages) {
     log.debug("Adding back reindex messages");
     for (ValuerecommenderReindexMessage message : messages) {
-      valuerecommenderQueueService.enqueueEvent(message);
+      if (!valuerecommenderQueueService.enqueueEventWithResult(message)) {
+        throw new IllegalStateException("Could not defer a rules-generation update");
+      }
+    }
+  }
+
+  private static void pause(int millis) {
+    try {
+      Thread.sleep(millis);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Interrupted while deferring rules generation", e);
     }
   }
 
@@ -138,15 +149,15 @@ public class ValuerecommenderReindexExecutorService {
     try {
       Request request = Request.post(url)
           .addHeader(HTTP_HEADER_AUTHORIZATION, authString);
-      ClassicHttpResponse response = HttpTimeouts.BATCH.execute(request);
-      int statusCode = response.getCode();
-      if (statusCode == HttpStatus.SC_OK) {
+      try (ClassicHttpResponse response = HttpTimeouts.BATCH.execute(request)) {
+        int statusCode = response.getCode();
+        if (statusCode != HttpStatus.SC_OK) {
+          throw new IllegalStateException("Rule generation returned HTTP " + statusCode);
+        }
         log.info("The rule regeneration was successfully requested.");
-      } else {
-        log.error("Error while requesting rule index regeneration. HTTP status code: " + statusCode);
       }
     } catch (Exception e) {
-      log.error("Error while requesting rule regeneration", e);
+      throw new IllegalStateException("Could not request rule generation", e);
     }
   }
 }
