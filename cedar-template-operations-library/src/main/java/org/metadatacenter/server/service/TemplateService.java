@@ -30,6 +30,11 @@ public interface TemplateService<K, T> {
   T updateTemplate(K templateId, T content, long expectedRevision)
       throws ArtifactServerResourceNotFoundException, IOException;
 
+  default T updateTemplateIfUnreferenced(K templateId, T content, long expectedRevision)
+      throws ArtifactServerResourceNotFoundException, IOException {
+    throw new UnsupportedOperationException("This operation requires storage-level reference fencing");
+  }
+
   void deleteTemplate(K templateId) throws ArtifactServerResourceNotFoundException, IOException;
 
   void deleteTemplate(K templateId, long expectedRevision) throws ArtifactServerResourceNotFoundException, IOException;

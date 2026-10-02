@@ -14,10 +14,11 @@ import static com.mongodb.client.model.Filters.*;
 import static com.mongodb.client.model.Updates.*;
 
 /**
- * Coordinates live instance writes and template deletion on standalone MongoDB, across processes.
- * A writer reserves before checking the deletion fence; a deleter fences before counting reservations
+ * Coordinates live instance writes with template deletion and inclusion updates across processes.
+ * A writer reserves before checking the template fence; a template mutation fences before counting reservations
  * and then stored references. An uncertain write leaves its reservation for inspection, never a gap
- * in which deletion may orphan it. Completed reservations can be recovered using revision predicates.
+ * in which a template mutation may orphan or invalidate it. Completed reservations can be recovered
+ * using revision predicates. Validation supplies the exact template revision the writer must still see.
  */
 public final class TemplateReferenceGuard {
   static final String DELETION_TOKEN = "_cedarDeletionToken";
@@ -39,6 +40,11 @@ public final class TemplateReferenceGuard {
 
   public <T> T write(JsonNode body, long expectedRevision, InstanceWrite<T> write)
       throws IOException, ArtifactServerResourceNotFoundException {
+    return write(body, expectedRevision, null, write);
+  }
+
+  public <T> T write(JsonNode body, long expectedRevision, Long templateRevision, InstanceWrite<T> write)
+      throws IOException, ArtifactServerResourceNotFoundException {
     String templateId = body.path("schema:isBasedOn").asText();
     String instanceId = body.path("@id").asText();
     String operation = UUID.randomUUID().toString();
@@ -46,7 +52,10 @@ public final class TemplateReferenceGuard {
         .append("instanceId", instanceId).append("expectedRevision", expectedRevision));
     boolean settled = false;
     try {
-      if (templates.find(and(eq("@id", templateId), exists(DELETION_TOKEN, false))).first() == null) {
+      var templateVersion = templateRevision == null ? new Document()
+          : templateRevision == 0 ? exists(GenericLDDaoMongoDB.INTERNAL_REVISION_FIELD, false)
+          : eq(GenericLDDaoMongoDB.INTERNAL_REVISION_FIELD, templateRevision);
+      if (templates.find(and(eq("@id", templateId), exists(DELETION_TOKEN, false), templateVersion)).first() == null) {
         settled = true;
         throw new ArtifactRevisionConflictException(templateId);
       }
@@ -74,6 +83,20 @@ public final class TemplateReferenceGuard {
 
   public void delete(String id, long revision, TemplateDaoMongoDB dao)
       throws IOException, ArtifactServerResourceNotFoundException {
+    unreferenced(id, revision, token -> { dao.deleteMatching(id, revision, eq(DELETION_TOKEN, token)); return null; });
+  }
+
+  public JsonNode update(String id, JsonNode content, long revision, TemplateDaoMongoDB dao)
+      throws IOException, ArtifactServerResourceNotFoundException {
+    return unreferenced(id, revision, token -> dao.updateMatching(id, content, revision, eq(DELETION_TOKEN, token)));
+  }
+
+  @FunctionalInterface private interface FencedWrite<T> {
+    T run(String token) throws IOException, ArtifactServerResourceNotFoundException;
+  }
+
+  private <T> T unreferenced(String id, long revision, FencedWrite<T> write)
+      throws IOException, ArtifactServerResourceNotFoundException {
     String token = UUID.randomUUID().toString();
     var revisionFilter = revision == 0 ? exists(GenericLDDaoMongoDB.INTERNAL_REVISION_FIELD, false)
         : eq(GenericLDDaoMongoDB.INTERNAL_REVISION_FIELD, revision);
@@ -89,9 +112,9 @@ public final class TemplateReferenceGuard {
           || instances.countDocuments(eq("schema:isBasedOn", id)) != 0) {
         throw new ArtifactRevisionConflictException(id, revision);
       }
-      dao.deleteMatching(id, revision, eq(DELETION_TOKEN, token));
+      return write.run(token);
     } finally {
-      // A competing delete may have taken over, or a template edit may have advanced the revision.
+      // A competing guarded mutation may have taken over, or a template edit may have advanced the revision.
       // Neither operation may have its fence removed by this request.
       templates.updateOne(and(eq("@id", id), eq(DELETION_TOKEN, token)), unset(DELETION_TOKEN));
     }

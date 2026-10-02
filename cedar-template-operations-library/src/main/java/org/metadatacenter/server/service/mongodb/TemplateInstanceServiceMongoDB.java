@@ -33,9 +33,14 @@ public class TemplateInstanceServiceMongoDB extends GenericTemplateServiceMongoD
 
   @Override
   public ArtifactWithRevision<JsonNode> createTemplateInstanceWithRevision(JsonNode instance) throws IOException {
+    return createTemplateInstanceWithRevision(instance, null);
+  }
+
+  @Override
+  public ArtifactWithRevision<JsonNode> createTemplateInstanceWithRevision(JsonNode instance, Long templateRevision) throws IOException {
     if (referenceGuard == null) return templateInstanceDao.createWithRevision(instance);
     try {
-      return referenceGuard.write(instance, -1, () -> templateInstanceDao.createWithRevision(instance));
+      return referenceGuard.write(instance, -1, templateRevision, () -> templateInstanceDao.createWithRevision(instance));
     } catch (ArtifactServerResourceNotFoundException e) {
       throw new IOException(e);
     }
@@ -76,8 +81,14 @@ public class TemplateInstanceServiceMongoDB extends GenericTemplateServiceMongoD
   @Override
   public JsonNode updateTemplateInstance(String templateInstanceId, JsonNode content, long expectedRevision) throws
       ArtifactServerResourceNotFoundException, IOException {
+    return updateTemplateInstance(templateInstanceId, content, expectedRevision, null);
+  }
+
+  @Override
+  public JsonNode updateTemplateInstance(String templateInstanceId, JsonNode content, long expectedRevision, Long templateRevision)
+      throws ArtifactServerResourceNotFoundException, IOException {
     return referenceGuard == null ? templateInstanceDao.update(templateInstanceId, content, expectedRevision)
-        : referenceGuard.write(content, expectedRevision,
+        : referenceGuard.write(content, expectedRevision, templateRevision,
             () -> templateInstanceDao.update(templateInstanceId, content, expectedRevision));
   }
 

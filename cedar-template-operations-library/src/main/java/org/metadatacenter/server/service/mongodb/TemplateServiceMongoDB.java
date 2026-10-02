@@ -75,6 +75,13 @@ public class TemplateServiceMongoDB extends GenericTemplateServiceMongoDB<String
   }
 
   @Override
+  public JsonNode updateTemplateIfUnreferenced(String id, JsonNode content, long revision)
+      throws ArtifactServerResourceNotFoundException, IOException {
+    if (referenceGuard == null) throw new IllegalStateException("Reference fencing is not configured");
+    return referenceGuard.update(id, content, revision, templateDao);
+  }
+
+  @Override
   public void deleteTemplate(String templateId) throws ArtifactServerResourceNotFoundException, IOException {
     if (referenceGuard == null) templateDao.delete(templateId);
     else referenceGuard.delete(templateId, templateDao.getRevision(templateId), templateDao);

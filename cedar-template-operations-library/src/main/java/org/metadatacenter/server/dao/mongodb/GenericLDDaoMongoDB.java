@@ -190,6 +190,11 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
   @Override
   public JsonNode update(String id, JsonNode content, long expectedRevision)
       throws ArtifactServerResourceNotFoundException, IOException {
+    return updateMatching(id, content, expectedRevision, new Document());
+  }
+
+  JsonNode updateMatching(String id, JsonNode content, long expectedRevision, Bson condition)
+      throws ArtifactServerResourceNotFoundException, IOException {
     if ((id == null) || (id.length() == 0)) {
       throw new IllegalArgumentException();
     }
@@ -204,7 +209,7 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     Bson revisionFilter = expectedRevision == 0L
         ? com.mongodb.client.model.Filters.exists(INTERNAL_REVISION_FIELD, false)
         : eq(INTERNAL_REVISION_FIELD, expectedRevision);
-    UpdateResult updateResult = entityCollection.replaceOne(and(eq("@id", id), revisionFilter), contentDocument);
+    UpdateResult updateResult = entityCollection.replaceOne(and(eq("@id", id), revisionFilter, condition), contentDocument);
     if (updateResult.getMatchedCount() == 1) {
       // A fresh read could observe a later writer and return a body that does not match the response ETag.
       return toPublicJson(contentDocument);
