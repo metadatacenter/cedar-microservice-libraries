@@ -83,6 +83,45 @@ public class ArtifactYamlTranscoderNegotiationTest {
   }
 
   @Test
+  public void anInstanceAlsoNegotiatesNQuads() {
+    MediaType nquads = ArtifactYamlTranscoder.APPLICATION_NQUADS_TYPE;
+    assertEquals(Optional.of(nquads), ArtifactYamlTranscoder.negotiateInstanceResponseType(asList(nquads)));
+    assertEquals(Optional.of(nquads), ArtifactYamlTranscoder.negotiateInstanceResponseType(asList(nquads, JSON)));
+    assertEquals(Optional.of(JSON), ArtifactYamlTranscoder.negotiateInstanceResponseType(asList(JSON, nquads)));
+    assertEquals(Optional.of(JSON), ArtifactYamlTranscoder.negotiateInstanceResponseType(asList(MediaType.WILDCARD_TYPE)));
+    assertEquals(Optional.empty(), negotiate(asList(nquads)), "only an instance has an RDF form");
+  }
+
+  @Test
+  public void jsonIsAcceptedWhereverTheAcceptHeaderAdmitsIt() {
+    assertTrue(ArtifactYamlTranscoder.acceptsJson(null));
+    assertTrue(ArtifactYamlTranscoder.acceptsJson(Collections.emptyList()));
+    assertTrue(ArtifactYamlTranscoder.acceptsJson(asList(YAML, JSON)));
+    assertTrue(ArtifactYamlTranscoder.acceptsJson(asList(YAML, MediaType.valueOf("application/*"))));
+    assertTrue(ArtifactYamlTranscoder.acceptsJson(asList(YAML, MediaType.WILDCARD_TYPE)));
+    assertFalse(ArtifactYamlTranscoder.acceptsJson(asList(YAML)));
+    assertFalse(ArtifactYamlTranscoder.acceptsJson(asList(YAML, X_YAML)));
+  }
+
+  @Test
+  public void anArtifactTheLibraryCanNotReadHasNoYamlForm() {
+    com.fasterxml.jackson.databind.node.ObjectNode template =
+        (com.fasterxml.jackson.databind.node.ObjectNode) templateJson();
+    template.put("pav:createdOn", "yesterday");
+
+    for (com.fasterxml.jackson.databind.JsonNode unreadable :
+        List.of(template, JsonMapper.STRICT_MAPPER.createArrayNode(), JsonMapper.STRICT_MAPPER.createObjectNode())) {
+      ArtifactYamlTranscoder.UnreadableArtifactException e = org.junit.jupiter.api.Assertions.assertThrows(
+          ArtifactYamlTranscoder.UnreadableArtifactException.class,
+          () -> ArtifactYamlTranscoder.jsonToYaml(unreadable, CedarResourceType.TEMPLATE, false));
+      Response refusal = ArtifactYamlTranscoder.noYamlFormResponse("https://repo.metadatacenter.org/templates/1",
+          CedarResourceType.TEMPLATE, e);
+      assertEquals(406, refusal.getStatus());
+      assertEquals(JSON, refusal.getMediaType());
+    }
+  }
+
+  @Test
   public void isYamlMatchesBothYamlMediaTypes() {
     assertTrue(ArtifactYamlTranscoder.isYaml(new MediaType("application", "x-yaml")));
     assertTrue(ArtifactYamlTranscoder.isYaml(new MediaType("application", "yaml")));

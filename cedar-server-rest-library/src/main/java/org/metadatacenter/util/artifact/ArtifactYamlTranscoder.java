@@ -13,6 +13,7 @@ import org.metadatacenter.artifacts.model.reader.YamlArtifactReader;
 import org.metadatacenter.artifacts.model.renderer.JsonArtifactRenderer;
 import org.metadatacenter.artifacts.model.tools.YamlSerializer;
 import org.metadatacenter.model.CedarResourceType;
+import org.metadatacenter.util.http.CedarResponse;
 import org.metadatacenter.util.json.JsonMapper;
 
 import org.slf4j.Logger;
@@ -21,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +40,12 @@ public final class ArtifactYamlTranscoder {
 
   public static final MediaType APPLICATION_X_YAML_TYPE = new MediaType("application", "x-yaml");
   public static final MediaType APPLICATION_YAML_TYPE = new MediaType("application", "yaml");
+
+  /**
+   * The RDF serialization of a template instance, which its {@code ?format=rdf-nquad} already
+   * produces. Only an instance has one.
+   */
+  public static final MediaType APPLICATION_NQUADS_TYPE = new MediaType("application", "n-quads");
 
   private static final List<MediaType> YAML_TYPES = List.of(APPLICATION_X_YAML_TYPE, APPLICATION_YAML_TYPE);
 
@@ -78,6 +86,17 @@ public final class ArtifactYamlTranscoder {
   }
 
   /**
+   * Thrown when a stored artifact has no YAML form, because the artifact library cannot read the
+   * JSON it is stored as. The JSON itself is still served: a JSON read returns the stored document
+   * without reading it into the model.
+   */
+  public static final class UnreadableArtifactException extends RuntimeException {
+    private UnreadableArtifactException(String message, Throwable cause) {
+      super(message, cause);
+    }
+  }
+
+  /**
    * Selects the response media type from the acceptable media types of a request. The list is
    * expected in preference order, as returned by HttpHeaders.getAcceptableMediaTypes(). JSON is
    * the default: it matches wildcards, and an absent Accept header yields a wildcard entry. When
@@ -86,6 +105,18 @@ public final class ArtifactYamlTranscoder {
    * not produce.
    */
   public static Optional<MediaType> negotiateResponseType(List<MediaType> acceptableMediaTypes) {
+    return negotiate(acceptableMediaTypes, List.of());
+  }
+
+  /**
+   * As {@link #negotiateResponseType}, for a template instance, which can also be served as
+   * N-Quads.
+   */
+  public static Optional<MediaType> negotiateInstanceResponseType(List<MediaType> acceptableMediaTypes) {
+    return negotiate(acceptableMediaTypes, List.of(APPLICATION_NQUADS_TYPE));
+  }
+
+  private static Optional<MediaType> negotiate(List<MediaType> acceptableMediaTypes, List<MediaType> otherTypes) {
     if (acceptableMediaTypes == null || acceptableMediaTypes.isEmpty()) {
       return Optional.of(MediaType.APPLICATION_JSON_TYPE);
     }
@@ -98,8 +129,38 @@ public final class ArtifactYamlTranscoder {
           return Optional.of(yamlType);
         }
       }
+      for (MediaType otherType : otherTypes) {
+        if (requested.isCompatible(otherType)) {
+          return Optional.of(otherType);
+        }
+      }
     }
     return Optional.empty();
+  }
+
+  /**
+   * Whether JSON is among the types a request accepts at all, not only first. A read that can not
+   * produce the YAML a client preferred answers with JSON when the client named it as a lesser
+   * choice, and refuses only when it did not.
+   */
+  public static boolean acceptsJson(List<MediaType> acceptableMediaTypes) {
+    return acceptableMediaTypes == null || acceptableMediaTypes.isEmpty()
+        || acceptableMediaTypes.stream().anyMatch(type -> type.isCompatible(MediaType.APPLICATION_JSON_TYPE));
+  }
+
+  /**
+   * The refusal of a read that asked only for YAML, of an artifact that has none. It is a 406
+   * because no representation the client accepts exists; the message says why, so it is not taken
+   * for a mistake in the Accept header.
+   */
+  public static Response noYamlFormResponse(String artifactId, CedarResourceType resourceType,
+                                            UnreadableArtifactException e) {
+    return CedarResponse.notAcceptable()
+        .id(artifactId)
+        .message("The " + resourceType.getValue() + " has no YAML form: the artifact library can not read the "
+            + "JSON it is stored as. It can still be read as JSON. " + e.getMessage())
+        .parameter("allowed media types", Arrays.toString(new String[]{MediaType.APPLICATION_JSON}))
+        .build();
   }
 
   public static boolean isJson(MediaType mediaType) {
@@ -236,9 +297,19 @@ public final class ArtifactYamlTranscoder {
 
   /**
    * Converts an artifact's JSON Schema/JSON-LD form into its YAML serialization.
+   *
+   * @throws UnreadableArtifactException when the artifact library can not read the JSON
    */
   public static String jsonToYaml(JsonNode artifactNode, CedarResourceType resourceType, boolean compact) {
-    Artifact artifact = readJsonArtifact((ObjectNode) artifactNode, resourceType);
+    if (!(artifactNode instanceof ObjectNode objectNode)) {
+      throw new UnreadableArtifactException("The stored document is not a JSON object.", null);
+    }
+    Artifact artifact;
+    try {
+      artifact = readJsonArtifact(objectNode, resourceType);
+    } catch (RuntimeException e) {
+      throw new UnreadableArtifactException(e.getMessage(), e);
+    }
     return YamlSerializer.getYAML(artifact, compact, true);
   }
 
