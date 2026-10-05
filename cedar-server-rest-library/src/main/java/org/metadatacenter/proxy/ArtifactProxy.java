@@ -28,6 +28,10 @@ public class ArtifactProxy {
       int statusCode = proxyResponse.getCode();
       String mediaType = entity.getContentType();
       return Response.status(statusCode).type(mediaType).entity(entity.getContent()).build();
+    } catch (CedarProcessingException e) {
+      // An outage arrives as one and keeps its 503. Wrapping it made every unreachable artifact
+      // server a 500, under a message that still said the service was unavailable.
+      throw e;
     } catch (Exception e) {
       throw new CedarProcessingException(e);
     }
