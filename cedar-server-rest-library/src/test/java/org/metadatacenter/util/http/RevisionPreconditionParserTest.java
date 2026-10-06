@@ -10,6 +10,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RevisionPreconditionParserTest {
 
   @Test
+  void aMissingOrBlankFieldIsAbsentAndAnyTagIsNot() {
+    assertTrue(RevisionPreconditionParser.isAbsent(null));
+    assertTrue(RevisionPreconditionParser.isAbsent(""));
+    assertTrue(RevisionPreconditionParser.isAbsent(" \t "));
+    assertFalse(RevisionPreconditionParser.isAbsent("*"));
+    assertFalse(RevisionPreconditionParser.isAbsent("not-a-tag"));
+  }
+
+  @Test
+  void theAnswerToAnAbsentFieldIs428() {
+    assertEquals(428, CedarResponse.preconditionRequired().message("needs a tag").build().getStatus());
+  }
+
+  @Test
   void wildcardMatchesEveryCurrentRepresentation() {
     assertTrue(RevisionPreconditionParser.parse(" * ").matches(937));
   }

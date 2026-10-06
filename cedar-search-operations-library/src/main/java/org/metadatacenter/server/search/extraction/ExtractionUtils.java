@@ -54,7 +54,7 @@ public class ExtractionUtils {
                                             CedarRequestContext requestContext) throws CedarProcessingException {
     String url =
         cedarConfig.getMicroserviceUrlUtil().getArtifact().getResourceType(nodeType) + "/"
-            + CedarUrlUtil.urlEncode(artifactId);
+            + CedarUrlUtil.urlEncode(cedarConfig.getLinkedDataUtil().resourcePathId(nodeType, artifactId));
     ClassicHttpResponse proxyResponse = artifactClient.get(url, requestContext);
     HttpEntity entity = proxyResponse.getEntity();
     int statusCode = proxyResponse.getCode();
