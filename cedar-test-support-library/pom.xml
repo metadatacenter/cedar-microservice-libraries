@@ -18,6 +18,12 @@
 
   <dependencies>
 
+    <!-- Classpath discovery for an independent inventory of compiled JAX-RS resources. -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-server-rest-library</artifactId>

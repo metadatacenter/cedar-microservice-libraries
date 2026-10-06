@@ -144,7 +144,7 @@ public final class RouteSurface {
 
   private static void addResourceClass(List<Class<?>> resourceClasses, Class<?> resourceClass,
                                        String packagePrefix) {
-    if (resourceClass.getName().startsWith(packagePrefix) && resourceClass.isAnnotationPresent(Path.class)) {
+    if (resourceClass.getName().startsWith(packagePrefix + ".") && resourceClass.isAnnotationPresent(Path.class)) {
       resourceClasses.add(resourceClass);
     }
   }
