@@ -19,6 +19,16 @@ public final class RevisionPreconditionParser {
   private RevisionPreconditionParser() {
   }
 
+  /**
+   * Whether a conditional write was sent without the If-Match it needs.
+   *
+   * A blank field is absent too, since no entity tag is blank. Every write that replaces or deletes a
+   * revisioned resource asked this in a copy of its own, and answers 428 when it holds.
+   */
+  public static boolean isAbsent(String ifMatch) {
+    return ifMatch == null || ifMatch.isBlank();
+  }
+
   public static RevisionPrecondition parse(String ifMatch) {
     if ("*".equals(ifMatch.trim())) {
       return RevisionPrecondition.any();

@@ -232,6 +232,11 @@ public abstract class CedarResponse {
     return newResponseBuilder().status(CedarResponseStatus.METHOD_NOT_ALLOWED);
   }
 
+  /** The answer to a conditional write sent without If-Match; see {@link RevisionPreconditionParser#isAbsent}. */
+  public static CedarResponseBuilder preconditionRequired() {
+    return newResponseBuilder().status(CedarResponseStatus.PRECONDITION_REQUIRED);
+  }
+
   public static CedarResponseBuilder conflict() {
     return newResponseBuilder().status(CedarResponseStatus.CONFLICT);
   }
