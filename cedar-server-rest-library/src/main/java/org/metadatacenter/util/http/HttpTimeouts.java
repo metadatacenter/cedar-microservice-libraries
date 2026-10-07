@@ -223,6 +223,15 @@ public final class HttpTimeouts {
     return derived;
   }
 
+  /** Keep the same bounds and pool, but never redirect a request carrying a caller's credentials. */
+  public HttpTimeouts withoutRedirects() {
+    if (!followRedirects) return this;
+    HttpTimeouts derived = new HttpTimeouts(callClass, false, overrideSource, override, null);
+    derived.fixedPool = fixedPool;
+    derived.fixedBounds = fixedPool == null ? null : settings();
+    return derived;
+  }
+
   /**
    * Executes the request under this class's timeouts and pool. The response body is buffered before
    * the call returns, so the connection is back in the pool by the time the caller reads it.
