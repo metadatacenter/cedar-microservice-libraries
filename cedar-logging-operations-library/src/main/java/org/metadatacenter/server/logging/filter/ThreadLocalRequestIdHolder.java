@@ -5,7 +5,12 @@ public class ThreadLocalRequestIdHolder {
   private static final ThreadLocal<LoggingContext> loggingContext = new ThreadLocal<>();
 
   public static void setLoggingContext(LoggingContext ctx) {
-    loggingContext.set(ctx);
+    if (ctx == null) loggingContext.remove();
+    else loggingContext.set(ctx);
+  }
+
+  public static void clear() {
+    loggingContext.remove();
   }
 
   public static LoggingContext getLoggingContext() {

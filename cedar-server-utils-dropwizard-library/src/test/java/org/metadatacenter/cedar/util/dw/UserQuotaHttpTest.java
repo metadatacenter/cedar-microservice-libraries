@@ -96,7 +96,7 @@ class UserQuotaHttpTest {
             .POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(429, rejected.statusCode(), rejected.body());
         assertTrue(Long.parseLong(rejected.headers().firstValue("Retry-After").orElseThrow()) > 0);
-        assertEquals("writes", new ObjectMapper().readTree(rejected.body()).path("policy").asText());
+        assertEquals("writes", new ObjectMapper().readTree(rejected.body()).path("parameters").path("policy").asText());
         assertEquals(1, mutations.get(), "Rejected POST must never run its mutation");
         var read = client.send(HttpRequest.newBuilder(uri).header("Authorization", "apiKey user-1").GET().build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(200, read.statusCode(), read.body());

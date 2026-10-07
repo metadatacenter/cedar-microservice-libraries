@@ -20,11 +20,8 @@ import java.util.Map;
     + "when they are relevant to the failure.", additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
 public final class CedarError {
 
-  @Schema(description = "Symbolic HTTP response status.", requiredMode = Schema.RequiredMode.REQUIRED,
-      allowableValues = {"BAD_REQUEST", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "METHOD_NOT_ALLOWED",
-          "NOT_ACCEPTABLE", "CONFLICT", "PRECONDITION_FAILED", "UNSUPPORTED_MEDIA_TYPE",
-          "UNPROCESSABLE_ENTITY", "PRECONDITION_REQUIRED", "INTERNAL_SERVER_ERROR", "NOT_IMPLEMENTED",
-          "BAD_GATEWAY", "SERVICE_UNAVAILABLE", "HTTP_VERSION_NOT_SUPPORTED"})
+  @Schema(description = "Symbolic HTTP response status, or HTTP_<code> for an unnamed status.",
+      requiredMode = Schema.RequiredMode.REQUIRED, pattern = "^[A-Z][A-Z0-9_]*$")
   public String status;
 
   @Schema(description = "Numeric HTTP response status.", minimum = "400", maximum = "599",
@@ -70,7 +67,7 @@ public final class CedarError {
           "versioningOnlyByOwner", "nonVersionedArtifactType", "createDraftOnlyFromPublished",
           "publishOnlyDraft", "draftNotCreated", "contentNotValid", "doiNotSupportedByResourceType",
           "doiCanNotBeSetForEmptyAtId", "doiCanNotBeAltered", "doiCanNotBeSet", "doiAlreadyExists",
-          "dataCiteDOIDisabled", "pinnedVersionUnavailable", "resourceNotFound", "internalError"
+          "dataCiteDOIDisabled", "pinnedVersionUnavailable", "resourceNotFound", "rateLimitExceeded", "rateLimitUnavailable", "internalError"
       })
   public String errorKey;
 
@@ -130,11 +127,25 @@ public final class CedarError {
     return error;
   }
 
+  /** Build diagnostics and both status representations from the final HTTP status. */
+  public static CedarError from(CedarErrorPack pack, String errorId, int statusCode) {
+    CedarError error = from(pack, errorId);
+    error.status = statusName(statusCode);
+    error.statusCode = statusCode;
+    return error;
+  }
+
+  private static String statusName(int statusCode) {
+    CedarResponseStatus cedarStatus = CedarResponseStatus.fromStatusCode(statusCode);
+    if (cedarStatus != null) return cedarStatus.name();
+    Response.Status standardStatus = Response.Status.fromStatusCode(statusCode);
+    return standardStatus == null ? "HTTP_" + statusCode : standardStatus.name();
+  }
+
   /** Build the envelope for a framework status that is not represented by {@link CedarResponseStatus}. */
   public static CedarError fromStatus(int statusCode) {
     CedarError error = new CedarError();
-    Response.Status standardStatus = Response.Status.fromStatusCode(statusCode);
-    error.status = standardStatus == null ? "HTTP_" + statusCode : standardStatus.name();
+    error.status = statusName(statusCode);
     error.statusCode = statusCode;
     error.parameters = Collections.emptyMap();
     error.objects = Collections.emptyMap();

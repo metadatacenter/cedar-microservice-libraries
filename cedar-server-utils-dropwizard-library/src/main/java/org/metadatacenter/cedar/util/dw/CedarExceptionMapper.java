@@ -78,40 +78,27 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
   }
 
   private Response clientResponse(Exception exception) {
-    if (exception instanceof BadRequestException) {
-      return CedarResponse.badRequest().build();
-    } else if (exception instanceof ForbiddenException) {
-      return CedarResponse.forbidden().build();
-    } else if (exception instanceof NotAcceptableException) {
-      return CedarResponse.notAcceptable().build();
-    } else if (exception instanceof NotAllowedException) {
-      return CedarResponse.methodNotAllowed().build();
-    } else if (exception instanceof NotAuthorizedException) {
-      return CedarResponse.unauthorized().build();
-    } else if (exception instanceof NotFoundException) {
-      return CedarResponse.notFound().build();
-    } else if (exception instanceof NotSupportedException) {
-      // JAX-RS throws NotSupportedException when the request's Content-Type does not match the
-      // endpoint's @Consumes, which is 415 Unsupported Media Type. It has nothing to do with the
-      // HTTP protocol version: this previously answered 505, reporting a client mistake as a
-      // server fault (and as a retryable 5xx).
-      return CedarResponse.unsupportedMediaType().build();
-    } else if (exception instanceof WebApplicationException webApplicationException) {
-      // Any other framework-level rejection Jersey raises before the resource runs — most visibly a
-      // ParamException when a query param cannot be parsed into its type, such as a non-integer
-      // limit=abc, which Jersey classifies as 400. Honor the status Jersey chose; the fallthrough
-      // below would otherwise report every one of these as a 500.
-      int status = webApplicationException.getResponse().getStatus();
-      CedarResponseStatus cedarStatus = CedarResponseStatus.fromStatusCode(status);
-      if (cedarStatus != null) {
-        return CedarResponse.status(cedarStatus).build();
+    if (!(exception instanceof WebApplicationException webException)) return null;
+    Response original = webException.getResponse();
+    // Jersey normally bypasses mappers for an explicit entity. Preserve that contract for callers
+    // that invoke this mapper directly too (operation reports and deliberate upstream payloads).
+    if (original.hasEntity()) return original;
+    // Jersey treats query conversion as a URI lookup failure (404). A malformed query is a
+    // client input error; keep path conversion's 404, but classify query input as 400.
+    int status = exception instanceof org.glassfish.jersey.server.ParamException.QueryParamException
+        ? 400 : original.getStatus();
+    Response normalized = CedarResponse.status(status).build();
+    Response.ResponseBuilder result = Response.fromResponse(normalized);
+    // Preserve protocol metadata, including multi-valued challenges. Representation metadata belongs
+    // to the newly generated JSON body, not to the bodyless response carried by the exception.
+    original.getHeaders().forEach((name, values) -> {
+      if (!java.util.Set.of("content-type", "content-length", "content-encoding", "transfer-encoding")
+          .contains(name.toLowerCase(java.util.Locale.ROOT))) {
+        result.header(name, null);
+        values.forEach(value -> result.header(name, value));
       }
-      return Response.status(status)
-          .entity(CedarError.fromStatus(status))
-          .type(MediaType.APPLICATION_JSON)
-          .build();
-    }
-    return null;
+    });
+    return result.build();
   }
 
 }

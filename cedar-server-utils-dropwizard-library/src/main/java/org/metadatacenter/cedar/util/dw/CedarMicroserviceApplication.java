@@ -228,10 +228,17 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
           new org.metadatacenter.cedar.util.dw.ratelimit.UserRateLimits(
               cedarConfig.getRateLimits(), quotaStore, environment.metrics())));
     }
-    environment.jersey().register(RequestIdGeneratorFilter.class);
-    environment.jersey().register(ResponseLoggerFilter.class);
+    registerRequestLogging(environment);
     environment.jersey().register(StrongEtagResponseFilter.class);
     environment.jersey().register(new InstanceContextInjectionFeature(environment.jersey().getResourceConfig()));
+  }
+
+  /** One lifecycle for every service, including early authentication and routing failures. */
+  public static void registerRequestLogging(Environment environment) {
+    environment.servlets().addFilter("CedarLoggingContext", RequestLoggingScopeFilter.class)
+        .addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), false, "/*");
+    environment.jersey().register(RequestIdGeneratorFilter.class);
+    environment.jersey().register(ResponseLoggerFilter.class);
   }
 
   private Integer getApplicationHttpPort(T configuration) {
@@ -276,7 +283,8 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     return httpPort;
   }
 
-  protected void setupEnvironment(Environment environment) {
+  /** The production mapper set, also exercised through HTTP by the response contract suite. */
+  static void registerExceptionMappers(Environment environment) {
     // Register Exception Mapper
     environment.jersey().register(new CedarCedarExceptionMapper());
     environment.jersey().register(new CedarExceptionMapper());
@@ -288,6 +296,11 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     environment.jersey().register(new CedarEmptyOptionalExceptionMapper());
     environment.jersey().register(new CedarIllegalStateExceptionMapper());
     environment.jersey().register(new CedarEarlyEofExceptionMapper());
+
+  }
+
+  protected void setupEnvironment(Environment environment) {
+    registerExceptionMappers(environment);
 
     registerSharedHealthChecks(environment);
 

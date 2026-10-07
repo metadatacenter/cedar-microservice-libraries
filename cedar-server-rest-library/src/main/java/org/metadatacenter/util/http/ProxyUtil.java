@@ -1,17 +1,14 @@
 package org.metadatacenter.util.http;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.collect.Lists;
 import org.apache.commons.codec.CharEncoding;
 import org.apache.hc.client5.http.fluent.Request;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.ParseException;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.metadatacenter.constant.CedarHeaderParameters;
-import org.metadatacenter.constant.CustomHttpConstants;
 import org.metadatacenter.constant.HttpConstants;
 import org.metadatacenter.exception.CedarBadRequestException;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
@@ -22,7 +19,6 @@ import org.metadatacenter.util.json.JsonMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.ws.rs.core.HttpHeaders;
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,14 +34,6 @@ public class ProxyUtil {
 
   public static final String ZERO_LENGTH = "0";
 
-  private static final List<String> CEDAR_RESPONSE_HEADERS = Lists.newArrayList(
-      HttpHeaders.CONTENT_TYPE,
-      HttpHeaders.ETAG,
-      HttpHeaders.VARY,
-      CustomHttpConstants.HEADER_CEDAR_VALIDATION_STATUS,
-      CustomHttpConstants.HEADER_CEDAR_VALIDATION_REPORT,
-      HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS);
-
   public static ClassicHttpResponse proxyGet(String url, CedarRequestContext context) throws CedarProcessingException {
     return proxyGet(url, context, HttpTimeouts.INTERACTIVE);
   }
@@ -56,7 +44,7 @@ public class ProxyUtil {
     copyHeaders(proxyRequest, context);
     requestIdentityEncoding(proxyRequest);
     try {
-      return timeouts.execute(proxyRequest);
+      return timeouts.withoutRedirects().execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
@@ -68,7 +56,7 @@ public class ProxyUtil {
     copyHeaders(proxyRequest, additionalHeaders);
     requestIdentityEncoding(proxyRequest);
     try {
-      return HttpTimeouts.INTERACTIVE.execute(proxyRequest);
+      return HttpTimeouts.NO_REDIRECT_INTERACTIVE.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
@@ -99,7 +87,7 @@ public class ProxyUtil {
     copyHeaders(proxyRequest, context);
     copyHeader(proxyRequest, HttpHeaders.IF_MATCH, ifMatch);
     try {
-      return HttpTimeouts.INTERACTIVE.execute(proxyRequest);
+      return HttpTimeouts.NO_REDIRECT_INTERACTIVE.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
@@ -120,7 +108,7 @@ public class ProxyUtil {
         .bodyString(content, ContentType.APPLICATION_JSON);
     copyHeaders(proxyRequest, context);
     try {
-      return timeouts.execute(proxyRequest);
+      return timeouts.withoutRedirects().execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
@@ -153,7 +141,7 @@ public class ProxyUtil {
     copyHeaders(proxyRequest, context);
     copyHeader(proxyRequest, HttpHeaders.IF_MATCH, ifMatch);
     try {
-      return HttpTimeouts.INTERACTIVE.execute(proxyRequest);
+      return HttpTimeouts.NO_REDIRECT_INTERACTIVE.execute(proxyRequest);
     } catch (IOException e) {
       throw dependencyUnavailable(e);
     }
@@ -167,11 +155,7 @@ public class ProxyUtil {
   }
 
   public static void proxyResponseHeaders(ClassicHttpResponse proxyResponse, HttpServletResponse response) {
-    for (Header header : proxyResponse.getHeaders()) {
-      if (CEDAR_RESPONSE_HEADERS.stream().anyMatch(name -> name.equalsIgnoreCase(header.getName()))) {
-        response.setHeader(header.getName(), header.getValue());
-      }
-    }
+    ResponseRelay.copyHeaders(proxyResponse, response);
   }
 
   private static void copyHeaders(Request proxyRequest, CedarRequestContext context) {

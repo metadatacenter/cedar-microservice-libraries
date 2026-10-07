@@ -20,7 +20,12 @@ class CedarErrorSchemaTest {
 
   @Test
   void documentedEnumsMatchTheirWireValues() throws Exception {
-    assertEquals(errorStatuses(), documentedValues("status"));
+    // The numeric API also accepts extension statuses; a closed enum would reject valid errors.
+    assertEquals(Set.of(), documentedValues("status"));
+    for (String value : errorStatuses()) {
+      org.junit.jupiter.api.Assertions.assertTrue(value.matches(
+          CedarError.class.getField("status").getAnnotation(Schema.class).pattern()));
+    }
     assertEquals(serializedValues(CedarErrorKey.class), documentedValues("errorKey"));
     assertEquals(serializedValues(CedarErrorReasonKey.class), documentedValues("errorReasonKey"));
     assertEquals(serializedValues(CedarErrorType.class), documentedValues("errorType"));
