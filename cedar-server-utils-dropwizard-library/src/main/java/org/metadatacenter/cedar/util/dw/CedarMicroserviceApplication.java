@@ -228,10 +228,17 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
           new org.metadatacenter.cedar.util.dw.ratelimit.UserRateLimits(
               cedarConfig.getRateLimits(), quotaStore, environment.metrics())));
     }
-    environment.jersey().register(RequestIdGeneratorFilter.class);
-    environment.jersey().register(ResponseLoggerFilter.class);
+    registerRequestLogging(environment);
     environment.jersey().register(StrongEtagResponseFilter.class);
     environment.jersey().register(new InstanceContextInjectionFeature(environment.jersey().getResourceConfig()));
+  }
+
+  /** One lifecycle for every service, including early authentication and routing failures. */
+  public static void registerRequestLogging(Environment environment) {
+    environment.servlets().addFilter("CedarLoggingContext", RequestLoggingScopeFilter.class)
+        .addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), false, "/*");
+    environment.jersey().register(RequestIdGeneratorFilter.class);
+    environment.jersey().register(ResponseLoggerFilter.class);
   }
 
   private Integer getApplicationHttpPort(T configuration) {

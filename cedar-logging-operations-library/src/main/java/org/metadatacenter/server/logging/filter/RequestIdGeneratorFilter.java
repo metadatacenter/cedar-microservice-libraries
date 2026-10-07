@@ -8,6 +8,9 @@ import org.metadatacenter.server.logging.model.AppLogType;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.ext.Provider;
+import jakarta.ws.rs.container.PreMatching;
+import jakarta.annotation.Priority;
+import jakarta.ws.rs.Priorities;
 import java.io.IOException;
 import java.util.UUID;
 
@@ -15,12 +18,17 @@ import static org.metadatacenter.constant.CedarHeaderParameters.GLOBAL_REQUEST_I
 import static org.metadatacenter.constant.CedarHeaderParameters.LOCAL_REQUEST_ID_KEY;
 
 @Provider
+@PreMatching
+@Priority(Priorities.AUTHENTICATION - 100)
 public class RequestIdGeneratorFilter implements ContainerRequestFilter {
+  static final String CONTEXT_PROPERTY = RequestIdGeneratorFilter.class.getName() + ".context";
 
   @Override
   public void filter(ContainerRequestContext requestContext) throws IOException {
 
-    if (requestContext.getMethod() == "OPTIONS") {
+    ThreadLocalRequestIdHolder.clear();
+    requestContext.removeProperty(CONTEXT_PROPERTY);
+    if ("OPTIONS".equals(requestContext.getMethod())) {
       return;
     }
 
@@ -37,7 +45,8 @@ public class RequestIdGeneratorFilter implements ContainerRequestFilter {
     requestContext.getHeaders().remove(LOCAL_REQUEST_ID_KEY);
     requestContext.getHeaders().add(LOCAL_REQUEST_ID_KEY, localRequestId);
 
-    ThreadLocalRequestIdHolder.setLoggingContext(new LoggingContext(globalRequestId, localRequestId));
+    LoggingContext context = new LoggingContext(globalRequestId, localRequestId);
+    ThreadLocalRequestIdHolder.setLoggingContext(context);
 
     AppLogger.message(AppLogType.REQUEST_FILTER, AppLogSubType.START, globalRequestId, localRequestId)
         .param(AppLogParam.GLOBAL_REQUEST_ID_SOURCE, requestIdSource)
@@ -45,5 +54,6 @@ public class RequestIdGeneratorFilter implements ContainerRequestFilter {
         .param(AppLogParam.PATH, requestContext.getUriInfo().getPath())
         .param(AppLogParam.QUERY_PARAMETERS, requestContext.getUriInfo().getQueryParameters())
         .enqueue();
+    requestContext.setProperty(CONTEXT_PROPERTY, context);
   }
 }
