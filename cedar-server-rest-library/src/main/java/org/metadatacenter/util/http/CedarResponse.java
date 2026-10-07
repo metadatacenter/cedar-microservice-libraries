@@ -18,6 +18,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 public abstract class CedarResponse {
@@ -38,12 +39,13 @@ public abstract class CedarResponse {
         }
       }
     }
-    return null;
+    throw new IllegalArgumentException("An unsuccessful backend result with an error pack is required");
   }
 
   public static class CedarResponseBuilder {
 
     private final CedarErrorPack errorPack;
+    private int statusCode = 500;
     private Exception exception;
     private Object entity;
     private URI createdResourceUri;
@@ -57,37 +59,41 @@ public abstract class CedarResponse {
 
     public CedarResponseBuilder(CedarErrorPack errorPack) {
       this.errorPack = new CedarErrorPack(errorPack);
-      exception = errorPack.getOriginalException();
+      statusCode = this.errorPack.getStatusCode();
+      exception = this.errorPack.getOriginalException();
     }
 
     /**
      * Whether the status this response carries may not have a body.
      *
-     * <p>RFC 9110 forbids one on 204 and 304, and on every 1xx. A body sent with those is at best
+     * <p>RFC 9110 forbids one on 204, 205 and 304, and on every 1xx. A body sent with those is at best
      * ignored and at worst confuses an intermediary about where the next message starts.
      */
     private boolean statusForbidsABody() {
-      int code = errorPack.getStatusCode();
-      return code == CedarResponseStatus.NO_CONTENT.getStatusCode() || code == 304 || (code >= 100 && code < 200);
+      int code = statusCode;
+      return code == CedarResponseStatus.NO_CONTENT.getStatusCode() || code == 205 || code == 304 || (code >= 100 && code < 200);
     }
 
     public Response build() {
       Response.ResponseBuilder responseBuilder = Response.noContent();
       boolean generatedErrorEntity = false;
-      responseBuilder.status(errorPack.getStatusCode());
+      responseBuilder.status(statusCode);
 
       if (!headers.isEmpty()) {
         for (String property : headers.keySet()) {
           responseBuilder.header(property, headers.get(property));
         }
       }
-      if (errorPack.getStatus() == CedarResponseStatus.UNAUTHORIZED) {
+      if (statusCode == 401 && headers.keySet().stream().noneMatch(HttpHeaders.WWW_AUTHENTICATE::equalsIgnoreCase)) {
         responseBuilder.header(HttpHeaders.WWW_AUTHENTICATE, HttpConstants.HTTP_AUTH_CHALLENGE);
       }
       responseBuilder.header(HttpConstants.HTTP_HEADER_ACCESS_CONTROL_EXPOSE_HEADERS,
           CustomHttpConstants.EXPOSED_HEADERS_VALUE);
-      if (createdResourceUri != null) {
-        responseBuilder.status(CedarResponseStatus.CREATED.getStatusCode()).location(createdResourceUri);
+      if (createdResourceUri != null && statusCode == 201) {
+        responseBuilder.location(createdResourceUri);
+      }
+      if (statusForbidsABody()) {
+        return responseBuilder.build();
       }
       if (entity != null) {
         responseBuilder.entity(entity);
@@ -99,14 +105,13 @@ public abstract class CedarResponse {
           // server-side under a correlation id and return only that id, so an operator can find the
           // full detail in the logs while the client gets nothing exploitable.
           errorId = UUID.randomUUID().toString();
-          log.error("Error response {} (status {}): {}", errorId, errorPack.getStatus(), exception.getMessage(),
+          log.error("Error response {} (status {}): {}", errorId, statusCode, exception.getMessage(),
               exception);
         }
 
-        // A status that cannot carry a body gets none; every other entity-less response gets the
-        // common envelope.
-        if (!statusForbidsABody()) {
-          CedarError error = CedarError.from(errorPack, errorId);
+        // An empty success is not an error. Only errors gain a generated envelope.
+        if (statusCode >= 400) {
+          CedarError error = CedarError.from(errorPack, errorId, statusCode);
           responseBuilder.entity(error);
           generatedErrorEntity = true;
         }
@@ -123,7 +128,14 @@ public abstract class CedarResponse {
     }
 
     public CedarResponseBuilder status(CedarResponseStatus status) {
-      this.errorPack.status(status);
+      if (status == null) throw new IllegalArgumentException("HTTP status must not be null");
+      return status(status.getStatusCode());
+    }
+
+    /** Numeric statuses preserve upstream answers outside the named CEDAR subset. */
+    public CedarResponseBuilder status(int status) {
+      if (status < 100 || status > 599) throw new IllegalArgumentException("HTTP status must be between 100 and 599");
+      this.statusCode = status;
       return this;
     }
 
@@ -167,8 +179,8 @@ public abstract class CedarResponse {
     }
 
     public CedarResponseBuilder created(URI createdResourceUri) {
-      this.createdResourceUri = createdResourceUri;
-      return this;
+      this.createdResourceUri = Objects.requireNonNull(createdResourceUri, "Created resource location");
+      return status(CedarResponseStatus.CREATED);
     }
 
     public CedarResponseBuilder header(String property, Object value) {
@@ -257,6 +269,11 @@ public abstract class CedarResponse {
     return newResponseBuilder().status(status);
   }
 
+  public static CedarResponseBuilder status(int status) {
+    return newResponseBuilder().status(status);
+  }
+
+  /** Render a failed backend call; successful payloads are the resource's responsibility. */
   public static Response from(BackendCallResult backendCallResult) {
     return newResponseBuilder(backendCallResult).build();
   }

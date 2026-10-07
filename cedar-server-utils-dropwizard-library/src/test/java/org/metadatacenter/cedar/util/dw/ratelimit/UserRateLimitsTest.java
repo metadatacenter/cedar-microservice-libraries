@@ -56,7 +56,7 @@ class UserRateLimitsTest {
       assertEquals(429, response.getStatus());
       assertEquals("7", response.getHeaderString("Retry-After"));
       assertEquals("no-store", response.getHeaderString("Cache-Control"));
-      assertEquals("writes", ((Map<?, ?>) response.getEntity()).get("policy"));
+      assertEquals("writes", ((org.metadatacenter.util.http.CedarError) response.getEntity()).parameters.get("policy"));
       assertThrows(UserRateLimitException.class, () -> UserRateLimits.check(request, user(source)));
     }
     assertEquals(List.of("user-1", "user-1"), store.users);

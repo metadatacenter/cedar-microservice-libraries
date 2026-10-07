@@ -8,7 +8,8 @@ import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.rest.context.CedarRequestContext;
 
-import java.net.ServerSocket;
+import com.sun.net.httpserver.HttpServer;
+import java.net.InetSocketAddress;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,24 +25,27 @@ class ArtifactProxyOutageTest {
 
   @Test
   void aReadNobodyAnswersIsAnOutageAndNotA500() throws Exception {
-    int closed;
-    try (ServerSocket socket = new ServerSocket(0)) {
-      closed = socket.getLocalPort();
+    HttpServer unavailable = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    unavailable.createContext("/", exchange -> exchange.close());
+    unavailable.start();
+    try {
+      String base = "http://127.0.0.1:" + unavailable.getAddress().getPort() + "/";
+      CedarConfig config = mock(CedarConfig.class, RETURNS_DEEP_STUBS);
+      when(config.getServers().getArtifact().getBase()).thenReturn(base);
+      when(config.getArtifactService().requireApiKey()).thenReturn("test-only-artifact-service-key-not-for-prod");
+      when(config.getMicroserviceUrlUtil().getArtifact().getArtifactTypeWithId(any(CedarResourceType.class),
+          any(String.class), any())).thenReturn(base + "templates/t");
+      CedarRequestContext user = mock(CedarRequestContext.class);
+      when(user.getAuthorizationHeader()).thenReturn("Bearer token");
+
+      CedarProcessingException thrown = assertThrows(CedarProcessingException.class, () ->
+          ArtifactProxy.executeResourceGetByProxyFromArtifactServer(config, null, CedarResourceType.TEMPLATE,
+              "https://repo.metadatacenter.orgx/templates/t", Optional.empty(), user));
+
+      assertInstanceOf(CedarDependencyUnavailableException.class, thrown);
+      assertEquals(CedarResponseStatus.SERVICE_UNAVAILABLE, thrown.getErrorPack().getStatus());
+    } finally {
+      unavailable.stop(0);
     }
-    String base = "http://127.0.0.1:" + closed + "/";
-    CedarConfig config = mock(CedarConfig.class, RETURNS_DEEP_STUBS);
-    when(config.getServers().getArtifact().getBase()).thenReturn(base);
-    when(config.getArtifactService().requireApiKey()).thenReturn("test-only-artifact-service-key-not-for-prod");
-    when(config.getMicroserviceUrlUtil().getArtifact().getArtifactTypeWithId(any(CedarResourceType.class),
-        any(String.class), any())).thenReturn(base + "templates/t");
-    CedarRequestContext user = mock(CedarRequestContext.class);
-    when(user.getAuthorizationHeader()).thenReturn("Bearer token");
-
-    CedarProcessingException thrown = assertThrows(CedarProcessingException.class, () ->
-        ArtifactProxy.executeResourceGetByProxyFromArtifactServer(config, null, CedarResourceType.TEMPLATE,
-            "https://repo.metadatacenter.orgx/templates/t", Optional.empty(), user));
-
-    assertInstanceOf(CedarDependencyUnavailableException.class, thrown);
-    assertEquals(CedarResponseStatus.SERVICE_UNAVAILABLE, thrown.getErrorPack().getStatus());
   }
 }
