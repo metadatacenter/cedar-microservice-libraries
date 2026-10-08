@@ -119,6 +119,14 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
+  public ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
+      Map<NodeProperty, String> updateFields, String restoreJobId, String projectionContent,
+      org.metadatacenter.server.ArtifactModificationProvenance modificationProvenance) {
+    return proxies.artifact().updateArtifactById(artifactId, updateFields, cu.getResourceId(), restoreJobId,
+        projectionContent, modificationProvenance);
+  }
+
+  @Override
   public VersionedResource<FolderServerArtifact> findVersionedArtifactById(CedarArtifactId artifactId) {
     return proxies.artifact().findVersionedArtifactById(artifactId);
   }
