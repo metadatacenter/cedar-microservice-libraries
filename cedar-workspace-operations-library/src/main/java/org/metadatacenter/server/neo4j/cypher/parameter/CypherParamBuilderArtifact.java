@@ -20,6 +20,20 @@ public class CypherParamBuilderArtifact extends AbstractCypherParamBuilder {
     return updateResourceById(artifactId, updateFields, updatedBy);
   }
 
+  public static CypherParameters updateArtifactById(CedarArtifactId artifactId,
+      Map<NodeProperty, String> updateFields, CedarUserId updatedBy,
+      org.metadatacenter.server.ArtifactModificationProvenance provenance) {
+    CypherParameters parameters = updateResourceById(artifactId, updateFields, updatedBy);
+    if (provenance != null) {
+      parameters.put(NodeProperty.LAST_UPDATED_BY, provenance.modifiedBy());
+      parameters.put(NodeProperty.LAST_UPDATED_ON, provenance.graphModifiedOn());
+      Long epochSecond = provenance.epochSecond();
+      if (epochSecond == null) parameters.put(NodeProperty.LAST_UPDATED_ON_TS, (String) null);
+      else parameters.put(NodeProperty.LAST_UPDATED_ON_TS, epochSecond.longValue());
+    }
+    return parameters;
+  }
+
   public static CypherParameters matchArtifactIdAndUserId(CedarArtifactId artifactId, CedarUserId userId) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.ARTIFACT_ID, artifactId);

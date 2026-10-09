@@ -80,6 +80,11 @@ public interface FolderServiceSession {
   ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
       Map<NodeProperty, String> updateFields, String restoreJobId, String projectionContent);
 
+  /** A verbatim replacement projects its stated modification provenance, including explicit nulls. */
+  ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, CedarResourceType resourceType,
+      Map<NodeProperty, String> updateFields, String restoreJobId, String projectionContent,
+      ArtifactModificationProvenance modificationProvenance);
+
   boolean deleteFolderById(CedarFolderId folderId);
 
   boolean deleteFolderById(CedarFolderId folderId, RevisionPrecondition precondition);

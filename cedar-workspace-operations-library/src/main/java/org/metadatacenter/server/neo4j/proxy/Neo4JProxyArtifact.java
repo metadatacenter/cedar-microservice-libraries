@@ -145,6 +145,12 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
 
   ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, Map<NodeProperty, String> updateFields,
       CedarUserId updatedBy, String restoreJobId, String projectionContent) {
+    return updateArtifactById(artifactId, updateFields, updatedBy, restoreJobId, projectionContent, null);
+  }
+
+  ArtifactGraphUpdateResult updateArtifactById(CedarArtifactId artifactId, Map<NodeProperty, String> updateFields,
+      CedarUserId updatedBy, String restoreJobId, String projectionContent,
+      org.metadatacenter.server.ArtifactModificationProvenance modificationProvenance) {
     initializeVersioning();
     return executeInWriteTransaction(tx -> {
       // Use the relay's lock before touching graph state: an in-flight projection cannot be
@@ -166,7 +172,7 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
       }
       FolderServerArtifact result = runInTransactionGetOne(tx, new CypherQueryWithParameters(
           CypherQueryBuilderArtifact.updateResourceById(updateFields),
-          CypherParamBuilderArtifact.updateArtifactById(artifactId, updateFields, updatedBy)),
+          CypherParamBuilderArtifact.updateArtifactById(artifactId, updateFields, updatedBy, modificationProvenance)),
           FolderServerArtifact.class);
       if (result != null) {
         if (updateFields.containsKey(NodeProperty.PUBLICATION_STATUS)) VersionChainTransaction.reconcile(tx,artifactId.getId());
