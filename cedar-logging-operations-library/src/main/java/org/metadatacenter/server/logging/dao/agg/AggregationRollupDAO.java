@@ -9,6 +9,7 @@ import org.metadatacenter.server.logging.dbmodel.agg.AggRequestHourly;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 
 /**
@@ -104,27 +105,22 @@ public class AggregationRollupDAO extends AbstractDAO<AggRequestHourly> {
       "SELECT id, systemComponentName, operation, runnableHash, duration, logTime, runnable, interpolated, "
           + "className, methodName FROM log_cypher_pre284 WHERE id > :fromId ORDER BY id LIMIT :lim";
 
-  // Live path: reads the current tables (which DO have status + apiKeyHash), a settled UTC day at a
-  // time, in id order, taking only rows not yet marked. aggregatedAt IS the progress cursor — the
-  // batch's mark UPDATE commits in the same transaction as the upsert, so a crash leaves the rows
-  // unmarked (and the deltas rolled back) for clean reprocessing.
+  // Only completed fragments are immutable enough to aggregate. Missing fragments remain in raw
+  // logs until they arrive; a time margin cannot prove that a durable queue has drained.
+  private static final String COMPLETE_REQUEST =
+      "requestTime IS NOT NULL AND startTime IS NOT NULL AND endTime IS NOT NULL AND status IS NOT NULL";
   private static final String SELECT_LIVE_REQUEST =
       "SELECT id, systemComponentName, className, methodName, httpMethod, userId, authSource, apiKeyHash, "
           + "status, requestTime, handlerDuration, preHandlerDuration, path, (errorPack IS NOT NULL) AS hasError "
-          + "FROM log_request WHERE aggregatedAt IS NULL AND requestTime >= :ds AND requestTime < :de "
-          + "ORDER BY id LIMIT :lim";
-  private static final String MARK_LIVE_REQUEST =
-      "UPDATE log_request SET aggregatedAt = :now WHERE aggregatedAt IS NULL "
-          + "AND requestTime >= :ds AND requestTime < :de AND id <= :maxId";
+          + "FROM log_request WHERE aggregatedAt IS NULL AND " + COMPLETE_REQUEST
+          + " AND requestTime >= :ds AND requestTime < :de ORDER BY id LIMIT :lim FOR UPDATE SKIP LOCKED";
   private static final String SELECT_LIVE_CYPHER =
       "SELECT id, systemComponentName, operation, runnableHash, duration, logTime, runnable, interpolated, "
           + "className, methodName FROM log_cypher WHERE aggregatedAt IS NULL AND logTime >= :ds AND logTime < :de "
-          + "ORDER BY id LIMIT :lim";
-  private static final String MARK_LIVE_CYPHER =
-      "UPDATE log_cypher SET aggregatedAt = :now WHERE aggregatedAt IS NULL "
-          + "AND logTime >= :ds AND logTime < :de AND id <= :maxId";
+          + "ORDER BY id LIMIT :lim FOR UPDATE SKIP LOCKED";
   private static final String PRUNE_REQUEST =
-      "DELETE FROM log_request WHERE aggregatedAt IS NOT NULL AND requestTime < :cutoff ORDER BY id LIMIT :lim";
+      "DELETE FROM log_request WHERE aggregatedAt IS NOT NULL AND " + COMPLETE_REQUEST
+          + " AND requestTime < :cutoff ORDER BY id LIMIT :lim";
   private static final String PRUNE_CYPHER =
       "DELETE FROM log_cypher WHERE aggregatedAt IS NOT NULL AND logTime < :cutoff ORDER BY id LIMIT :lim";
 
@@ -191,16 +187,16 @@ public class AggregationRollupDAO extends AbstractDAO<AggRequestHourly> {
 
   // ---- live path (current tables, per settled UTC day) ------------------------------------------
 
-  /** @return {rowsRead, maxIdInBatch}; rowsRead 0 means the day is fully aggregated. */
+  /** @return exact IDs locked and folded by this transaction; other workers may own skipped rows. */
   @SuppressWarnings("unchecked")
-  public long[] foldLiveRequestBatch(RollupAccumulators acc, Instant dayStart, Instant dayEnd, int limit) {
+  public List<Long> foldLiveRequestBatch(RollupAccumulators acc, Instant dayStart, Instant dayEnd, int limit) {
     List<Object[]> rows = currentSession().createNativeQuery(SELECT_LIVE_REQUEST)
         .setParameter("ds", Timestamp.from(dayStart))
         .setParameter("de", Timestamp.from(dayEnd))
         .setParameter("lim", limit).getResultList();
-    long maxId = 0;
+    List<Long> ids = new ArrayList<>(rows.size());
     for (Object[] r : rows) {
-      maxId = Math.max(maxId, num(r[0]));
+      ids.add(num(r[0]));
       String component = str(r[1]);
       String className = str(r[2]);
       String methodName = str(r[3]);
@@ -221,18 +217,18 @@ public class AggregationRollupDAO extends AbstractDAO<AggRequestHourly> {
       acc.foldRequest(when, component, className, methodName, httpMethod, statusClass(status, hasError),
           authSource, userId, apiKeyHash, handlerNanos, preNanos, isError, path);
     }
-    return new long[]{rows.size(), maxId};
+    return ids;
   }
 
   @SuppressWarnings("unchecked")
-  public long[] foldLiveCypherBatch(RollupAccumulators acc, Instant dayStart, Instant dayEnd, int limit) {
+  public List<Long> foldLiveCypherBatch(RollupAccumulators acc, Instant dayStart, Instant dayEnd, int limit) {
     List<Object[]> rows = currentSession().createNativeQuery(SELECT_LIVE_CYPHER)
         .setParameter("ds", Timestamp.from(dayStart))
         .setParameter("de", Timestamp.from(dayEnd))
         .setParameter("lim", limit).getResultList();
-    long maxId = 0;
+    List<Long> ids = new ArrayList<>(rows.size());
     for (Object[] r : rows) {
-      maxId = Math.max(maxId, num(r[0]));
+      ids.add(num(r[0]));
       String component = str(r[1]);
       String operation = str(r[2]);
       String runnableHash = str(r[3]);
@@ -248,33 +244,32 @@ public class AggregationRollupDAO extends AbstractDAO<AggRequestHourly> {
       acc.foldCypher(when, component, operation, runnableHash, nanos, runnable, interpolated,
           className, methodName);
     }
-    return new long[]{rows.size(), maxId};
+    return ids;
   }
 
-  /** Mark exactly the rows just folded (the smallest-id unmarked rows in the day, up to maxId). */
-  public int markLiveRequestRows(Instant dayStart, Instant dayEnd, long maxId, Instant now) {
-    return currentSession().createNativeMutationQuery(MARK_LIVE_REQUEST)
-        .setParameter("now", Timestamp.from(now))
-        .setParameter("ds", Timestamp.from(dayStart))
-        .setParameter("de", Timestamp.from(dayEnd))
-        .setParameter("maxId", maxId)
-        .executeUpdate();
+  /** Never mark a range: a smaller ID may have committed since the SELECT. */
+  public int markLiveRequestRows(List<Long> ids, Instant now) {
+    return markRows("log_request", ids, now);
   }
 
-  public int markLiveCypherRows(Instant dayStart, Instant dayEnd, long maxId, Instant now) {
-    return currentSession().createNativeMutationQuery(MARK_LIVE_CYPHER)
-        .setParameter("now", Timestamp.from(now))
-        .setParameter("ds", Timestamp.from(dayStart))
-        .setParameter("de", Timestamp.from(dayEnd))
-        .setParameter("maxId", maxId)
-        .executeUpdate();
+  public int markLiveCypherRows(List<Long> ids, Instant now) {
+    return markRows("log_cypher", ids, now);
+  }
+
+  private int markRows(String table, List<Long> ids, Instant now) {
+    if (ids.isEmpty()) return 0;
+    int marked = currentSession().createNativeMutationQuery("UPDATE " + table
+        + " SET aggregatedAt = :now WHERE aggregatedAt IS NULL AND id IN (:ids)")
+        .setParameter("now", Timestamp.from(now)).setParameterList("ids", ids).executeUpdate();
+    if (marked != ids.size()) throw new IllegalStateException("Log batch lost ownership before marking");
+    return marked;
   }
 
   /** Earliest not-yet-aggregated timestamp in a live table, or null if all are aggregated. */
   public Instant earliestUnaggregated(String timeColumn, String table) {
     Object o = currentSession()
         .createNativeQuery("SELECT MIN(" + safeCol(timeColumn) + ") FROM " + safe(table)
-            + " WHERE aggregatedAt IS NULL")
+            + " WHERE aggregatedAt IS NULL" + ("log_request".equals(table) ? " AND " + COMPLETE_REQUEST : ""))
         .getSingleResult();
     return ts(o);
   }

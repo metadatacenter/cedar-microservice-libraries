@@ -11,12 +11,9 @@ import org.metadatacenter.server.logging.model.AppLogParam;
 import org.metadatacenter.server.logging.model.AppLogSubType;
 import org.metadatacenter.server.logging.model.AppLogType;
 import org.metadatacenter.util.json.JsonMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class AppLoggerExecutorService {
 
-  private static final Logger log = LoggerFactory.getLogger(AppLoggerExecutorService.class);
   private ApplicationRequestLogDAO requestLogDAO;
   private ApplicationCypherLogDAO cypherLogDAO;
 
@@ -28,36 +25,31 @@ public class AppLoggerExecutorService {
 
   @UnitOfWork
   public void handleLog(AppLogMessage appLog) {
-    if (appLog.getType() == AppLogType.REQUEST_FILTER) {
-      if (appLog.getSubType() == AppLogSubType.START) {
-        ApplicationRequestLog l = ApplicationRequestLog.fromAppRequestFilter(appLog);
-        requestLogDAO.createOrUpdate(l);
-      } else if (appLog.getSubType() == AppLogSubType.END) {
-        ApplicationRequestLog oldLog = requestLogDAO.findByLocalRequestId(appLog.getLocalRequestId());
-        if (oldLog != null) {
-          oldLog.mergeEndLog(appLog);
-          requestLogDAO.createOrUpdate(oldLog);
-        }
+    var receipt = requestLogDAO.claimEvent(appLog);
+    if (receipt.isProcessed(appLog)) return;
+    if (appLog.getType() == AppLogType.CYPHER_QUERY) {
+      cypherLogDAO.create(ApplicationCypherLog.fromAppCypherLog(appLog));
+    } else {
+      ApplicationRequestLog row = requestLogDAO.lockOrCreate(appLog.getLocalRequestId(), receipt.hasRequestFragments());
+      if (row == null) {
+        receipt.markProcessed(appLog);
+        return;
       }
-    } else if (appLog.getType() == AppLogType.REQUEST_HANDLER) {
-      ApplicationRequestLog oldLog = requestLogDAO.findByLocalRequestId(appLog.getLocalRequestId());
-      if (oldLog != null) {
-        oldLog.mergeStartLog(appLog);
-        requestLogDAO.createOrUpdate(oldLog);
-      }
-    } else if (appLog.getType() == AppLogType.RESPONSE_EXCEPTION) {
-      ApplicationRequestLog oldLog = requestLogDAO.findByLocalRequestId(appLog.getLocalRequestId());
-      if (oldLog != null) {
+      if (appLog.getType() == AppLogType.REQUEST_FILTER && appLog.getSubType() == AppLogSubType.START) {
+        row.mergeFilterStartLog(appLog);
+      } else if (appLog.getType() == AppLogType.REQUEST_FILTER && appLog.getSubType() == AppLogSubType.END) {
+        row.mergeEndLog(appLog);
+      } else if (appLog.getType() == AppLogType.REQUEST_HANDLER) {
+        row.mergeStartLog(appLog);
+      } else if (appLog.getType() == AppLogType.RESPONSE_EXCEPTION) {
         try {
-          oldLog.setErrorPack(JsonMapper.STRICT_MAPPER.writeValueAsString(appLog.getParamAsMap(AppLogParam.EXCEPTION)));
-          requestLogDAO.createOrUpdate(oldLog);
+          row.setErrorPack(JsonMapper.STRICT_MAPPER.writeValueAsString(appLog.getParamAsMap(AppLogParam.EXCEPTION)));
         } catch (JsonProcessingException e) {
-          log.error("Error while serializing ErrorPack for DB log", e);
+          throw new IllegalArgumentException("Cannot serialize log exception", e);
         }
       }
-    } else if (appLog.getType() == AppLogType.CYPHER_QUERY) {
-      ApplicationCypherLog l = ApplicationCypherLog.fromAppCypherLog(appLog);
-      cypherLogDAO.create(l);
     }
+    // Dirty checking writes both the request fragment and its receipt in this UnitOfWork.
+    receipt.markProcessed(appLog);
   }
 }

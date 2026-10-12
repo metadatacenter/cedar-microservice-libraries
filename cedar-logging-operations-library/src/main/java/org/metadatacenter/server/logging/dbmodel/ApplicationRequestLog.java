@@ -127,22 +127,35 @@ public class ApplicationRequestLog {
 
   public static ApplicationRequestLog fromAppRequestFilter(AppLogMessage appLog) {
     ApplicationRequestLog l = new ApplicationRequestLog();
-    l.globalRequestId = appLog.getGlobalRequestId();
-    l.localRequestId = appLog.getLocalRequestId();
-    l.systemComponentName = appLog.getSystemComponent().getStringValue();
-    l.requestTime = appLog.getLogTime();
-    l.type = appLog.getType().getValue();
-    l.subType = appLog.getSubType().getValue();
-    l.globalRequestIdSource = appLog.getParamAsString(AppLogParam.GLOBAL_REQUEST_ID_SOURCE);
-    l.httpMethod = appLog.getParamAsString(AppLogParam.HTTP_METHOD);
-    l.path = appLog.getParamAsString(AppLogParam.PATH);
+    l.mergeFilterStartLog(appLog);
+    return l;
+  }
+
+  public void mergeFilterStartLog(AppLogMessage appLog) {
+    if (requestTime != null) return;
+    requireUnaggregated();
+    globalRequestId = appLog.getGlobalRequestId();
+    localRequestId = appLog.getLocalRequestId();
+    systemComponentName = appLog.getSystemComponent().getStringValue();
+    requestTime = appLog.getLogTime();
+    if (endTime == null) {
+      type = appLog.getType().getValue();
+      subType = appLog.getSubType().getValue();
+    }
+    globalRequestIdSource = appLog.getParamAsString(AppLogParam.GLOBAL_REQUEST_ID_SOURCE);
+    httpMethod = appLog.getParamAsString(AppLogParam.HTTP_METHOD);
+    path = appLog.getParamAsString(AppLogParam.PATH);
     Map<String, Object> parameters = appLog.getParamAsMap(AppLogParam.QUERY_PARAMETERS);
     try {
-      l.queryParameters = JsonMapper.PRETTY_MAPPER.writeValueAsString(parameters);
+      queryParameters = JsonMapper.PRETTY_MAPPER.writeValueAsString(parameters);
     } catch (JsonProcessingException e) {
       log.error("Error serializing parameters", e);
     }
-    return l;
+    recalculateDurations();
+  }
+
+  private void requireUnaggregated() {
+    if (aggregatedAt != null) throw new IllegalStateException("Incomplete request was already aggregated; reconcile its rollups before accepting late fragments");
   }
 
   public Long getId() {
@@ -150,6 +163,8 @@ public class ApplicationRequestLog {
   }
 
   public void mergeStartLog(AppLogMessage appLog) {
+    if (startTime != null) return;
+    requireUnaggregated();
     className = appLog.getParamAsString(AppLogParam.CLASS_NAME);
     methodName = appLog.getParamAsString(AppLogParam.METHOD_NAME);
     lineNumber = appLog.getParamAsInt(AppLogParam.LINE_NUMBER);
@@ -159,9 +174,12 @@ public class ApplicationRequestLog {
     apiKeyHash = appLog.getParamAsString(AppLogParam.API_KEY_HASH);
     authSource = appLog.getParamAsString(AppLogParam.AUTH_SOURCE);
     startTime = appLog.getLogTime();
+    recalculateDurations();
   }
 
   public void mergeEndLog(AppLogMessage appLog) {
+    if (endTime != null) return;
+    requireUnaggregated();
     type = AppLogType.REQUEST_HANDLER.getValue();
     subType = AppLogSubType.FULL.getValue();
     // HTTP status is only known at response time (the response-filter END event). A real status is
@@ -171,6 +189,10 @@ public class ApplicationRequestLog {
       status = responseStatus;
     }
     endTime = appLog.getLogTime();
+    recalculateDurations();
+  }
+
+  private void recalculateDurations() {
     if (startTime != null && endTime != null) {
       handlerDuration = Duration.between(startTime, endTime).toNanos();
     }

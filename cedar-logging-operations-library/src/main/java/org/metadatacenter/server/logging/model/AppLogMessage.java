@@ -8,9 +8,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 public class AppLogMessage {
 
+  private String eventId;
   private String globalRequestId;
   private String localRequestId;
   private SystemComponent systemComponent;
@@ -27,6 +29,7 @@ public class AppLogMessage {
 
   public AppLogMessage(SystemComponent systemComponent, AppLogType type, AppLogSubType subType, String globalRequestId,
                        String localRequestId) {
+    this.eventId = UUID.randomUUID().toString();
     this.logTime = Instant.now();
     this.systemComponent = systemComponent;
     this.globalRequestId = globalRequestId;
@@ -54,6 +57,10 @@ public class AppLogMessage {
 
   public void enqueue() {
     AppLogger.enqueue(this);
+  }
+
+  public String getEventId() {
+    return eventId;
   }
 
   public String getGlobalRequestId() {
