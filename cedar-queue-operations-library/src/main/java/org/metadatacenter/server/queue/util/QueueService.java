@@ -40,27 +40,49 @@ public abstract class QueueService {
    */
   public static final RedisServerVersion MINIMUM_SERVER_VERSION = new RedisServerVersion(2, 6, 0);
 
-  /**
-   * Moves the message at the head of one list to the tail of another, and returns it.
-   * <p>
-   * This is how a consumer claims work: the message leaves the queue and joins the processing list
-   * in one step, so it is never absent from both, and a consumer that stops before acknowledging
-   * leaves it recoverable rather than losing it.
-   */
-  private static final String HEAD_TO_TAIL_SCRIPT =
-      "local message = redis.call('LPOP', KEYS[1]); "
-          + "if message then redis.call('RPUSH', KEYS[2], message); end; "
-          + "return message";
+  // Redis scripts exclude other clients, but do not roll back commands preceding a runtime error.
+  // Validate all participating types before mutation and append before removing the source.
+  protected static final String TRANSFER_HELPERS = """
+      local function requireType(key, expected)
+        local actual = redis.call('TYPE', key).ok
+        if actual ~= 'none' and actual ~= expected then
+          error('WRONGTYPE expected ' .. expected .. ' for ' .. key)
+        end
+      end
+      local function contains(key, value)
+        for _, item in ipairs(redis.call('LRANGE', key, 0, -1)) do
+          if item == value then return true end
+        end
+        return false
+      end
+      """;
 
-  /** The reverse move, which returns a claimed message to the queue ahead of newer work. */
-  private static final String TAIL_TO_HEAD_SCRIPT =
-      "local message = redis.call('RPOP', KEYS[1]); "
-          + "if message then redis.call('LPUSH', KEYS[2], message); end; "
-          + "return message";
+  private static final String HEAD_TO_TAIL_SCRIPT = TRANSFER_HELPERS + """
+      requireType(KEYS[1], 'list'); requireType(KEYS[2], 'list')
+      local message = redis.call('LINDEX', KEYS[1], 0)
+      if message then
+        redis.call('RPUSH', KEYS[2], message)
+        redis.call('LPOP', KEYS[1])
+      end
+      return message
+      """;
 
-  protected static final String DEAD_LETTER_SCRIPT =
-      "local removed = redis.call('LREM', KEYS[1], 1, ARGV[1]); "
-          + "if removed == 1 then redis.call('RPUSH', KEYS[2], ARGV[1]); end; return removed";
+  private static final String TAIL_TO_HEAD_SCRIPT = TRANSFER_HELPERS + """
+      requireType(KEYS[1], 'list'); requireType(KEYS[2], 'list')
+      local message = redis.call('LINDEX', KEYS[1], -1)
+      if message then
+        redis.call('LPUSH', KEYS[2], message)
+        redis.call('RPOP', KEYS[1])
+      end
+      return message
+      """;
+
+  protected static final String DEAD_LETTER_SCRIPT = TRANSFER_HELPERS + """
+      requireType(KEYS[1], 'list'); requireType(KEYS[2], 'list')
+      if not contains(KEYS[1], ARGV[1]) then return 0 end
+      redis.call('RPUSH', KEYS[2], ARGV[1])
+      return redis.call('LREM', KEYS[1], 1, ARGV[1])
+      """;
 
   protected final CacheServerPersistent cacheConfig;
   protected JedisPool pool;

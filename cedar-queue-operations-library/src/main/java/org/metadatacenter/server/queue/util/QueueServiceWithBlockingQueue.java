@@ -63,7 +63,7 @@ public abstract class QueueServiceWithBlockingQueue extends QueueService {
    * caller loops on this, so an empty result is an ordinary idle turn rather than a failure.
    */
   public List<String> waitForMessages() {
-    String message = moveHeadToTail(blockingQueue, queueName, processingQueueName);
+    String message = claimOne(blockingQueue);
     if (message != null) {
       return List.of(queueName, message);
     }
@@ -76,11 +76,16 @@ public abstract class QueueServiceWithBlockingQueue extends QueueService {
     if (limit < 0 || limit > 512) throw new IllegalArgumentException("Claim limit must be between 0 and 512");
     List<String> messages = new java.util.ArrayList<>();
     for (int i = 0; i < limit; i++) {
-      String message = moveHeadToTail(blockingQueue, queueName, processingQueueName);
+      String message = claimOne(blockingQueue);
       if (message == null) break;
       messages.add(message);
     }
     return messages;
+  }
+
+  /** Subclasses may attach an ownership receipt to the same atomic claim. */
+  protected String claimOne(Jedis jedis) {
+    return moveHeadToTail(jedis, queueName, processingQueueName);
   }
 
   /** A shutdown interrupts this thread, and the interrupt is preserved for the caller's loop. */
