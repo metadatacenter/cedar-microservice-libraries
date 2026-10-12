@@ -101,6 +101,20 @@
       <scope>test</scope>
     </dependency>
 
+    <!-- Share the bundled, isolated Redis fixture already used by the queue consumers. -->
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-queue-operations-library</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>com.github.codemonstur</groupId>
+      <artifactId>embedded-redis</artifactId>
+      <scope>test</scope>
+    </dependency>
+
     <dependency>
       <groupId>org.neo4j.test</groupId>
       <artifactId>neo4j-harness</artifactId>

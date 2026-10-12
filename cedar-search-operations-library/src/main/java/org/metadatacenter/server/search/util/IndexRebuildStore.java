@@ -38,6 +38,16 @@ public interface IndexRebuildStore {
 
   void recordDelete(String cedarId);
 
+  /** One coherent view: moving an identifier between sets must not make it disappear to readers. */
+  Snapshot snapshot();
+
+  record Snapshot(Set<String> written, Set<String> deleted) {
+    public Snapshot {
+      written = Set.copyOf(written);
+      deleted = Set.copyOf(deleted);
+    }
+  }
+
   /** Ids a live write has placed in the rebuilding index. */
   Set<String> written();
 

@@ -302,7 +302,8 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
         rememberRevision(document.getString("@id"), revision == null ? 0 : revision.longValue());
       }
     }
-    entityCollection.drop();
+    // Clearing documents must preserve the unique @id index (and all other collection indexes).
+    entityCollection.deleteMany(new Document());
   }
 
   private long nextIncarnationRevision(String id) {

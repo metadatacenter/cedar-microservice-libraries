@@ -110,8 +110,9 @@ public final class IndexRebuildRegistry {
    * now narrowed to one batch.
    */
   public static Set<String> liveTouched() {
-    Set<String> touched = new HashSet<>(store.written());
-    touched.addAll(store.deleted());
+    IndexRebuildStore.Snapshot snapshot = store.snapshot();
+    Set<String> touched = new HashSet<>(snapshot.written());
+    touched.addAll(snapshot.deleted());
     return touched;
   }
 
@@ -134,8 +135,9 @@ public final class IndexRebuildRegistry {
           + " while the index was rebuilding and the rest were not tracked. If promotion is refused on"
           + " a document count, that is why, and the rebuild should simply be re-run.");
     }
-    long created = store.written().stream().filter(id -> !snapshotIds.contains(id)).count();
-    long deleted = store.deleted().stream().filter(snapshotIds::contains).count();
+    IndexRebuildStore.Snapshot snapshot = store.snapshot();
+    long created = snapshot.written().stream().filter(id -> !snapshotIds.contains(id)).count();
+    long deleted = snapshot.deleted().stream().filter(snapshotIds::contains).count();
     return created - deleted;
   }
 }
