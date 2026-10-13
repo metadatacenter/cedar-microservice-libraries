@@ -9,8 +9,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
+import java.util.function.LongSupplier;
 
 /**
  * A short-lived memory of which user an API key resolves to.
@@ -71,8 +73,10 @@ public class ApiKeyLookupCache {
     }
   }
 
-  private final Map<String, Entry> entries = new ConcurrentHashMap<>();
+  private final Map<String, Entry> entries = new HashMap<>();
   private final long ttlNanos;
+  private final LongSupplier clock;
+  private long generation;
   private final AtomicLong hits = new AtomicLong();
   private final AtomicLong misses = new AtomicLong();
 
@@ -89,6 +93,11 @@ public class ApiKeyLookupCache {
   }
 
   ApiKeyLookupCache(String configuredTtlSeconds) {
+    this(configuredTtlSeconds, System::nanoTime);
+  }
+
+  ApiKeyLookupCache(String configuredTtlSeconds, LongSupplier clock) {
+    this.clock = clock;
     this.ttlNanos = parseTtlSeconds(configuredTtlSeconds) * 1_000_000_000L;
     if (ttlNanos == 0) {
       log.info("API key lookup caching is disabled ({}=0)", TTL_ENV_VARIABLE);
@@ -124,7 +133,7 @@ public class ApiKeyLookupCache {
    * @return the cached graph record for this key, {@link Lookup#miss()} when nothing is remembered,
    * and a hit carrying a null user when the key is remembered as authenticating nobody.
    */
-  public Lookup get(String apiKey) {
+  synchronized Lookup get(String apiKey) {
     if (!isEnabled() || apiKey == null) {
       return Lookup.miss();
     }
@@ -134,7 +143,7 @@ public class ApiKeyLookupCache {
       misses.incrementAndGet();
       return Lookup.miss();
     }
-    if (!entry.isLive(System.nanoTime())) {
+    if (!entry.isLive(clock.getAsLong())) {
       // Remove the exact entry seen, so a concurrent put of a fresh one is not thrown away.
       entries.remove(hash, entry);
       misses.incrementAndGet();
@@ -145,7 +154,7 @@ public class ApiKeyLookupCache {
   }
 
   /** Remembers what this key resolves to, {@code user} being null for a key that authenticates nobody. */
-  public void put(String apiKey, FolderServerUser user) {
+  synchronized void put(String apiKey, FolderServerUser user) {
     if (!isEnabled() || apiKey == null) {
       return;
     }
@@ -155,7 +164,7 @@ public class ApiKeyLookupCache {
         return;
       }
     }
-    entries.put(hash(apiKey), new Entry(user, System.nanoTime() + ttlNanos));
+    entries.put(hash(apiKey), new Entry(user, clock.getAsLong() + ttlNanos));
   }
 
   /**
@@ -166,14 +175,33 @@ public class ApiKeyLookupCache {
    * are administrative and rare, entries live ten seconds, and a cleared cache costs one graph
    * lookup per key in flight.
    */
-  public void invalidateAll() {
-    if (!entries.isEmpty()) {
-      entries.clear();
+  public synchronized void invalidateAll() {
+    // Advance even when empty: an in-flight miss may still hold an old graph snapshot.
+    generation++;
+    entries.clear();
+  }
+
+  /**
+   * Load outside the monitor so graph I/O never blocks invalidation. A read overlapping a mutation
+   * may return its original snapshot to that caller, but cannot seed subsequent requests with it.
+   * The generation check and insertion must share the invalidation monitor.
+   */
+  public FolderServerUser getOrLoad(String apiKey, Supplier<FolderServerUser> loader) {
+    long startedAt;
+    synchronized (this) {
+      Lookup cached = get(apiKey);
+      if (cached.isPresent()) return cached.getUser();
+      startedAt = generation;
     }
+    FolderServerUser loaded = loader.get();
+    synchronized (this) {
+      if (generation == startedAt) put(apiKey, loaded);
+    }
+    return loaded;
   }
 
   private void purgeExpired() {
-    long now = System.nanoTime();
+    long now = clock.getAsLong();
     entries.values().removeIf(entry -> !entry.isLive(now));
   }
 
@@ -195,7 +223,7 @@ public class ApiKeyLookupCache {
     return misses.get();
   }
 
-  int size() {
+  synchronized int size() {
     return entries.size();
   }
 

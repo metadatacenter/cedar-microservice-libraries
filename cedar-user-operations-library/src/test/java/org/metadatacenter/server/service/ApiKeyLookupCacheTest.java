@@ -1,6 +1,8 @@
 package org.metadatacenter.server.service;
 
 import org.junit.jupiter.api.Test;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.TimeUnit;
 import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -60,13 +62,15 @@ class ApiKeyLookupCacheTest {
   @Test
   void anEntryStopsAnsweringWhenItsWindowPasses() throws Exception {
     ApiKeyLookupCache cache = new ApiKeyLookupCache("0");
-    // A zero TTL disables the cache outright, so the expiry path is exercised through the smallest
-    // window the configuration accepts rather than by sleeping ten seconds.
-    ApiKeyLookupCache shortLived = new ApiKeyLookupCache("1");
+    // Move a monotonic clock to either side of the exact expiry boundary, without sleeping.
+    AtomicLong clock = new AtomicLong();
+    ApiKeyLookupCache shortLived = new ApiKeyLookupCache("1", clock::get);
     shortLived.put("secret", user("https://example.org/users/1"));
     assertTrue(shortLived.get("secret").isPresent());
 
-    Thread.sleep(1100);
+    clock.set(TimeUnit.SECONDS.toNanos(1) - 1);
+    assertTrue(shortLived.get("secret").isPresent());
+    clock.incrementAndGet();
 
     assertFalse(shortLived.get("secret").isPresent(), "the entry should have lapsed");
     assertEquals(0, shortLived.size(), "and been dropped rather than left behind");

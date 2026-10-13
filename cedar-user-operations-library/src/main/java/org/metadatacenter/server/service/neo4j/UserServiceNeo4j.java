@@ -15,6 +15,7 @@ import org.metadatacenter.server.service.UserService;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 public class UserServiceNeo4j implements UserService {
 
@@ -32,7 +33,7 @@ public class UserServiceNeo4j implements UserService {
 
   @Override
   public CedarUser createUser(CedarUser user) {
-    FolderServerUser u = userProxy.createUser(user);
+    FolderServerUser u = invalidatingCache(() -> userProxy.createUser(user));
     return u == null ? null : u.buildUser();
   }
 
@@ -57,14 +58,7 @@ public class UserServiceNeo4j implements UserService {
     // The graph record is what is cached, not the CedarUser built from it: buildUser() makes a new
     // instance per call, and the caller mutates what it is given (the resolver stamps the auth
     // source on it). Handing out one shared object would let one request's edit reach another's.
-    ApiKeyLookupCache.Lookup cached = apiKeyCache.get(apiKey);
-    FolderServerUser user;
-    if (cached.isPresent()) {
-      user = cached.getUser();
-    } else {
-      user = userProxy.findUserByApiKey(apiKey);
-      apiKeyCache.put(apiKey, user);
-    }
+    FolderServerUser user = apiKeyCache.getOrLoad(apiKey, () -> userProxy.findUserByApiKey(apiKey));
     if (user == null) {
       return null;
     }
@@ -79,40 +73,40 @@ public class UserServiceNeo4j implements UserService {
 
   @Override
   public BackendCallResult<CedarUser> setHomeFolderId(CedarUserId userId, String homeFolderId) {
-    return invalidatingCache(userProxy.setHomeFolderId(userId, homeFolderId));
+    return invalidatingCache(() -> userProxy.setHomeFolderId(userId, homeFolderId));
   }
 
   @Override
   public BackendCallResult<CedarUser> replaceRolesAndPermissions(CedarUserId userId, List<CedarUserRole> roles,
                                                                  List<String> permissions) {
-    return invalidatingCache(userProxy.replaceRolesAndPermissions(userId, roles, permissions));
+    return invalidatingCache(() -> userProxy.replaceRolesAndPermissions(userId, roles, permissions));
   }
 
   @Override
   public BackendCallResult<CedarUser> replaceUiPreferences(CedarUserId userId,
                                                             CedarUserUIPreferences uiPreferences) {
-    return invalidatingCache(userProxy.replaceUiPreferences(userId, uiPreferences));
+    return invalidatingCache(() -> userProxy.replaceUiPreferences(userId, uiPreferences));
   }
 
   @Override
   public BackendCallResult<CedarUser> patchUser(CedarUserId userId, JsonNode modifications) {
-    return invalidatingCache(userProxy.patchUser(userId, modifications));
+    return invalidatingCache(() -> userProxy.patchUser(userId, modifications));
   }
 
   @Override
   public BackendCallResult<CedarUser> addApiKey(CedarUserId userId, CedarUserApiKey newApiKey, int maxApiKeys) {
-    return invalidatingCache(userProxy.addApiKey(userId, newApiKey, maxApiKeys));
+    return invalidatingCache(() -> userProxy.addApiKey(userId, newApiKey, maxApiKeys));
   }
 
   @Override
   public BackendCallResult<CedarUser> regenerateApiKey(CedarUserId userId, String keyId, String newKeyValue,
                                                        OffsetDateTime newCreationDate) {
-    return invalidatingCache(userProxy.regenerateApiKey(userId, keyId, newKeyValue, newCreationDate));
+    return invalidatingCache(() -> userProxy.regenerateApiKey(userId, keyId, newKeyValue, newCreationDate));
   }
 
   @Override
   public BackendCallResult<CedarUser> deleteApiKey(CedarUserId userId, String keyId) {
-    return invalidatingCache(userProxy.deleteApiKey(userId, keyId));
+    return invalidatingCache(() -> userProxy.deleteApiKey(userId, keyId));
   }
 
   /**
@@ -126,9 +120,13 @@ public class UserServiceNeo4j implements UserService {
    * <strong>Only this JVM's cache.</strong> A key revoked through the user server is refused there
    * immediately and by every other service once its entry expires. See {@link ApiKeyLookupCache}.
    */
-  private BackendCallResult<CedarUser> invalidatingCache(BackendCallResult<CedarUser> result) {
-    apiKeyCache.invalidateAll();
-    return result;
+  private <T> T invalidatingCache(Supplier<T> mutation) {
+    try {
+      return mutation.get();
+    } finally {
+      // A failed completion does not establish that the graph write rolled back.
+      apiKeyCache.invalidateAll();
+    }
   }
 
   @Override
