@@ -8,6 +8,7 @@ import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.server.GroupServiceSession;
+import org.metadatacenter.server.GroupCallerMembership;
 import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.VersionedGroupUsers;
 import org.metadatacenter.server.VersionedResource;
@@ -169,5 +170,10 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
   @Override
   public long getGroupCount() {
     return proxies.group().getGroupCount();
+  }
+
+  @Override
+  public GroupCallerMembership findCallerMembership(CedarGroupId groupId) {
+    return proxies.group().findCallerMembership(groupId, cu.getResourceId());
   }
 }
