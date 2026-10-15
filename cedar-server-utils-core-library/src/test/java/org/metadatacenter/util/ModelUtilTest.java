@@ -252,6 +252,68 @@ class ModelUtilTest {
   }
 
   @Test
+  void aRenamedChildKeepsItsHistoryAndRejectsRestatedAuthorship() throws Exception {
+    JsonNode stored = schemaWithProperty("field", STORED_CHILD);
+    JsonNode request = schemaWithProperty("renamed", STORED_CHILD.replace("https://users.example/author",
+        "https://users.example/impostor"));
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+    assertEquals(stored.at("/properties/field"), request.at("/properties/renamed"));
+  }
+
+  @Test
+  void aRenamedRepeatedElementPreservesNestedHistory() throws Exception {
+    String element = "{\"type\":\"array\",\"items\":" + elementWith(NESTED_OLD, "Same") + "}";
+    JsonNode stored = schemaWithProperty("element", element);
+    JsonNode request = schemaWithProperty("renamed", element);
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+    // The fixture has no nested creation record; normalization fills it. Its existing
+    // modification record and the containing element's complete history must survive.
+    assertEquals("2019-01-01T00:00:00Z", request.at("/properties/renamed/items/pav:createdOn").asText());
+    assertEquals("2020-06-01T00:00:00Z", request.at("/properties/renamed/items/pav:lastUpdatedOn").asText());
+    assertEquals("2020-06-01T00:00:00Z", request.at("/properties/renamed/items/properties/nested/pav:lastUpdatedOn").asText());
+  }
+
+  @Test
+  void swappedKeysFollowTheDefinitionHistory() throws Exception {
+    String other = STORED_CHILD.replace("fields/1", "fields/2").replace("users.example/author", "users.example/other");
+    JsonNode stored = JsonMapper.STRICT_MAPPER.readTree(
+        "{\"properties\":{\"one\":" + STORED_CHILD + ",\"two\":" + other + "}}");
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree(
+        "{\"properties\":{\"two\":" + STORED_CHILD + ",\"one\":" + other + "}}");
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+    assertEquals(stored.at("/properties/one"), request.at("/properties/two"));
+    assertEquals(stored.at("/properties/two"), request.at("/properties/one"));
+  }
+
+  @Test
+  void aNewCopyOfAnExistingChildDoesNotBorrowItsCreationRecord() throws Exception {
+    JsonNode stored = schemaWithProperty("field", STORED_CHILD);
+    JsonNode request = JsonMapper.STRICT_MAPPER.readTree(
+        "{\"properties\":{\"field\":" + STORED_CHILD + ",\"copy\":" + STORED_CHILD + "}}");
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+    assertEquals(stored.at("/properties/field"), request.at("/properties/field"));
+    assertCreationProvenance(request.at("/properties/copy"));
+  }
+
+  @Test
+  void propertyIrisDisambiguateRenamedUsesOfTheSameLibraryChild() throws Exception {
+    String other = STORED_CHILD.replace("users.example/author", "users.example/other");
+    ObjectNode stored = (ObjectNode) JsonMapper.STRICT_MAPPER.readTree(
+        "{\"properties\":{\"one\":" + STORED_CHILD + ",\"two\":" + other + "}}");
+    ObjectNode context = ((ObjectNode) stored.get("properties")).putObject("@context").putObject("properties");
+    context.putObject("one").putArray("enum").add("https://example.org/one");
+    context.putObject("two").putArray("enum").add("https://example.org/two");
+    ObjectNode request = stored.deepCopy();
+    ObjectNode children = (ObjectNode) request.get("properties");
+    children.set("renamed", children.remove("one"));
+    ObjectNode mappings = (ObjectNode) request.at("/properties/@context/properties");
+    mappings.set("renamed", mappings.remove("one"));
+    ModelUtil.ensureFieldIdsRecursively(request, stored, provenance, new ProvenanceUtil(), linkedDataUtil);
+    assertEquals(stored.at("/properties/one"), request.at("/properties/renamed"));
+    assertEquals(stored.at("/properties/two"), request.at("/properties/two"));
+  }
+
+  @Test
   void aSiblingIsNotStampedBecauseAnotherChildChanged() throws Exception {
     String other = STORED_CHILD.replace("fields/1", "fields/2").replace("Original", "Untouched");
     JsonNode stored = JsonMapper.STRICT_MAPPER.readTree(
