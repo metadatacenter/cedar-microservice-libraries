@@ -44,6 +44,12 @@ class CypherPermissionQueryEquivalenceTest {
           CREATE (outsider:User:Resource {_id: 'user-outsider'})
           CREATE (otherOwner:User:Resource {_id: 'user-other-owner'})
           CREATE (group:Group:Resource {_id: 'group-shared'})
+          CREATE (canonicalViewer:User:Resource {_id: 'user-canonical-viewer'})
+          CREATE (canonicalManager:User:Resource {_id: 'user-canonical-manager'})
+          CREATE (canonicalViewerMember:User:Resource {_id: 'user-canonical-viewer-member'})
+          CREATE (canonicalManagerMember:User:Resource {_id: 'user-canonical-manager-member'})
+          CREATE (canonicalViewerGroup:Group:Resource {_id: 'group-canonical-viewer'})
+          CREATE (canonicalManagerGroup:Group:Resource {_id: 'group-canonical-manager'})
           CREATE (root:Folder:FileSystemResource:Resource {
             _id: 'folder-root', schema_name: 'CEDAR', schema_name_lower: 'cedar',
             nodeSortOrder: 1, isRoot: true, isOpen: true})
@@ -81,6 +87,12 @@ class CypherPermissionQueryEquivalenceTest {
           CREATE (overlap)-[:MEMBEROF]->(group)
           CREATE (group)-[:CANREAD]->(root)
           CREATE (group)-[:CANREAD]->(shared)
+          CREATE (canonicalViewer)-[:VIEWER_ROLE]->(shared)
+          CREATE (canonicalManager)-[:MANAGER_ROLE]->(shared)
+          CREATE (canonicalViewerMember)-[:MEMBEROF]->(canonicalViewerGroup)
+          CREATE (canonicalManagerMember)-[:MEMBEROF]->(canonicalManagerGroup)
+          CREATE (canonicalViewerGroup)-[:VIEWER_ROLE]->(shared)
+          CREATE (canonicalManagerGroup)-[:MANAGER_ROLE]->(shared)
           """).consume();
     }
   }
@@ -198,6 +210,25 @@ class CypherPermissionQueryEquivalenceTest {
     assertRoleEquivalent("user-outsider", "VIEWER");
   }
 
+  /**
+   * Production writes only CANREAD, EDITOR_ROLE and CANWRITE, but the role checks also accept the
+   * canonical VIEWER_ROLE and MANAGER_ROLE labels, which a planned data migration would write. Each
+   * row names one user and the answer each production role query must give for them. The canonical
+   * grants are held both directly and through a group.
+   */
+  @Test
+  void roleChecksAnswerEveryGrantLabelHeldDirectlyOrThroughAGroup() {
+    assertRoles("user-canonical-viewer", true, false, false);
+    assertRoles("user-canonical-viewer-member", true, false, false);
+    assertRoles("user-canonical-manager", true, true, true);
+    assertRoles("user-canonical-manager-member", true, true, true);
+    assertRoles("user-viewer", true, false, false);
+    assertRoles("user-editor", true, true, false);
+    assertRoles("user-manager", true, true, true);
+    assertRoles("user-owner", true, true, true);
+    assertRoles("user-outsider", false, false, false);
+  }
+
   @Test
   void transitiveUserMaterializationPreservesIdentitySetsWithoutCrossProducts() {
     assertEquals(stringSet(oldTransitiveUsers("CANREAD|VIEWER_ROLE"), RESOURCE_ID),
@@ -308,6 +339,16 @@ class CypherPermissionQueryEquivalenceTest {
     Map<String, Object> parameters = Map.of("userId", userId, "fsResourceId", RESOURCE_ID);
     assertEquals(rowCount(oldRoleCheck(labels), parameters) > 0,
         rowCount(replacement, parameters) > 0, userId + " " + role);
+  }
+
+  private static void assertRoles(String userId, boolean viewer, boolean editor, boolean manager) {
+    Map<String, Object> parameters = Map.of("userId", userId, "fsResourceId", RESOURCE_ID);
+    assertEquals(viewer, rowCount(CypherQueryBuilderFilesystemResourcePermission
+        .userHasViewerRoleOnFilesystemResource(), parameters) > 0, userId + " VIEWER");
+    assertEquals(editor, rowCount(CypherQueryBuilderFilesystemResourcePermission
+        .userHasEditorRoleOnFilesystemResource(), parameters) > 0, userId + " EDITOR");
+    assertEquals(manager, rowCount(CypherQueryBuilderFilesystemResourcePermission
+        .userHasManagerRoleOnFilesystemResource(), parameters) > 0, userId + " MANAGER");
   }
 
   private static Set<String> stringSet(String query, String resourceId) {
