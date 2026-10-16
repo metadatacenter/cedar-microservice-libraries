@@ -31,9 +31,10 @@ class Neo4jSearchPermissionOutboxTest {
 
   @BeforeAll
   static void startDatabase() {
-    // Bolt's Netty event loops each wait out a quiet period on close, one after another, which
-    // makes a close take about six seconds. Nothing is in flight by then, so a zero period costs
-    // nothing and the close takes under one.
+    // Closing the harness shuts Bolt's Netty event-loop group down gracefully: every loop closes
+    // its connections, then all of them wait out a five-second quiet period together, so a close
+    // took about six seconds. The connections are already closed when the period starts, so a zero
+    // period changes nothing a client can observe, and the close takes under one second.
     neo4j = Neo4jBuilders.newInProcessBuilder().withDisabledServer()
         .withConfig(GraphDatabaseInternalSettings.netty_server_shutdown_quiet_period, 0).build();
   }
