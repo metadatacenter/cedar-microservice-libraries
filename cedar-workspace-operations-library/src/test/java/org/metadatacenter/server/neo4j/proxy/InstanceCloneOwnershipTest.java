@@ -9,11 +9,11 @@ import org.metadatacenter.model.CedarResource;
 import org.metadatacenter.model.folderserver.basic.*;
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
+import org.metadatacenter.server.neo4j.ScratchNeo4j;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderFilesystemResource;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFilesystemResourcePermission;
 import org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder;
 import org.neo4j.driver.*;
-import org.neo4j.harness.*;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.function.Function;
@@ -22,17 +22,16 @@ import static org.mockito.Mockito.mock;
 
 /** Executes the real registration and transfer queries against embedded Neo4j. */
 class InstanceCloneOwnershipTest {
-  static Neo4j neo;
   static Driver database;
   static final CedarTemplateInstanceId SOURCE = CedarTemplateInstanceId.build("source");
   static final CedarFolderId DESTINATION = CedarFolderId.build("destination");
   static final CedarUserId OWNER = CedarUserId.build("owner");
   static final CedarUserId NEXT_OWNER = CedarUserId.build("next-owner");
   @BeforeAll static void start() {
-    neo = Neo4jBuilders.newInProcessBuilder().withDisabledServer().build();
-    database = GraphDatabase.driver(neo.boltURI(), AuthTokens.none());
+    ScratchNeo4j.blank();
+    database = GraphDatabase.driver(ScratchNeo4j.boltURI(), AuthTokens.none());
   }
-  @AfterAll static void stop() { database.close(); neo.close(); }
+  @AfterAll static void stop() { database.close(); }
   @BeforeEach void seed() {
     try (var session = database.session()) {
       session.run("MATCH (n) DETACH DELETE n").consume();
@@ -75,7 +74,7 @@ class InstanceCloneOwnershipTest {
   @ParameterizedTest @ValueSource(booleans = {false, true})
   void cloneRegistrationRetiresCleanupOnlyIfOwnershipStillAllowsIt(boolean transferred) {
     try (var outbox = new org.metadatacenter.server.neo4j.ArtifactCreateCleanupOutbox(
-        GraphDatabase.driver(neo.boltURI(), AuthTokens.none()), 0)) {
+        GraphDatabase.driver(ScratchNeo4j.boltURI(), AuthTokens.none()), 0)) {
       String job = outbox.prepare(org.metadatacenter.model.CedarResourceType.INSTANCE, "worker-clone");
       outbox.created(job, "clone", "\"7\"");
       if (transferred) {

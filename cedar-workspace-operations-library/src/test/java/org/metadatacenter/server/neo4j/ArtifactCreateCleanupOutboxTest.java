@@ -3,7 +3,6 @@ package org.metadatacenter.server.neo4j;
 import org.junit.jupiter.api.*;
 import org.metadatacenter.model.CedarResourceType;
 import org.neo4j.driver.*;
-import org.neo4j.harness.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -11,16 +10,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Persisted transitions and crash windows, rather than a mocked successful cleanup call. */
 class ArtifactCreateCleanupOutboxTest {
-  static Neo4j neo;
   static Driver database;
   @BeforeAll static void start() {
-    neo=Neo4jBuilders.newInProcessBuilder().withDisabledServer().build();
-    database=GraphDatabase.driver(neo.boltURI(),AuthTokens.none());
+    ScratchNeo4j.blank();
+    database=GraphDatabase.driver(ScratchNeo4j.boltURI(),AuthTokens.none());
   }
-  @AfterAll static void stop() { database.close(); neo.close(); }
+  @AfterAll static void stop() { database.close(); }
   @BeforeEach void clear() { query("MATCH (n) DETACH DELETE n", Map.of()); }
   ArtifactCreateCleanupOutbox open() {
-    return new ArtifactCreateCleanupOutbox(GraphDatabase.driver(neo.boltURI(),AuthTokens.none()),0);
+    return new ArtifactCreateCleanupOutbox(GraphDatabase.driver(ScratchNeo4j.boltURI(),AuthTokens.none()),0);
   }
   static void query(String query, Map<String,Object> args) {
     try(var session=database.session()) { session.run(query,args).consume(); }

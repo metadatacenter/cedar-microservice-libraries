@@ -1,15 +1,22 @@
 package org.metadatacenter.server.search.permission;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.server.search.SearchPermissionQueueEvent;
 import org.metadatacenter.server.search.SearchPermissionQueueEventType;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Values;
+import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.harness.Neo4j;
 import org.neo4j.harness.Neo4jBuilders;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -18,93 +25,130 @@ import static org.mockito.Mockito.when;
 
 class Neo4jSearchPermissionOutboxTest {
 
+  // One harness serves every test, since booting one takes several seconds. The restart tests
+  // restart the outbox's client, which a new driver does, and never need a new database.
+  private static Neo4j neo4j;
+
+  @BeforeAll
+  static void startDatabase() {
+    // Bolt's Netty event loops each wait out a quiet period on close, one after another, which
+    // makes a close take about six seconds. Nothing is in flight by then, so a zero period costs
+    // nothing and the close takes under one.
+    neo4j = Neo4jBuilders.newInProcessBuilder().withDisabledServer()
+        .withConfig(GraphDatabaseInternalSettings.netty_server_shutdown_quiet_period, 0).build();
+  }
+
+  /**
+   * Gives each test the graph of a freshly booted harness. Its outbox finds no nodes, and none of
+   * the constraints or indexes an earlier test's outbox created, so the test asserting that the
+   * outbox creates its indexes still proves it.
+   */
+  @BeforeEach
+  void blankDatabase() {
+    GraphDatabaseService database = neo4j.defaultDatabaseService();
+    database.executeTransactionally("MATCH (n) DETACH DELETE n");
+    for (String constraint : names(database, "SHOW CONSTRAINTS YIELD name RETURN name")) {
+      database.executeTransactionally("DROP CONSTRAINT `" + constraint + "`");
+    }
+    for (String index : names(database, "SHOW INDEXES YIELD name, type WHERE type <> 'LOOKUP' RETURN name")) {
+      database.executeTransactionally("DROP INDEX `" + index + "`");
+    }
+  }
+
+  @AfterAll
+  static void stopDatabase() {
+    if (neo4j != null) {
+      neo4j.close();
+    }
+  }
+
+  private static List<String> names(GraphDatabaseService database, String query) {
+    return database.executeTransactionally(query, Map.of(),
+        result -> result.stream().map(row -> (String) row.get("name")).toList());
+  }
+
   @Test
   void eventsSurviveAClientRestartAndDisappearOnlyAfterAcknowledgement() {
-    try (var neo4j = Neo4jBuilders.newInProcessBuilder().withDisabledServer().build()) {
-      String outboxId;
-      try (var first = new Neo4jSearchPermissionOutbox(
-          GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none()))) {
-        outboxId = first.append(new SearchPermissionQueueEvent(
-            "resource-1", SearchPermissionQueueEventType.RESOURCE_PERMISSION_CHANGED));
-        assertEquals(1, first.count());
-      }
+    String outboxId;
+    try (var first = new Neo4jSearchPermissionOutbox(
+        GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none()))) {
+      outboxId = first.append(new SearchPermissionQueueEvent(
+          "resource-1", SearchPermissionQueueEventType.RESOURCE_PERMISSION_CHANGED));
+      assertEquals(1, first.count());
+    }
 
-      try (var restarted = new Neo4jSearchPermissionOutbox(
-          GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none()))) {
-        var pending = restarted.pending(100);
-        assertEquals(1, pending.size());
-        assertEquals(outboxId, pending.get(0).outboxId());
-        assertEquals("resource-1", pending.get(0).event().getId());
-        assertEquals(SearchPermissionQueueEventType.RESOURCE_PERMISSION_CHANGED,
-            pending.get(0).event().getEventType());
+    try (var restarted = new Neo4jSearchPermissionOutbox(
+        GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none()))) {
+      var pending = restarted.pending(100);
+      assertEquals(1, pending.size());
+      assertEquals(outboxId, pending.get(0).outboxId());
+      assertEquals("resource-1", pending.get(0).event().getId());
+      assertEquals(SearchPermissionQueueEventType.RESOURCE_PERMISSION_CHANGED,
+          pending.get(0).event().getEventType());
 
-        restarted.remove(List.of(outboxId));
-        assertEquals(0, restarted.count());
-      }
+      restarted.remove(List.of(outboxId));
+      assertEquals(0, restarted.count());
     }
   }
 
   @Test
   void malformedEntriesAreQuarantinedWithoutBlockingValidEvents() {
-    try (var neo4j = Neo4jBuilders.newInProcessBuilder().withDisabledServer().build()) {
-      try (var seedDriver = GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none());
-           var session = seedDriver.session()) {
-        session.writeTransaction(tx -> {
-          tx.run("CREATE (:CedarSearchPermissionOutbox {outboxId: 'missing-type', "
-              + "resourceId: 'resource-missing-type', createdAtTS: 0})").consume();
-          tx.run("CREATE (:CedarSearchPermissionOutbox {outboxId: 'unknown-type', "
-              + "resourceId: 'resource-unknown-type', eventType: 'NOT_A_REAL_EVENT', createdAtTS: 1})")
-              .consume();
-          return null;
-        });
-      }
+    try (var seedDriver = GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none());
+         var session = seedDriver.session()) {
+      session.writeTransaction(tx -> {
+        tx.run("CREATE (:CedarSearchPermissionOutbox {outboxId: 'missing-type', "
+            + "resourceId: 'resource-missing-type', createdAtTS: 0})").consume();
+        tx.run("CREATE (:CedarSearchPermissionOutbox {outboxId: 'unknown-type', "
+            + "resourceId: 'resource-unknown-type', eventType: 'NOT_A_REAL_EVENT', createdAtTS: 1})")
+            .consume();
+        return null;
+      });
+    }
 
-      try (var outbox = new Neo4jSearchPermissionOutbox(
-          GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none()))) {
-        String validId = outbox.append(new SearchPermissionQueueEvent(
-            "resource-valid", SearchPermissionQueueEventType.RESOURCE_PERMISSION_CHANGED));
+    try (var outbox = new Neo4jSearchPermissionOutbox(
+        GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none()))) {
+      String validId = outbox.append(new SearchPermissionQueueEvent(
+          "resource-valid", SearchPermissionQueueEventType.RESOURCE_PERMISSION_CHANGED));
 
-        var pending = outbox.pending(100);
-        assertEquals(3, outbox.count(), "relay reads must not run the full quarantine scan");
-        outbox.quarantineMalformed();
+      var pending = outbox.pending(100);
+      assertEquals(3, outbox.count(), "relay reads must not run the full quarantine scan");
+      outbox.quarantineMalformed();
 
-        assertEquals(1, pending.size());
-        assertEquals(validId, pending.get(0).outboxId());
-        assertEquals("resource-valid", pending.get(0).event().getId());
-        assertEquals(1, outbox.count(), "only the valid active event should remain pending");
-      }
+      assertEquals(1, pending.size());
+      assertEquals(validId, pending.get(0).outboxId());
+      assertEquals("resource-valid", pending.get(0).event().getId());
+      assertEquals(1, outbox.count(), "only the valid active event should remain pending");
+    }
 
-      try (var inspectionDriver = GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none());
-           var session = inspectionDriver.session()) {
-        long deadLetters = session.readTransaction(tx -> tx.run(
-                "MATCH (e:CedarSearchPermissionOutboxDeadLetter) RETURN count(e) AS count")
-            .single().get("count").asLong());
-        long stillActive = session.readTransaction(tx -> tx.run(
-                "MATCH (e:CedarSearchPermissionOutboxDeadLetter:CedarSearchPermissionOutbox) "
-                    + "RETURN count(e) AS count")
-            .single().get("count").asLong());
-        long reasons = session.readTransaction(tx -> tx.run(
-                "MATCH (e:CedarSearchPermissionOutboxDeadLetter) "
-                    + "WHERE e.deadLetterReason IS NOT NULL AND e.deadLetteredAtTS IS NOT NULL "
-                    + "RETURN count(e) AS count")
-            .single().get("count").asLong());
-        long relayLocks = session.readTransaction(tx -> tx.run(
-                "MATCH (lock:CedarSearchPermissionOutboxRelayLock "
-                    + "{name: 'search-permission-relay'}) RETURN count(lock) AS count")
-            .single().get("count").asLong());
+    try (var inspectionDriver = GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none());
+         var session = inspectionDriver.session()) {
+      long deadLetters = session.readTransaction(tx -> tx.run(
+              "MATCH (e:CedarSearchPermissionOutboxDeadLetter) RETURN count(e) AS count")
+          .single().get("count").asLong());
+      long stillActive = session.readTransaction(tx -> tx.run(
+              "MATCH (e:CedarSearchPermissionOutboxDeadLetter:CedarSearchPermissionOutbox) "
+                  + "RETURN count(e) AS count")
+          .single().get("count").asLong());
+      long reasons = session.readTransaction(tx -> tx.run(
+              "MATCH (e:CedarSearchPermissionOutboxDeadLetter) "
+                  + "WHERE e.deadLetterReason IS NOT NULL AND e.deadLetteredAtTS IS NOT NULL "
+                  + "RETURN count(e) AS count")
+          .single().get("count").asLong());
+      long relayLocks = session.readTransaction(tx -> tx.run(
+              "MATCH (lock:CedarSearchPermissionOutboxRelayLock "
+                  + "{name: 'search-permission-relay'}) RETURN count(lock) AS count")
+          .single().get("count").asLong());
 
-        assertEquals(2, deadLetters);
-        assertEquals(0, stillActive, "dead letters must not remain in the active relay label");
-        assertEquals(2, reasons, "each quarantined entry should explain when and why it was parked");
-        assertEquals(1, relayLocks, "relay scans and acknowledgements must share a database mutex");
-      }
+      assertEquals(2, deadLetters);
+      assertEquals(0, stillActive, "dead letters must not remain in the active relay label");
+      assertEquals(2, reasons, "each quarantined entry should explain when and why it was parked");
+      assertEquals(1, relayLocks, "relay scans and acknowledgements must share a database mutex");
     }
   }
 
   @Test
   void batchAcknowledgementPreservesNewEventsAndDoesNotBlockAppendOnTheRelayLock() throws Exception {
-    try (var neo4j = Neo4jBuilders.newInProcessBuilder().withDisabledServer().build();
-         var driver = GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none());
+    try (var driver = GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none());
          var outbox = new Neo4jSearchPermissionOutbox(driver)) {
       String first = outbox.append(new SearchPermissionQueueEvent(
           "resource-1", SearchPermissionQueueEventType.RESOURCE_MOVED));

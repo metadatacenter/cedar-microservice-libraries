@@ -5,13 +5,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
+import org.metadatacenter.server.neo4j.ScratchNeo4j;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Record;
-import org.neo4j.harness.Neo4j;
-import org.neo4j.harness.Neo4jBuilders;
 
 import java.util.HashSet;
 import java.util.List;
@@ -27,13 +26,17 @@ class CypherPermissionQueryEquivalenceTest {
   private static final String RESOURCE_ID = "resource-special-nested";
   private static final String ROOT_NAME = "CEDAR";
 
-  private static Neo4j neo4j;
   private static Driver driver;
 
+  /**
+   * The fixture is seeded once for the whole class and never cleared, and the unrestricted lookups
+   * and counts read every matching node. The shared graph is therefore blanked before seeding, so
+   * nothing another class left behind can reach them.
+   */
   @BeforeAll
   static void startGraph() {
-    neo4j = Neo4jBuilders.newInProcessBuilder().withDisabledServer().build();
-    driver = GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none());
+    ScratchNeo4j.blank();
+    driver = GraphDatabase.driver(ScratchNeo4j.boltURI(), AuthTokens.none());
     try (var session = driver.session()) {
       session.run("""
           CREATE (owner:User:Resource {_id: 'user-owner'})
@@ -101,9 +104,6 @@ class CypherPermissionQueryEquivalenceTest {
   static void stopGraph() {
     if (driver != null) {
       driver.close();
-    }
-    if (neo4j != null) {
-      neo4j.close();
     }
   }
 
