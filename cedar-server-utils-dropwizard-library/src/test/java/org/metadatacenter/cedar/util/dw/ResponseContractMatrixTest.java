@@ -78,6 +78,25 @@ class ResponseContractMatrixTest {
     @POST @Path("input") @Consumes("application/json")
     public Input input(@Valid Input input) { return input; }
     @GET @Path("query") public Map<String, Integer> query(@QueryParam("limit") int limit) { return Map.of("limit", limit); }
+    @GET @Path("optional") public Map<String, Integer> optional(@QueryParam("offset") Optional<Integer> offset) {
+      return Map.of("offset", offset.orElse(0));
+    }
+    @GET @Path("each") public Map<String, Integer> each(@QueryParam("n") List<Long> n) { return Map.of("n", n.size()); }
+    @GET @Path("count/{n}") public Map<String, Integer> count(@PathParam("n") int n) { return Map.of("n", n); }
+    @GET @Path("header") public Map<String, Integer> header(@HeaderParam("X-Count") int n) { return Map.of("n", n); }
+    @POST @Path("form") @Consumes("application/x-www-form-urlencoded")
+    public Map<String, Integer> form(@FormParam("n") int n) { return Map.of("n", n); }
+    @GET @Path("revision") public Map<String, Integer> revision(@QueryParam("revision") Revision revision) {
+      return Map.of("revision", revision.number());
+    }
+  }
+
+  /** A parameter type with a conversion of its own, whose form the conversion message does not describe. */
+  public record Revision(int number) {
+    public static Revision valueOf(String value) {
+      if (!value.matches("r[0-9]+")) throw new IllegalArgumentException("private parsing detail");
+      return new Revision(Integer.parseInt(value.substring(1)));
+    }
   }
 
   @BeforeAll static void start() throws Exception {
@@ -118,6 +137,49 @@ class ResponseContractMatrixTest {
     if (c.path().equals("crash") || c.path().equals("domain")) {
       assertTrue(error.path("errorId").isTextual());
       assertDoesNotThrow(() -> UUID.fromString(error.path("errorId").asText()));
+    }
+  }
+  record Conversion(String method, String path, String header, String value, int status, String message) {
+    public String toString() { return method + " " + path + (header == null ? "" : " " + header); }
+  }
+  static Stream<Conversion> conversions() {
+    String int32 = "an integer from -2147483648 to 2147483647";
+    return Stream.of(
+        new Conversion("GET", "query?limit=abc", null, null, 400, "The query parameter limit must be " + int32),
+        new Conversion("GET", "query?limit=99999999999", null, null, 400, "The query parameter limit must be " + int32),
+        new Conversion("GET", "optional?offset=abc", null, null, 400, "The query parameter offset must be " + int32),
+        new Conversion("GET", "each?n=1&n=abc", null, null, 400,
+            "Every value of the query parameter n must be an integer from -9223372036854775808 to 9223372036854775807"),
+        new Conversion("GET", "revision?revision=abc", null, null, 400,
+            "The query parameter revision is not in a form this route accepts"),
+        new Conversion("GET", "count/abc", null, null, 404, "The path parameter n must be " + int32),
+        new Conversion("GET", "header", "X-Count", "abc", 400, "The header X-Count must be " + int32),
+        new Conversion("POST", "form", "Content-Type", "application/x-www-form-urlencoded", 400,
+            "The form parameter n must be " + int32));
+  }
+  /**
+   * A parameter Jersey cannot convert is answered in the shared error body with a message that
+   * identifies the parameter and says what form it takes. Jersey's text, which describes the Java
+   * parsing that failed, stays out of the body, and every other field is the one a bodyless refusal of
+   * that status has always carried.
+   */
+  @ParameterizedTest(name="{0}") @MethodSource("conversions")
+  void aParameterThatCannotBeConvertedIsNamedWithTheFormItTakes(Conversion c) throws Exception {
+    var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+server.getLocalPort()+"/responses/"+c.path()))
+        .timeout(java.time.Duration.ofSeconds(5));
+    if (c.header() != null) request.header(c.header(), c.value());
+    HttpResponse<String> response = CLIENT.send(request.method(c.method(), c.method().equals("POST")
+        ? HttpRequest.BodyPublishers.ofString("n=abc") : HttpRequest.BodyPublishers.noBody()).build(),
+        HttpResponse.BodyHandlers.ofString());
+    JsonNode error = error(response, c.status());
+    assertEquals(c.message(), error.path("message").asText(null), response.body());
+    com.fasterxml.jackson.databind.node.ObjectNode expected =
+        JSON.valueToTree(CedarResponse.status(c.status()).build().getEntity());
+    expected.put("message", c.message());
+    assertEquals(expected, error);
+    for (String conversionText : List.of("For input string", "NumberFormatException", "abc", "99999999999",
+        "private parsing detail", "HTTP 40")) {
+      assertFalse(response.body().contains(conversionText), response.body());
     }
   }
   @Test void wrongMethodRetainsAllow() throws Exception {

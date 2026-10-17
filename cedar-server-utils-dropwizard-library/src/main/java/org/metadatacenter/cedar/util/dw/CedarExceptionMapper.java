@@ -1,8 +1,11 @@
 package org.metadatacenter.cedar.util.dw;
 
+import org.glassfish.jersey.server.ParamException;
+import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.error.CedarErrorPack;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.http.CedarResponseStatus;
+import org.metadatacenter.server.jsonld.UnresolvableIdentifierException;
 import org.metadatacenter.server.logging.AppLogger;
 import org.metadatacenter.server.logging.filter.LoggingContext;
 import org.metadatacenter.server.logging.filter.ThreadLocalRequestIdHolder;
@@ -15,16 +18,23 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jakarta.ws.rs.*;
+import jakarta.ws.rs.container.ResourceInfo;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
+import java.lang.reflect.Method;
 import java.util.UUID;
 
 @Provider
 public class CedarExceptionMapper extends AbstractExceptionMapper implements ExceptionMapper<Exception> {
 
   private static final Logger log = LoggerFactory.getLogger(CedarExceptionMapper.class);
+
+  /** The route the request matched. Jersey injects it, and it is null when the mapper is called directly. */
+  @Context
+  private ResourceInfo resourceInfo;
 
   public Response toResponse(Exception exception) {
 
@@ -85,9 +95,18 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
     if (original.hasEntity()) return original;
     // Jersey treats query conversion as a URI lookup failure (404). A malformed query is a
     // client input error; keep path conversion's 404, but classify query input as 400.
-    int status = exception instanceof org.glassfish.jersey.server.ParamException.QueryParamException
-        ? 400 : original.getStatus();
-    Response normalized = CedarResponse.status(status).build();
+    int status = exception instanceof ParamException.QueryParamException ? 400 : original.getStatus();
+    CedarResponse.CedarResponseBuilder body = CedarResponse.status(status);
+    // A bodyless exception's message stays out of the body, because Jersey's own exceptions carry
+    // generic text or the text of a failed conversion. Two refusals are answered with a message. An
+    // identifier the request supplied that cannot be resolved carries one written for the caller. A
+    // parameter Jersey could not convert is described from the route's declaration.
+    if (exception instanceof UnresolvableIdentifierException refusal) {
+      body.errorKey(CedarErrorKey.INVALID_INPUT).message(refusal.getMessage());
+    } else if (exception instanceof ParamException conversion) {
+      body.message(ParameterConversionMessage.of(conversion, matchedRoute()));
+    }
+    Response normalized = body.build();
     Response.ResponseBuilder result = Response.fromResponse(normalized);
     // Preserve protocol metadata, including multi-valued challenges. Representation metadata belongs
     // to the newly generated JSON body, not to the bodyless response carried by the exception.
@@ -99,6 +118,15 @@ public class CedarExceptionMapper extends AbstractExceptionMapper implements Exc
       }
     });
     return result.build();
+  }
+
+  private Method matchedRoute() {
+    if (resourceInfo == null) return null;
+    try {
+      return resourceInfo.getResourceMethod();
+    } catch (IllegalStateException outsideARequest) {
+      return null;
+    }
   }
 
 }
