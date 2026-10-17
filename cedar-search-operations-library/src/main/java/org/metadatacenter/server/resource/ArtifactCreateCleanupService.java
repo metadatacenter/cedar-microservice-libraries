@@ -6,9 +6,14 @@ import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.neo4j.ArtifactCreateCleanupOutbox;
+import org.metadatacenter.server.neo4j.ArtifactCreateCleanupOutbox.Stored;
 import org.metadatacenter.server.service.UserService;
 import org.metadatacenter.util.http.ArtifactServiceClient;
+import org.metadatacenter.util.http.RevisionPreconditionParser;
+import org.apache.hc.core5.http.HttpHeaders;
+import org.apache.hc.core5.http.HttpStatus;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
+import java.util.Optional;
 import java.util.concurrent.*;
 
 /** Shared producer and relay for resource requests and background instance clones. */
@@ -24,26 +29,53 @@ public final class ArtifactCreateCleanupService implements AutoCloseable {
   }
 
   public String prepare(CedarResourceType type, String operation) { return outbox.prepare(type, operation); }
-  public void created(String job, String id, String etag) {
-    // Jetty can suffix the response validator (for example, "1--gzip"). Persist the exact
-    // datastore revision, using the same parser as conditional writes, never a wildcard.
-    String condition = null;
-    if (etag != null) {
-      var parsed = org.metadatacenter.util.http.RevisionPreconditionParser.parse(etag);
-      if (!parsed.anyCurrentRevision() && parsed.revisions().size() == 1) {
-        condition = org.metadatacenter.util.http.RevisionPreconditionParser.format(parsed.revisions().iterator().next());
-      }
-    }
-    outbox.created(job,id,condition);
+
+  /**
+   * Records a create's intent before its content write, with the identity its caller chose when
+   * there is one. The cleanup then holds the identity from the start, so it can remove a document
+   * stored there after the create's answer was lost and reading the identity back found nothing.
+   */
+  public String prepare(CedarResourceType type, String operation, Optional<CedarArtifactId> identity) {
+    return identity.isPresent() ? outbox.prepare(type, operation, identity.get().getId()) : outbox.prepare(type, operation);
   }
+
+  public void created(String job, String id, String etag) { outbox.created(job,id,exactRevision(etag)); }
   public void rejected(String job, int status) { outbox.rejected(job,status); }
+
+  /**
+   * The single datastore revision a validator names, formatted as a conditional write names it, or
+   * null when it names none or several. Jetty can suffix a response validator, as in "1--gzip", so
+   * the validator is read with the parser conditional writes use, and a wildcard never counts.
+   */
+  static String exactRevision(String etag) {
+    if (etag == null) return null;
+    var parsed = RevisionPreconditionParser.parse(etag);
+    return !parsed.anyCurrentRevision() && parsed.revisions().size() == 1
+        ? RevisionPreconditionParser.format(parsed.revisions().iterator().next()) : null;
+  }
+
+  /** What an answer to reading a job's identity says is stored there. */
+  static Stored stored(int status, String etag) {
+    if (status == HttpStatus.SC_NOT_FOUND) return new Stored.Nothing();
+    if (status != HttpStatus.SC_OK) return new Stored.Unknown(status);
+    String revision = exactRevision(etag);
+    return revision == null ? new Stored.Unversioned() : new Stored.Revision(revision);
+  }
 
   public void cleanupNow(String job, CedarRequestContext context) {
     try {
       outbox.attempt(job, pending -> {
-        String url=config.getMicroserviceUrlUtil().getArtifact().getArtifactTypeWithId(pending.resourceType(),
-            CedarArtifactId.build(pending.resourceId(), pending.resourceType()));
-        try (var response=new ArtifactServiceClient(config).delete(url, context, pending.etag())) {
+        try (var response=new ArtifactServiceClient(config).get(url(pending), context)) {
+          EntityUtils.consume(response.getEntity());
+          var etag = response.getFirstHeader(HttpHeaders.ETAG);
+          return stored(response.getCode(), etag == null ? null : etag.getValue());
+        } catch (Exception failure) {
+          log.warn("The identity {} of an unsettled create could not be read; its cleanup reads it again",
+              pending.resourceId(), failure);
+          return new Stored.Unknown(503);
+        }
+      }, pending -> {
+        try (var response=new ArtifactServiceClient(config).delete(url(pending), context, pending.etag())) {
           EntityUtils.consume(response.getEntity());
           return response.getCode();
         } catch (Exception failure) {
@@ -52,6 +84,11 @@ public final class ArtifactCreateCleanupService implements AutoCloseable {
         }
       });
     } catch (Exception failure) { log.warn("Create cleanup {} remains recorded for recovery", job, failure); }
+  }
+
+  private String url(ArtifactCreateCleanupOutbox.Job pending) {
+    return config.getMicroserviceUrlUtil().getArtifact().getArtifactTypeWithId(pending.resourceType(),
+        CedarArtifactId.build(pending.resourceId(), pending.resourceType()));
   }
 
   public void resume() {

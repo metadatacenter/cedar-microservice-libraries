@@ -6,6 +6,8 @@ import org.neo4j.driver.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.ToIntFunction;
+import org.metadatacenter.server.neo4j.ArtifactCreateCleanupOutbox.Stored;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Persisted transitions and crash windows, rather than a mocked successful cleanup call. */
@@ -42,6 +44,17 @@ class ArtifactCreateCleanupOutboxTest {
     String job=box.prepare(CedarResourceType.TEMPLATE,"create");
     box.created(job,"artifact","\"7\"");
     return job;
+  }
+  /** A create at the identity its caller chose, whose outcome is not yet known. */
+  static String atIdentity(ArtifactCreateCleanupOutbox box) {
+    return box.prepare(CedarResourceType.TEMPLATE,"copy","artifact");
+  }
+  /** Moves the job past the time any write it awaits could still land. */
+  static void endWindow(String job) {
+    query("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) SET j.recheckUntil=timestamp()-1",Map.of("job",job));
+  }
+  static ToIntFunction<ArtifactCreateCleanupOutbox.Job> neverDelete(String why) {
+    return ignored -> fail(why);
   }
 
   @Test void aFailedDeleteSurvivesRestartAndRetainsItsExactRevision() {
@@ -183,6 +196,175 @@ class ArtifactCreateCleanupOutboxTest {
       assertEquals(List.of(good),box.pending(25));
       box.attempt(good,ignored -> 204);
       assertTrue(box.pending(25).isEmpty());
+    }
+  }
+
+  @Test void anIdentityWhoseDocumentNeverAppearsIsReadUntilNoWriteCanLandThenRetired() {
+    try(var box=open()) {
+      String job=atIdentity(box);
+      AtomicInteger reads=new AtomicInteger();
+      box.attempt(job,pending -> {
+        reads.incrementAndGet(); assertEquals("artifact",pending.resourceId()); assertNull(pending.etag());
+        return new Stored.Nothing();
+      },neverDelete("Nothing was stored, so nothing may be deleted"));
+      assertEquals(false,state(job).get("parked"),"An unknown outcome at a known identity is read again");
+      assertEquals(List.of(job),box.pending(10));
+      endWindow(job);
+      box.attempt(job,pending -> { reads.incrementAndGet(); return new Stored.Nothing(); },
+          neverDelete("Nothing was stored, so nothing may be deleted"));
+      assertTrue(state(job).isEmpty(),"The job outlived the window");
+      assertEquals(2,reads.get());
+    }
+  }
+
+  @Test void aDocumentStoredAfterTheReadBackIsDeletedAtTheRevisionJustRead() {
+    String job;
+    try(var box=open()) {
+      job=atIdentity(box);
+      box.attempt(job,ignored -> new Stored.Nothing(),neverDelete("Nothing is stored yet"));
+    }
+    // The lost write lands after the read-back, and a restarted relay reads the identity again.
+    try(var restarted=open()) {
+      List<String> conditions=new ArrayList<>();
+      restarted.attempt(job,ignored -> new Stored.Revision("\"9\""),pending -> {
+        assertEquals("artifact",pending.resourceId()); conditions.add(pending.etag()); return 204;
+      });
+      assertEquals(List.of("\"9\""),conditions,"The delete must be conditional on the revision just read");
+      assertTrue(state(job).isEmpty());
+      assertThrows(IllegalStateException.class,() -> register(job,true),"A removed create registered");
+    }
+  }
+
+  @Test void aDocumentAlreadyGoneWhenItsDeleteArrivesRetiresTheJob() {
+    try(var box=open()) {
+      String job=atIdentity(box);
+      box.attempt(job,ignored -> new Stored.Revision("\"9\""),ignored -> 404);
+      assertTrue(state(job).isEmpty());
+    }
+  }
+
+  @Test void aDocumentTheGraphRegisteredIsNeverDeleted() {
+    try(var box=open()) {
+      String lost=atIdentity(box),retry=atIdentity(box);
+      box.created(retry,"artifact","\"8\""); register(retry,true);
+      box.attempt(lost,ignored -> new Stored.Revision("\"8\""),neverDelete("Registered content must be retained"));
+      assertEquals(false,state(lost).get("parked"));
+      endWindow(lost);
+      box.attempt(lost,ignored -> new Stored.Revision("\"8\""),neverDelete("Registered content must be retained"));
+      assertTrue(state(lost).isEmpty(),"Nothing is left to remove once no write can land");
+    }
+  }
+
+  @Test void aRegistrationThatLandsWhileTheIdentityIsReadIsSeenBeforeAnyDelete() {
+    try(var box=open()) {
+      String job=atIdentity(box);
+      box.attempt(job,ignored -> {
+        query("CREATE (:Artifact {_id:'artifact'})",Map.of());
+        return new Stored.Revision("\"8\"");
+      },neverDelete("The graph registered the document after it was read"));
+      assertEquals(false,state(job).get("parked"),"A registered identity is read again until the window ends");
+      assertNotEquals(true,state(job).get("cleanupStarted"));
+    }
+  }
+
+  @Test void aRetryAtTheIdentityCannotRegisterTheDocumentTheRelayDeletes() {
+    try(var box=open()) {
+      String lost=atIdentity(box),retry=atIdentity(box);
+      // The retry's write stored revision 8 and its answer is on its way when the relay reads it.
+      box.attempt(lost,ignored -> new Stored.Revision("\"8\""),ignored -> 204);
+      assertTrue(state(lost).isEmpty());
+      box.created(retry,"artifact","\"8\"");
+      assertThrows(IllegalStateException.class,() -> register(retry,true),
+          "The retry registered a document the relay deleted");
+      box.attempt(retry,ignored -> fail("The retry knows its revision"),ignored -> 404);
+      assertTrue(state(retry).isEmpty());
+    }
+  }
+
+  @Test void aDocumentAnotherCreateRecordedIsLeftToThatCreate() {
+    try(var box=open()) {
+      String lost=atIdentity(box),retry=atIdentity(box);
+      box.created(retry,"artifact","\"8\"");
+      box.attempt(lost,ignored -> new Stored.Revision("\"8\""),neverDelete("The retry answers for its own document"));
+      assertNotEquals(true,state(retry).get("cleanupStarted"));
+      register(retry,true);
+      assertTrue(state(retry).isEmpty());
+    }
+  }
+
+  @Test void aDocumentThatChangedAfterTheRelayReadItIsParkedRatherThanDeleted() {
+    try(var box=open()) {
+      String job=atIdentity(box);
+      AtomicInteger deletes=new AtomicInteger();
+      box.attempt(job,ignored -> new Stored.Revision("\"9\""),pending -> { deletes.incrementAndGet(); return 412; });
+      assertEquals(1,deletes.get());
+      assertEquals(true,state(job).get("parked"));
+      assertTrue(state(job).get("parkedReason").toString().contains("recreated"));
+      box.attempt(job,ignored -> fail("A parked job is not read again"),neverDelete("Parked jobs must not retry"));
+      assertEquals(1,deletes.get());
+    }
+  }
+
+  @Test void aDocumentWithoutAnExactRevisionIsParkedRatherThanDeleted() {
+    try(var box=open()) {
+      String job=atIdentity(box);
+      box.attempt(job,ignored -> new Stored.Unversioned(),neverDelete("Never delete without an exact validator"));
+      assertEquals(true,state(job).get("parked"));
+    }
+  }
+
+  @Test void anIdentityThatCannotBeReadIsParkedOnlyOnceNoWriteCanLand() {
+    try(var box=open()) {
+      String job=atIdentity(box);
+      for(int i=0;i<60;i++) box.attempt(job,ignored -> new Stored.Unknown(503),neverDelete("Nothing was read"));
+      assertEquals(false,state(job).get("parked"),"A write may still land, so the job is read again");
+      endWindow(job);
+      box.attempt(job,ignored -> { throw new IllegalStateException("connection refused"); },
+          neverDelete("Nothing was read"));
+      assertEquals(true,state(job).get("parked"));
+    }
+  }
+
+  @Test void aJobWithoutAnIdentityIsNeverReadAndKeepsItsHandling() {
+    try(var box=open()) {
+      String unknown=box.prepare(CedarResourceType.INSTANCE,"worker-clone");
+      box.attempt(unknown,ignored -> fail("A job without an identity has nothing to read"),
+          neverDelete("A missing response is not proof of what was created"));
+      assertEquals(true,state(unknown).get("parked"));
+      assertTrue(state(unknown).get("parkedReason").toString().contains("unknown"));
+
+      String unvalidated=box.prepare(CedarResourceType.TEMPLATE,"copy");box.created(unvalidated,"artifact",null);
+      box.attempt(unvalidated,ignored -> fail("Only a job that held its identity from the start is read"),
+          neverDelete("Never issue a DELETE without its exact validator"));
+      assertEquals(true,state(unvalidated).get("parked"));
+
+      String known=created(box);
+      box.attempt(known,ignored -> fail("A known revision needs no read"),pending -> {
+        assertEquals("\"7\"",pending.etag()); return 204;
+      });
+      assertTrue(state(known).isEmpty());
+    }
+  }
+
+  @Test void aRelayThatCannotReadParksAnIdentityRatherThanGuessing() {
+    try(var box=open()) {
+      String job=atIdentity(box);
+      box.attempt(job,neverDelete("The outcome is unknown"));
+      assertEquals(true,state(job).get("parked"));
+    }
+  }
+
+  @Test void aCreateAtAnIdentityTakesOnlyThatIdentitysOutcome() {
+    try(var box=open()) {
+      String refused=atIdentity(box);
+      box.rejected(refused,412);
+      assertTrue(state(refused).isEmpty(),"A refused create stored nothing to look for");
+
+      String other=atIdentity(box);
+      assertThrows(IllegalStateException.class,() -> box.created(other,"elsewhere","\"1\""));
+      box.created(other,"artifact","\"1\"");
+      assertEquals("\"1\"",state(other).get("etag"));
+      assertThrows(IllegalStateException.class,() -> box.created(other,"artifact","\"2\""));
     }
   }
 }
