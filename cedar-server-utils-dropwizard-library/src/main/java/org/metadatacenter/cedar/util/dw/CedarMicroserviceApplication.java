@@ -310,6 +310,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   }
 
   protected void setupEnvironment(Environment environment) {
+    registerHttpConnectionPolicy(environment);
     registerExceptionMappers(environment);
     registerParameterConverters(environment);
 
@@ -329,6 +330,12 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     });
     // Add URL mapping
     cors.addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), true, "/*");
+  }
+
+  /** Includes servlet refusals and routing/authentication failures before Jersey reads an entity. */
+  public static void registerHttpConnectionPolicy(Environment environment) {
+    environment.servlets().addFilter("CedarUnreadRequestBody", UnreadRequestBodyFilter.class)
+        .addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), false, "/*");
   }
 
   /**
