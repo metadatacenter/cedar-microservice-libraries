@@ -53,6 +53,8 @@ final class ParameterConversionMessage {
       Map.entry(float.class, "a number"),
       Map.entry(Float.class, "a number"),
       Map.entry(BigDecimal.class, "a number"),
+      Map.entry(boolean.class, "true or false"),
+      Map.entry(Boolean.class, "true or false"),
       Map.entry(UUID.class, "a UUID"));
 
   private ParameterConversionMessage() {

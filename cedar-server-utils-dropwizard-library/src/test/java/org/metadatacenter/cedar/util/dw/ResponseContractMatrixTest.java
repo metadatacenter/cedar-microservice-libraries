@@ -37,6 +37,7 @@ class ResponseContractMatrixTest {
   public static class TestApplication extends Application<Configuration> {
     @Override public void run(Configuration configuration, Environment environment) {
       CedarMicroserviceApplication.registerExceptionMappers(environment);
+      CedarMicroserviceApplication.registerParameterConverters(environment);
       environment.jersey().register(new Fixture());
     }
   }
@@ -88,6 +89,23 @@ class ResponseContractMatrixTest {
     public Map<String, Integer> form(@FormParam("n") int n) { return Map.of("n", n); }
     @GET @Path("revision") public Map<String, Integer> revision(@QueryParam("revision") Revision revision) {
       return Map.of("revision", revision.number());
+    }
+    @GET @Path("flag") public Map<String, String> flag(@QueryParam("compact") boolean compact) {
+      return Map.of("value", String.valueOf(compact));
+    }
+    @GET @Path("defaulted-flag")
+    public Map<String, String> defaultedFlag(@QueryParam("exact") @DefaultValue("true") boolean exact) {
+      return Map.of("value", String.valueOf(exact));
+    }
+    @GET @Path("boxed-flag") public Map<String, String> boxedFlag(@QueryParam("summary") Boolean summary) {
+      return Map.of("value", String.valueOf(summary));
+    }
+    @GET @Path("optional-flag")
+    public Map<String, String> optionalFlag(@QueryParam("verbatim") Optional<Boolean> verbatim) {
+      return Map.of("value", verbatim.map(String::valueOf).orElse("absent"));
+    }
+    @GET @Path("flag/{flag}") public Map<String, String> pathFlag(@PathParam("flag") boolean flag) {
+      return Map.of("value", String.valueOf(flag));
     }
   }
 
@@ -181,6 +199,74 @@ class ResponseContractMatrixTest {
         "private parsing detail", "HTTP 40")) {
       assertFalse(response.body().contains(conversionText), response.body());
     }
+  }
+  /**
+   * A route with a true-or-false query parameter, and the value the route reports when the request
+   * carries none: false for a boolean that declares no default, the default for one that declares
+   * one, null for a Boolean, and an empty Optional for an Optional.
+   */
+  record Flag(String path, String name, String absent) {
+    String carrying(String query) { return path + "?" + query; }
+    public String toString() { return path; }
+  }
+  static final List<Flag> FLAGS = List.of(new Flag("flag", "compact", "false"),
+      new Flag("defaulted-flag", "exact", "true"), new Flag("boxed-flag", "summary", "null"),
+      new Flag("optional-flag", "verbatim", "absent"));
+  static final List<String> TRUE_OR_FALSE = List.of("true", "TRUE", "false", "False");
+  record Sent(String path, String value) { public String toString() { return path; } }
+  static Stream<Sent> trueOrFalse() {
+    List<Sent> sent = new ArrayList<>();
+    for (String value : TRUE_OR_FALSE) {
+      for (Flag flag : FLAGS) sent.add(new Sent(flag.carrying(flag.name() + "=" + value), value));
+      sent.add(new Sent("flag/" + value, value));
+    }
+    return sent.stream();
+  }
+  /** True and false, in any case, are converted to the value they name, wherever the parameter is. */
+  @ParameterizedTest(name="{0}") @MethodSource("trueOrFalse")
+  void trueAndFalseInAnyCaseAreConverted(Sent sent) throws Exception {
+    HttpResponse<String> response = request("GET", sent.path(), null, null);
+    assertEquals(200, response.statusCode(), response.body());
+    assertEquals(sent.value().toLowerCase(Locale.ROOT), JSON.readTree(response.body()).path("value").asText());
+  }
+  /** A parameter the request does not carry keeps the value it had before conversion was strict. */
+  @ParameterizedTest(name="{0}") @MethodSource("flags")
+  void anAbsentTrueOrFalseParameterKeepsItsDefault(Flag flag) throws Exception {
+    HttpResponse<String> response = request("GET", flag.path(), null, null);
+    assertEquals(200, response.statusCode(), response.body());
+    assertEquals(flag.absent(), JSON.readTree(response.body()).path("value").asText());
+  }
+  static Stream<Flag> flags() { return FLAGS.stream(); }
+  record Refused(String path, int status, String message) { public String toString() { return path; } }
+  static Stream<Refused> neitherTrueNorFalse() {
+    List<Refused> refused = new ArrayList<>();
+    for (Flag flag : FLAGS) {
+      String message = "The query parameter " + flag.name() + " must be true or false";
+      // Besides three ordinary values, the empty value is refused, and so is the parameter named with
+      // no value at all, which Jersey reads as empty.
+      for (String query : List.of(flag.name() + "=abc", flag.name() + "=1", flag.name() + "=yes",
+          flag.name() + "=", flag.name())) {
+        refused.add(new Refused(flag.carrying(query), 400, message));
+      }
+    }
+    // A path parameter keeps the 404 that Jersey gives every path parameter it cannot convert.
+    for (String value : List.of("abc", "1", "yes")) {
+      refused.add(new Refused("flag/" + value, 404, "The path parameter flag must be true or false"));
+    }
+    return refused.stream();
+  }
+  /**
+   * Every other value is refused rather than read as false, and is answered in the shared error body
+   * with a message that names the parameter and says it must be true or false.
+   */
+  @ParameterizedTest(name="{0}") @MethodSource("neitherTrueNorFalse")
+  void aValueThatIsNeitherTrueNorFalseIsRefused(Refused refused) throws Exception {
+    HttpResponse<String> response = request("GET", refused.path(), null, null);
+    JsonNode error = error(response, refused.status());
+    com.fasterxml.jackson.databind.node.ObjectNode expected =
+        JSON.valueToTree(CedarResponse.status(refused.status()).build().getEntity());
+    expected.put("message", refused.message());
+    assertEquals(expected, error);
   }
   @Test void wrongMethodRetainsAllow() throws Exception {
     HttpResponse<String> response = request("DELETE", "created", null, null);

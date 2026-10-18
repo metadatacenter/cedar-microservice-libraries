@@ -299,8 +299,18 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
   }
 
+  /**
+   * The conversions every service applies to request parameters before Jersey's own, also exercised
+   * through HTTP by the response contract suite. A value they refuse reaches the mappers as a
+   * parameter Jersey could not convert.
+   */
+  static void registerParameterConverters(Environment environment) {
+    environment.jersey().register(new CedarBooleanParamConverterProvider());
+  }
+
   protected void setupEnvironment(Environment environment) {
     registerExceptionMappers(environment);
+    registerParameterConverters(environment);
 
     registerSharedHealthChecks(environment);
 
