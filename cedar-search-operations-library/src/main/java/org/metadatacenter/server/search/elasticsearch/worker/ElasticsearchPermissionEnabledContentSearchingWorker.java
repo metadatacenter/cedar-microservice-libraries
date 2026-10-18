@@ -1,6 +1,7 @@
 package org.metadatacenter.server.search.elasticsearch.worker;
 
 import org.metadatacenter.model.request.ModifiedDateRange;
+import org.metadatacenter.model.request.SearchSharingFilter;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.QueryParser;
@@ -84,10 +85,16 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
                                      ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                      int offset, ModifiedDateRange modified) throws CedarProcessingException {
+    return search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, modified, SearchSharingFilter.ALL);
+  }
+
+  public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
+                                     ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
+                                     int offset, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarProcessingException {
 
     try {
       SearchSourceBuilder searchSourceBuilder =
-          getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, modified);
+          getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, modified, sharing);
       SearchRequest searchRequest = new SearchRequest(indexName).source(searchSourceBuilder);
 
       // Set pagination parameters
@@ -125,12 +132,18 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
                                          ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                          int offset, ModifiedDateRange modified) throws CedarProcessingException {
+    return searchDeep(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, modified, SearchSharingFilter.ALL);
+  }
+
+  public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
+                                         ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
+                                         int offset, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarProcessingException {
     String pointInTimeId = null;
     try {
       pointInTimeId = openPointInTime();
 
       SearchSourceBuilder searchSourceBuilder = getDeepSearchSourceBuilder(rctx, query, resourceTypes, version,
-          publicationStatus, categoryId, sortList, pointInTimeId, modified);
+          publicationStatus, categoryId, sortList, pointInTimeId, modified, sharing);
       searchSourceBuilder.trackTotalHits(true);
 
       // A point in time carries the indices it was opened on, and OpenSearch rejects a request naming both.
@@ -193,6 +206,14 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                        ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
                                        String categoryId, List<String> sortList, int limit, String pointInTimeId,
                                        Object[] searchAfter, ModifiedDateRange modified) throws CedarException {
+    return searchDeepPage(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit,
+        pointInTimeId, searchAfter, modified, SearchSharingFilter.ALL);
+  }
+
+  public DeepSearchPage searchDeepPage(CedarRequestContext rctx, String query, List<String> resourceTypes,
+                                       ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                       String categoryId, List<String> sortList, int limit, String pointInTimeId,
+                                       Object[] searchAfter, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarException {
     boolean walkStarts = pointInTimeId == null;
     String walkPointInTimeId;
     try {
@@ -202,7 +223,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     }
     try {
       SearchSourceBuilder searchSourceBuilder = getDeepSearchSourceBuilder(rctx, query, resourceTypes, version,
-          publicationStatus, categoryId, sortList, walkPointInTimeId, modified);
+          publicationStatus, categoryId, sortList, walkPointInTimeId, modified, sharing);
       // Only the first page counts the result set. Every page after it is handed the total the walk
       // began with, which is also what makes the pages agree with each other.
       searchSourceBuilder.trackTotalHits(walkStarts);
@@ -247,9 +268,9 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                                          List<String> resourceTypes, ResourceVersionFilter version,
                                                          ResourcePublicationStatusFilter publicationStatus,
                                                          String categoryId, List<String> sortList,
-                                                         String pointInTimeId, ModifiedDateRange modified) throws CedarProcessingException {
+                                                         String pointInTimeId, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarProcessingException {
     SearchSourceBuilder searchSourceBuilder =
-        getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, modified);
+        getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, modified, sharing);
     // search_after resumes at a sort position, so the sort must order the hits totally. The caller's
     // sort fields do not: cid does, and appending it leaves the requested ordering intact. With no
     // caller sort the ordering is relevance, which has to be named explicitly to be sorted on.
@@ -293,7 +314,8 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                                      List<String> resourceTypes,
                                                      ResourceVersionFilter version,
                                                      ResourcePublicationStatusFilter publicationStatus,
-                                                     String categoryId, List<String> sortList, ModifiedDateRange modified) throws CedarProcessingException {
+                                                     String categoryId, List<String> sortList, ModifiedDateRange modified,
+                                                     SearchSharingFilter sharing) throws CedarProcessingException {
 
     SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
 
@@ -314,6 +336,16 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     }
 
     String userId = rctx.getCedarUser().getId();
+    // Constrain before counting, sorting and paging, never by filtering a returned page. Shared
+    // searches include descendants accessible through a shared folder; ownership is still excluded.
+    if (sharing == SearchSharingFilter.SHARED_WITH_EVERYBODY) {
+      mainQuery.filter(QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION,
+          NodeSharePermission.READ.getValue(), NodeSharePermission.WRITE.getValue()));
+    } else if (sharing == SearchSharingFilter.SHARED_WITH_ME) {
+      mainQuery.filter(QueryBuilders.termsQuery(USERS, accessibleRoleKeys(userId, ResourceRole.VIEWER)));
+      mainQuery.mustNot(QueryBuilders.termQuery("info.ownedBy", userId));
+      mainQuery.mustNot(QueryBuilders.existsQuery(COMPUTED_EVERYBODY_PERMISSION));
+    }
     if (!rctx.getCedarUser().has(CedarPermission.READ_NOT_READABLE_NODE)) {
       // Filter by user
       QueryBuilder userIdQuery = QueryBuilders.termsQuery(USERS, accessibleRoleKeys(userId, ResourceRole.VIEWER));

@@ -8,6 +8,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.metadatacenter.config.OpensearchConfig;
+import org.metadatacenter.model.request.ModifiedDateRange;
+import org.metadatacenter.model.request.SearchSharingFilter;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
 import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
@@ -27,6 +29,8 @@ import org.opensearch.search.SearchHit;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -34,6 +38,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -86,6 +91,14 @@ class ArtifactContentQueryIT {
     index("title-only", List.of(), false, "Astronomy register", "corpus Astronomy register");
     index("description-only", List.of(), false, "Record metadata", "corpus Astronomy register");
     index("value-only", List.of(field("Notes", "Notes", "Astronomy register")), false);
+    indexSharing("owner-private", "owner", List.of(key("owner")), null);
+    indexSharing("reader-owned", "reader", List.of(key("reader")), null);
+    for (ResourceRole role : List.of(ResourceRole.VIEWER, ResourceRole.EDITOR, ResourceRole.MANAGER))
+      indexSharing("shared-" + role.name(), "owner", List.of(key("owner"),
+          CedarNodeMaterializedPermissions.getKey("reader", role)), null);
+    indexSharing("public-read", "owner", List.of(key("owner")), "read");
+    indexSharing("public-write", "owner", List.of(key("owner")), "write");
+    indexSharing("inaccessible", "third", List.of(key("third")), null);
     client.indices().refresh(new RefreshRequest(INDEX), RequestOptions.DEFAULT);
   }
 
@@ -104,6 +117,13 @@ class ArtifactContentQueryIT {
         "users", hidden ? List.of(key("owner")) : List.of(key("owner"), key("reader")))), RequestOptions.DEFAULT);
   }
   private static String key(String user) { return CedarNodeMaterializedPermissions.getKey(user, ResourceRole.VIEWER); }
+  private static void indexSharing(String id, String owner, List<String> users, String everybody) throws Exception {
+    var source = new LinkedHashMap<String, Object>(Map.of("cid", id, "summaryText", "sharingprobe",
+        "infoFields", List.of(field("Notes", "Notes", "Sharingprobe")), "users", users,
+        "info", Map.of("resourceType", "instance", "schema:name", id, "ownedBy", owner)));
+    if (everybody != null) source.put("computedEverybodyPermission", everybody);
+    client.index(new IndexRequest(INDEX).id(id).source(source), RequestOptions.DEFAULT);
+  }
   private static CedarRequestContext context(String id) {
     CedarUser user = new CedarUser(); user.setId(id);
     CedarRequestContext context = mock(CedarRequestContext.class);
@@ -164,6 +184,51 @@ class ArtifactContentQueryIT {
     List<String> ids = result.getHits().stream().map(SearchHit::getId).toList();
     assertEquals(expected.size(), result.getTotalCount());
     assertEquals(expected.size(), ids.size());
+    assertEquals(expected, Set.copyOf(ids));
+  }
+
+  static Stream<Arguments> sharingMatrix() {
+    return Stream.of(SearchSharingFilter.values()).flatMap(sharing -> Stream.of("owner", "reader")
+        .flatMap(user -> Stream.of("search", "search-deep", "continuation")
+            .map(path -> Arguments.of(sharing, user, path))));
+  }
+
+  @ParameterizedTest(name = "{0} / {1} / {2}")
+  @MethodSource("sharingMatrix")
+  void sharingConstrainsCountsAndEveryPage(SearchSharingFilter sharing, String user, String path) throws Exception {
+    Set<String> shared = Set.of("shared-VIEWER", "shared-EDITOR", "shared-MANAGER");
+    Set<String> expected = switch (sharing) {
+      case SHARED_WITH_EVERYBODY -> Set.of("public-read", "public-write");
+      case SHARED_WITH_ME -> user.equals("reader") ? shared : Set.of();
+      case ALL -> Stream.concat(shared.stream(), Stream.of("public-read", "public-write",
+          user.equals("reader") ? "reader-owned" : "owner-private")).collect(Collectors.toSet());
+    };
+    List<String> ids = new ArrayList<>();
+    if (path.equals("continuation")) {
+      String pit = null;
+      Object[] after = null;
+      try {
+        for (int page = 0; page < 10; page++) {
+          var result = worker.searchDeepPage(context(user), "Notes:Sharingprobe", List.of("instance"),
+              ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, null, List.of("name"),
+              2, pit, after, ModifiedDateRange.ALL, sharing);
+          if (page == 0) assertEquals(expected.size(), result.result().getTotalCount());
+          ids.addAll(result.result().getHits().stream().map(SearchHit::getId).toList());
+          pit = result.pointInTimeId(); after = result.nextSearchAfter();
+          if (pit == null) break;
+        }
+        assertNull(pit, "Continuation must exhaust the scoped result set");
+      } finally { if (pit != null) client.deletePit(new org.opensearch.action.search.DeletePitRequest(pit), RequestOptions.DEFAULT); }
+    } else {
+      var result = path.equals("search-deep")
+          ? worker.searchDeep(context(user), "Notes:Sharingprobe", List.of("instance"), ResourceVersionFilter.ALL,
+              ResourcePublicationStatusFilter.ALL, null, List.of("name"), 100, 0, ModifiedDateRange.ALL, sharing)
+          : worker.search(context(user), "Notes:Sharingprobe", List.of("instance"), ResourceVersionFilter.ALL,
+              ResourcePublicationStatusFilter.ALL, null, List.of("name"), 100, 0, ModifiedDateRange.ALL, sharing);
+      assertEquals(expected.size(), result.getTotalCount());
+      ids.addAll(result.getHits().stream().map(SearchHit::getId).toList());
+    }
+    assertEquals(expected.size(), ids.size(), "No duplicate results across pages");
     assertEquals(expected, Set.copyOf(ids));
   }
 
