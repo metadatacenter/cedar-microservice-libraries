@@ -2,6 +2,8 @@ package org.metadatacenter.util.test;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,57 +14,57 @@ import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * The retry in {@link TestHttpClient} exists for a race — a pooled connection the server closes just
- * as the next request is written to it — which no test could lose reliably. A stub server scripts
- * the outcome of that race instead, one behaviour per connection, so both the recovery and its
- * limit are asserted deterministically.
+ * The server consumes a write before failing its response. A successful second response is available
+ * to expose accidental replay: send must report the first failure, not turn it into a passing test.
  */
 public class TestHttpClientTest {
 
   /** How the stub answers one connection. */
   private enum Behavior {
-    /** Read the request, then close without writing: what a server closing a pooled connection does. */
+    /** The request was consumed, but its acknowledgement was lost. */
     CLOSE_WITHOUT_ANSWERING,
     ANSWER_204,
+    ANSWER_PARTIAL_HEADERS,
+    ANSWER_PARTIAL_BODY,
     /** Answer with something that is not a status line, so the client rejects a real response. */
     ANSWER_GARBAGE
   }
 
   @Test
-  public void aConnectionClosedBeforeAnsweringIsRetried() throws Exception {
-    try (StubServer server = new StubServer(List.of(Behavior.CLOSE_WITHOUT_ANSWERING, Behavior.ANSWER_204))) {
+  public void aCompleteResponseIsReturned() throws Exception {
+    try (StubServer server = new StubServer(List.of(Behavior.ANSWER_204))) {
       HttpResponse<String> response = TestHttpClient.send(requestWithABody(server.baseUrl()));
 
-      Assertions.assertEquals(204, response.statusCode(),
-          "the retry should have reached the server on a fresh connection");
-      Assertions.assertEquals(2, server.connections(),
-          "the send should have taken exactly one retry");
+      Assertions.assertEquals(204, response.statusCode());
+      Assertions.assertEquals(1, server.requests());
     }
   }
 
-  @Test
-  public void aServerThatAnsweredIsNotSentTheRequestTwice() throws Exception {
-    try (StubServer server = new StubServer(List.of(Behavior.ANSWER_GARBAGE, Behavior.ANSWER_204))) {
+  @ParameterizedTest
+  @EnumSource(value = Behavior.class, names = "ANSWER_204", mode = EnumSource.Mode.EXCLUDE)
+  public void aFailedResponseDoesNotReplayTheWrite(Behavior response) throws Exception {
+    try (StubServer server = new StubServer(List.of(response, Behavior.ANSWER_204))) {
       Assertions.assertThrows(IOException.class, () -> TestHttpClient.send(requestWithABody(server.baseUrl())));
 
-      Assertions.assertEquals(1, server.connections(),
-          "response bytes arrived, so the request reached the server and the failure must stand");
+      Assertions.assertEquals(1, server.requests(),
+          "the server applied the write; a lost or broken response must not cause another write");
     }
   }
 
   /**
-   * A request with a body and a method the JDK client will not retry for itself, which is the case
-   * the retry was written for. Sending it twice also proves the request and its body publisher
-   * survive resubscription.
+   * Each stub uses a new port, so this POST uses a fresh connection. The lost-acknowledgement case
+   * also guards the parent's JDK retry setting: enabling retries for all methods repeats the write.
    */
   private static HttpRequest requestWithABody(String baseUrl) {
     return HttpRequest.newBuilder(URI.create(baseUrl + "/command"))
         .header("Content-Type", "application/json")
+        .timeout(Duration.ofSeconds(5))
         .POST(HttpRequest.BodyPublishers.ofString("{}"))
         .build();
   }
@@ -71,7 +73,7 @@ public class TestHttpClientTest {
   private static final class StubServer implements AutoCloseable {
 
     private final ServerSocket serverSocket;
-    private final AtomicInteger connections = new AtomicInteger();
+    private final AtomicInteger requests = new AtomicInteger();
 
     StubServer(List<Behavior> script) throws IOException {
       serverSocket = new ServerSocket(
@@ -84,12 +86,15 @@ public class TestHttpClientTest {
     private void serve(List<Behavior> script) {
       for (Behavior behavior : script) {
         try (Socket connection = serverSocket.accept()) {
-          connections.incrementAndGet();
           // Draining the request first means the client finished writing, so the close that
           // follows is an orderly one and the client reads an empty stream rather than a reset.
           readOneRequest(connection.getInputStream());
+          requests.incrementAndGet();
           switch (behavior) {
             case ANSWER_204 -> write(connection, "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n");
+            case ANSWER_PARTIAL_HEADERS -> write(connection, "HTTP/1.1 200 OK\r\nContent-Length:");
+            case ANSWER_PARTIAL_BODY -> write(connection,
+                "HTTP/1.1 200 OK\r\nContent-Length: 20\r\nConnection: close\r\n\r\nx");
             case ANSWER_GARBAGE -> write(connection, "not-a-status-line\r\n\r\n");
             case CLOSE_WITHOUT_ANSWERING -> {
             }
@@ -131,8 +136,8 @@ public class TestHttpClientTest {
       return "http://" + serverSocket.getInetAddress().getHostAddress() + ":" + serverSocket.getLocalPort();
     }
 
-    int connections() {
-      return connections.get();
+    int requests() {
+      return requests.get();
     }
 
     @Override
