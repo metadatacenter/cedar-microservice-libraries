@@ -233,7 +233,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
         Arguments.of("disease:\"stage: II\"", List.of("nested", "stage: II")),
         Arguments.of("\"study title\":\"colorectal cancer\"", List.of("study title", "colorectal cancer")),
         Arguments.of("(disease:*)", List.of("nested", "infoFields.fieldName")),
-        Arguments.of("*:*", List.of("nested", "query_string", "*")),
+        Arguments.of("*:*", List.of("nested", "bool")),
         Arguments.of("disease:influ*", List.of("infoFields.fieldValue", "influ*")),
         Arguments.of("disease:colo?", List.of("infoFields.fieldValue", "colo?")),
         Arguments.of("disease:https://example.org/A?x=1#part", List.of("infoFields.fieldValueUri", "x%3D1%23part")));
