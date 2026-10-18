@@ -1,5 +1,7 @@
 package org.metadatacenter.util.test;
 
+import java.util.Locale;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Assertions;
 import org.metadatacenter.util.json.JsonMapper;
@@ -73,7 +75,7 @@ public final class OpenApiSuccessContract {
         if (!HTTP_METHODS.contains(method.getKey())) {
           continue;
         }
-        String coordinate = method.getKey().toUpperCase() + " " + path.getKey();
+        String coordinate = method.getKey().toUpperCase(Locale.ROOT) + " " + path.getKey();
         JsonNode operation = method.getValue();
         checkSuccessResponses(spec, coordinate, operation, emptyResponses, findings);
         if (BODY_METHODS.contains(method.getKey())) {

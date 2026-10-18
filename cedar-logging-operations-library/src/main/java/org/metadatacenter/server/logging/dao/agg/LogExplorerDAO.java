@@ -1,5 +1,7 @@
 package org.metadatacenter.server.logging.dao.agg;
 
+import java.util.Locale;
+
 import io.dropwizard.hibernate.AbstractDAO;
 import org.hibernate.SessionFactory;
 import org.hibernate.query.NativeQuery;
@@ -187,7 +189,7 @@ public class LogExplorerDAO extends AbstractDAO<ApplicationRequestLog> {
   private static Filter outlierFilter(String kind) {
     Filter filter = new Filter();
     if (kind != null && !kind.isBlank()) {
-      filter.add("kind = :kind", "kind", kind.trim().toUpperCase());
+      filter.add("kind = :kind", "kind", kind.trim().toUpperCase(Locale.ROOT));
     }
     return filter;
   }

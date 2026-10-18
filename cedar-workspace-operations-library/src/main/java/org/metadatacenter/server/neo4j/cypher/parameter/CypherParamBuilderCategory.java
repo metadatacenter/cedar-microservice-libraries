@@ -1,5 +1,7 @@
 package org.metadatacenter.server.neo4j.cypher.parameter;
 
+import java.util.Locale;
+
 import org.metadatacenter.constant.CedarConstants;
 import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarCategoryId;
@@ -31,7 +33,7 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
     params.put(NodeProperty.LAST_UPDATED_ON_TS, nowTS);
     // NameDescriptionIdentifierGroup
     params.put(NodeProperty.NAME, categoryName);
-    params.put(NodeProperty.NAME_LOWER, categoryName.toLowerCase());
+    params.put(NodeProperty.NAME_LOWER, categoryName.toLowerCase(Locale.ROOT));
     params.put(NodeProperty.DESCRIPTION, categoryDescription);
     params.put(NodeProperty.IDENTIFIER, categoryIdentifier);
     // UsersDataGroup
@@ -46,7 +48,7 @@ public class CypherParamBuilderCategory extends AbstractCypherParamBuilder {
 
   public static CypherParameters getCategoryByParentAndName(CedarCategoryId parentId, String name) {
     CypherParameters params = new CypherParameters();
-    params.put(ParameterPlaceholder.NAME, name == null ? null : name.toLowerCase());
+    params.put(ParameterPlaceholder.NAME, name == null ? null : name.toLowerCase(Locale.ROOT));
     params.put(ParameterPlaceholder.PARENT_CATEGORY_ID, parentId);
     return params;
   }

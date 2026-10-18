@@ -1,5 +1,7 @@
 package org.metadatacenter.server.search.elasticsearch.worker;
 
+import java.util.Locale;
+
 import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.model.request.SearchSharingFilter;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
@@ -749,7 +751,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
    */
   private String preprocessPossibleValuesQuery(String query) {
     // Convert to lower case [PV] -> [pv]
-    query = query.replace(POSSIBLE_VALUES_PREFIX.toUpperCase(), POSSIBLE_VALUES_PREFIX);
+    query = query.replace(POSSIBLE_VALUES_PREFIX.toUpperCase(Locale.ROOT), POSSIBLE_VALUES_PREFIX);
     if (query.contains(POSSIBLE_VALUES_PREFIX)) {
       // Translates [pv]"Not available" -> "[pv]Not available", so that the query is not identified as a boolean query
       // Also [pv]="Not available" -> "[pv]=Not available"

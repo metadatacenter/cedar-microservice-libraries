@@ -1,5 +1,7 @@
 package org.metadatacenter.util.test;
 
+import java.util.Locale;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Assertions;
 import org.metadatacenter.util.json.JsonMapper;
@@ -48,7 +50,7 @@ public final class OpenApiErrorContract {
           if (!response.getKey().matches("[45][0-9][0-9]")) {
             continue;
           }
-          String coordinate = method.getKey().toUpperCase() + " " + path.getKey() + " " + response.getKey();
+          String coordinate = method.getKey().toUpperCase(Locale.ROOT) + " " + path.getKey() + " " + response.getKey();
           if (SHARED_NON_ERROR_ENVELOPE_RESPONSES.contains(coordinate)) {
             continue;
           }
