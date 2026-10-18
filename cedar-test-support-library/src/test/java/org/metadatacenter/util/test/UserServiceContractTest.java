@@ -2,6 +2,7 @@ package org.metadatacenter.util.test;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -34,6 +35,7 @@ import static org.junit.jupiter.api.Named.named;
  * drifted. Each runs twice, once against each implementation, from a user registered the way that
  * implementation registers one.
  */
+@Tag("integration")
 public class UserServiceContractTest {
 
   private static final int MAX_KEYS = 3;

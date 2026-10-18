@@ -4,6 +4,7 @@ import org.metadatacenter.model.CedarResourceType;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
@@ -47,6 +48,7 @@ import java.util.Map;
  * user. Redis is redirected to a dead port: the query-logging queue writes are best-effort, and
  * this enforces that no session operation under test depends on a live Redis.
  */
+@Tag("integration")
 public class WorkspacePermissionIntegrationTest {
 
   private static CedarConfig cedarConfig;

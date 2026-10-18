@@ -3,6 +3,7 @@ package org.metadatacenter.util.http;
 import com.sun.net.httpserver.HttpServer;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
@@ -12,6 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@Tag("integration")
 class ProxyUtilContentCodingTest {
 
   @Test

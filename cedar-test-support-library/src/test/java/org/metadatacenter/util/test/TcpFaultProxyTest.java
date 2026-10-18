@@ -1,5 +1,6 @@
 package org.metadatacenter.util.test;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.net.Socket;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+@Tag("integration")
 class TcpFaultProxyTest {
 
   @Test

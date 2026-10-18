@@ -2,6 +2,7 @@ package org.metadatacenter.server.neo4j.cypher.query;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("integration")
 class CypherPermissionQueryEquivalenceTest {
 
   private static final String RESOURCE_ID = "resource-special-nested";

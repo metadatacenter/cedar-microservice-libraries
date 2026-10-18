@@ -3,6 +3,7 @@ package org.metadatacenter.server.valuerecommender;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -28,6 +29,7 @@ import static org.mockito.Mockito.*;
 
 /** Real HTTP responses through the worker's parser and scheduling decisions. */
 @Timeout(30)
+@Tag("integration")
 class ValuerecommenderReindexExecutorServiceTest {
   private static final String TEMPLATE = "https://repo.metadatacenter.orgx/templates/one";
   private static final String OTHER = "https://repo.metadatacenter.orgx/templates/two";

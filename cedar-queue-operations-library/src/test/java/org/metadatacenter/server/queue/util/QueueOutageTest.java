@@ -1,5 +1,6 @@
 package org.metadatacenter.server.queue.util;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.metadatacenter.config.CacheServerPersistent;
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * of connections to a server that has gone away.
  */
 @Timeout(60)
+@Tag("integration")
 class QueueOutageTest {
 
   private static SearchPermissionQueueEvent event(String id) {

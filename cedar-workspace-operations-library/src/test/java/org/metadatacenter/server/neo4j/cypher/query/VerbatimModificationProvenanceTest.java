@@ -16,6 +16,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Executes the same update query as the graph repository, including null removal and numeric sort keys. */
+@Tag("integration")
 class VerbatimModificationProvenanceTest {
   static Driver database;
   @BeforeAll static void start() {

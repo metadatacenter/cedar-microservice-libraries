@@ -26,6 +26,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Exercises production mapper selection and the bytes Jetty sends, without external backends. */
+@Tag("integration")
 class ResponseContractMatrixTest {
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final Set<String> ERROR_FIELDS = Set.of("status", "statusCode", "errorKey", "errorReasonKey",

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.HttpHost;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -44,6 +45,7 @@ import static org.mockito.Mockito.when;
 
 /** Real matching with the shipped mapping, crossed with grouping, caller permissions and endpoint.
  * The REST corpus additionally proves extraction from stored artifacts and graph authorization. */
+@Tag("integration")
 class ArtifactContentQueryIT {
   private static final String INDEX = "cedar-content-query-it-" + UUID.randomUUID();
   private static final String URI = "https://example.org/terms/A?x=1&y=two#part";

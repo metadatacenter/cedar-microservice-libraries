@@ -8,6 +8,7 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Proves the exact prepared operator query on Neo4j without touching an application artifact. */
+@Tag("integration")
 class ProvenanceRestorationQueryTest {
   static Driver database;
   static String query;

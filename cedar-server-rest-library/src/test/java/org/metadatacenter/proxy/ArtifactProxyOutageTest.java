@@ -1,5 +1,6 @@
 package org.metadatacenter.proxy;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
@@ -21,6 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /** A read the artifact server never answers is an outage, and keeps the 503 an outage carries. */
+@Tag("integration")
 class ArtifactProxyOutageTest {
 
   @Test

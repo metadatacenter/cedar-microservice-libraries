@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Failed transfers and recovery must preserve accepted work; uses one isolated Redis fixture. */
 @Timeout(30)
+@Tag("integration")
 class QueueRecoveryMatrixTest {
   private static EmbeddedRedis redis;
   private static CacheServerPersistent config;

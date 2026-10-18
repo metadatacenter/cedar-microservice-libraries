@@ -2,6 +2,7 @@ package org.metadatacenter.util.http;
 
 import com.sun.net.httpserver.HttpServer;
 import org.apache.hc.client5.http.fluent.Request;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
@@ -12,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** Proves that one outbound call cannot leave cookie state for the next caller. */
+@Tag("integration")
 class HttpTimeoutsCookieTest {
 
   @Test

@@ -1,5 +1,6 @@
 package org.metadatacenter.server.queue.util;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.net.InetAddress;
@@ -14,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("integration")
 class EmbeddedRedisTest {
 
   @Test

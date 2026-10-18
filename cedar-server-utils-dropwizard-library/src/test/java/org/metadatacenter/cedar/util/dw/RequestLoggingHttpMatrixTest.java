@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.metadatacenter.constant.CedarHeaderParameters.*;
 
+@Tag("integration")
 class RequestLoggingHttpMatrixTest {
   static DropwizardTestSupport<Configuration> server;
   static java.nio.file.Path config;

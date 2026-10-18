@@ -11,6 +11,7 @@ import org.metadatacenter.server.neo4j.ArtifactCreateCleanupOutbox.Stored;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Persisted transitions and crash windows, rather than a mocked successful cleanup call. */
+@Tag("integration")
 class ArtifactCreateCleanupOutboxTest {
   static Driver database;
   @BeforeAll static void start() {

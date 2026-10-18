@@ -1,6 +1,7 @@
 package org.metadatacenter.util.test;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -23,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * The server consumes a write before failing its response. A successful second response is available
  * to expose accidental replay: send must report the first failure, not turn it into a passing test.
  */
+@Tag("integration")
 public class TestHttpClientTest {
 
   /** How the stub answers one connection. */

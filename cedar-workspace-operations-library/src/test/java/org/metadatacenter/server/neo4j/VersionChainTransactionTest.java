@@ -8,6 +8,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+@Tag("integration")
 class VersionChainTransactionTest {
   static Driver driver;
   @BeforeAll static void start() {

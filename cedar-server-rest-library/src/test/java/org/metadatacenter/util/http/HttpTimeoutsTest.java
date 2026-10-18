@@ -4,6 +4,7 @@ import org.apache.hc.client5.http.fluent.Request;
 import org.apache.hc.core5.http.ConnectionRequestTimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.http.CedarResponseStatus;
@@ -33,6 +34,7 @@ import static org.mockito.Mockito.mock;
  * <p>Both tests exhaust a pool of one against a server that accepts a connection and then says
  * nothing, so the second caller can only be waiting on the lease.
  */
+@Tag("integration")
 class HttpTimeoutsTest {
 
   private static final int LEASE_MILLIS = 200;

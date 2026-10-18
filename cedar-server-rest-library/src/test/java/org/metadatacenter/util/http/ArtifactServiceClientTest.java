@@ -3,6 +3,7 @@ package org.metadatacenter.util.http;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.config.ArtifactServiceConfig;
 import org.metadatacenter.config.CedarConfig;
@@ -18,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+@Tag("integration")
 class ArtifactServiceClientTest {
   private static final String KEY = "test-only-artifact-service-key-not-for-prod";
   private HttpServer artifact;

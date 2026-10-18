@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /** Real Redis command boundaries plus bounded thread races, with no sleeps or live services. */
+@Tag("integration")
 class IndexRebuildConcurrencyTest {
   private static EmbeddedRedis redis;
   private static JedisPool pool;

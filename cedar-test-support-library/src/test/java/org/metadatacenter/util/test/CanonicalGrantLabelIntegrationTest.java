@@ -2,6 +2,7 @@ package org.metadatacenter.util.test;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
@@ -41,6 +42,7 @@ import java.util.Map;
  * grantee holds, from which every authorization check derives, and for the materialized permissions
  * that become the {@code users} and {@code groups} fields of a search document.
  */
+@Tag("integration")
 public class CanonicalGrantLabelIntegrationTest {
 
   private static CedarConfig cedarConfig;

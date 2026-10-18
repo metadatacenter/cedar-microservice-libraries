@@ -5,6 +5,7 @@ import org.apache.hc.client5.http.fluent.Request;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.NoHttpResponseException;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import jakarta.ws.rs.core.HttpHeaders;
@@ -29,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * The two outbound failures the retry strategy has to tell apart. Both leave a call site with
  * nothing useful, and only one of them can be settled by sending the request again.
  */
+@Tag("integration")
 class HttpTimeoutsRetryTest {
 
   @Test

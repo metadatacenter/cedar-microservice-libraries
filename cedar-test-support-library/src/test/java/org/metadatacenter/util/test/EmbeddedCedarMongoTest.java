@@ -1,6 +1,7 @@
 package org.metadatacenter.util.test;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.platform.launcher.LauncherSessionListener;
 
@@ -8,6 +9,7 @@ import java.util.ServiceLoader;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /** Holds the embedded Mongo child process to the lifecycle its test JVM owns. */
+@Tag("integration")
 public class EmbeddedCedarMongoTest {
 
   @Test

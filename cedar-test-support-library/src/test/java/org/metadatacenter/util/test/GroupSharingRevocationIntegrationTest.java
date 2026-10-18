@@ -2,6 +2,7 @@ package org.metadatacenter.util.test;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
@@ -46,6 +47,7 @@ import java.util.Map;
  * covers both. The REST side of a membership change — who may perform it — is covered in the group
  * server's own matrix.
  */
+@Tag("integration")
 public class GroupSharingRevocationIntegrationTest {
 
   private static CedarConfig cedarConfig;

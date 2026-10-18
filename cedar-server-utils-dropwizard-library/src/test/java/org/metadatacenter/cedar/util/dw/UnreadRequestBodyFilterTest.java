@@ -27,6 +27,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+@Tag("integration")
 class UnreadRequestBodyFilterTest {
   private static DropwizardTestSupport<Configuration> server;
   private static java.nio.file.Path config;

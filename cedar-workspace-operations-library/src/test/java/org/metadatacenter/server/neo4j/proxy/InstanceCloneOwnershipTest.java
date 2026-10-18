@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 
 /** Executes the real registration and transfer queries against embedded Neo4j. */
+@Tag("integration")
 class InstanceCloneOwnershipTest {
   static Driver database;
   static final CedarTemplateInstanceId SOURCE = CedarTemplateInstanceId.build("source");
