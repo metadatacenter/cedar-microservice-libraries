@@ -1,10 +1,8 @@
 package org.metadatacenter.util.artifact;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.metadatacenter.artifacts.model.reader.ArtifactSourceParser;
 import org.metadatacenter.artifacts.model.core.Artifact;
 import org.metadatacenter.artifacts.model.core.TemplateInstanceArtifact;
 import org.metadatacenter.artifacts.model.core.TemplateSchemaArtifact;
@@ -68,7 +66,6 @@ public final class ArtifactYamlTranscoder {
     JsonNode templateFor(String templateIri) throws IOException;
   }
 
-  private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
 
   private static final Logger log = LoggerFactory.getLogger(ArtifactYamlTranscoder.class);
 
@@ -217,8 +214,7 @@ public final class ArtifactYamlTranscoder {
   public static String yamlToJsonString(String yamlContent, CedarResourceType resourceType,
                                         TemplateResolver templateResolver) throws IOException {
     LinkedHashMap<String, Object> yamlMap =
-        YAML_MAPPER.readValue(yamlContent, new TypeReference<LinkedHashMap<String, Object>>() {
-        });
+        ArtifactSourceParser.yaml(yamlContent);
     if (yamlMap.get("id") != null && SYSTEM_RECORDED_KEYS.stream().noneMatch(yamlMap::containsKey)) {
       throw new CompactYamlBodyException("The YAML body appears to be the compact form: it carries an id but none "
           + "of the system-recorded keys (version, status, modelVersion, provenance). The compact form is a lossy "

@@ -155,7 +155,8 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     // Dropwizard 2 ignores unknown request-body properties by default; CEDAR's API contract
     // predates that change and rejects them, so restore the strict behavior.
-    environment.getObjectMapper().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+    org.metadatacenter.util.json.JsonMapper.applySourcePolicy(environment.getObjectMapper())
+        .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
     CedarRequestContextFactory.init(cedarConfig.getLinkedDataUtil());
 
