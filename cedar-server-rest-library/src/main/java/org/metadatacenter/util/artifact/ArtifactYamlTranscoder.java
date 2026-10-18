@@ -247,8 +247,30 @@ public final class ArtifactYamlTranscoder {
       throw new IllegalArgumentException(
           "the template this instance says it isBasedOn can not be found: " + templateIri);
     }
-    TemplateSchemaArtifact schema = new JsonArtifactReader().readTemplateSchemaArtifact((ObjectNode) template);
+    // Completion supplies empty slots, never defaults. A legacy template can have an inconsistent
+    // default without making the answers in an instance invalid. Read only the schema needed for
+    // this conversion; the original template still supplies every constraint at the save gate.
+    ObjectNode completionSchema = ((ObjectNode) template).deepCopy();
+    omitDefaultsForInstanceCompletion(completionSchema);
+    TemplateSchemaArtifact schema = new JsonArtifactReader().readTemplateSchemaArtifact(completionSchema);
     return renderer.renderTemplateInstanceArtifact(schema, instance);
+  }
+
+  /** Remove only unused defaults from the private copy, including repeated and nested fields. */
+  private static void omitDefaultsForInstanceCompletion(JsonNode schema) {
+    if (schema.path("items").isObject()) {
+      omitDefaultsForInstanceCompletion(schema.get("items"));
+      return;
+    }
+    if (schema.path("_ui").has("inputType") && schema.path("_valueConstraints") instanceof ObjectNode constraints) {
+      constraints.remove("defaultValue");
+    }
+    schema.path("properties").fields().forEachRemaining(child -> {
+      JsonNode definition = child.getValue();
+      if (definition.path("_ui").isObject() || definition.path("items").path("_ui").isObject()) {
+        omitDefaultsForInstanceCompletion(definition);
+      }
+    });
   }
 
   /**
