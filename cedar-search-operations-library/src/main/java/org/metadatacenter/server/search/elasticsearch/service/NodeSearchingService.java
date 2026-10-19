@@ -150,7 +150,7 @@ public class NodeSearchingService extends AbstractSearchingService {
           absoluteUrl);
       response.getRequest().setModified(modified);
       return response;
-    } catch (CedarDependencyUnavailableException e) {
+    } catch (CedarProcessingException e) {
       throw e;
     } catch (Exception e) {
       throw new CedarProcessingException(e);
@@ -168,7 +168,7 @@ public class NodeSearchingService extends AbstractSearchingService {
                                      List<String> sortList, int limit, int offset, ModifiedDateRange modified) throws CedarProcessingException {
     try {
       return permissionEnabledSearchWorker.search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, modified);
-    } catch (CedarDependencyUnavailableException e) {
+    } catch (CedarProcessingException e) {
       throw e;
     } catch (Exception e) {
       throw new CedarProcessingException(e);
@@ -199,7 +199,7 @@ public class NodeSearchingService extends AbstractSearchingService {
           absoluteUrl);
       response.getRequest().setModified(modified);
       return response;
-    } catch (CedarDependencyUnavailableException e) {
+    } catch (CedarProcessingException e) {
       throw e;
     } catch (Exception e) {
       throw new CedarProcessingException(e);
