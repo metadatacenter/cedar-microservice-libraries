@@ -2,7 +2,9 @@ package org.metadatacenter.server.search.extraction;
 
 import org.metadatacenter.constant.OntologyAndValueSetConstants;
 import org.metadatacenter.exception.CedarProcessingException;
+import org.metadatacenter.search.PossibleValues;
 import org.semanticweb.owlapi.apibinding.OWLManager;
+import org.semanticweb.owlapi.io.OWLOntologyInputSourceException;
 import org.semanticweb.owlapi.model.AxiomType;
 import org.semanticweb.owlapi.model.EntityType;
 import org.semanticweb.owlapi.model.IRI;
@@ -22,6 +24,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.Collections;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -57,24 +60,28 @@ public class ValueSetsExtractor
 
   private final Logger logger = LoggerFactory.getLogger(ValueSetsExtractor.class);
 
-  private record Snapshot(Map<String, Set<String>> classHierarchy,
+  private record Snapshot(String sourcePath, Map<String, Set<String>> classHierarchy,
                           Map<Annotation, Map<String, String>> annotations) {
   }
 
   private static final ValueSetsExtractor SINGLE_INSTANCE = new ValueSetsExtractor();
 
-  private volatile Snapshot snapshot = new Snapshot(Map.of(), Map.of());
+  private volatile Snapshot snapshot = new Snapshot(null, Map.of(), Map.of());
 
   public static ValueSetsExtractor getInstance() {
     return SINGLE_INSTANCE;
   }
 
-  private ValueSetsExtractor()
+  ValueSetsExtractor()
   {
   }
 
   public synchronized void loadValueSetsOntology(String ontologyFilePath) throws CedarProcessingException
   {
+    if (ontologyFilePath == null || ontologyFilePath.isBlank()) {
+      throw new CedarProcessingException("No path configured for value set ontology");
+    }
+    String sourcePath = new File(ontologyFilePath).getAbsoluteFile().toPath().normalize().toString();
     try {
       OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
       logger.info("Reading OWL value sets ontology " + ontologyFilePath + " ...");
@@ -82,12 +89,47 @@ public class ValueSetsExtractor
 
       Map<String, Set<String>> classHierarchy = immutableClassHierarchy(getClassHierarchy(ontology));
       Map<Annotation, Map<String, String>> annotations = immutableAnnotations(getAnnotations(ontology));
-      snapshot = new Snapshot(classHierarchy, annotations);
+      snapshot = new Snapshot(sourcePath, classHierarchy, annotations);
 
       logger.info("Finished processing OWL value sets ontology");
-    } catch (OWLOntologyCreationException e) {
+    } catch (OWLOntologyCreationException | OWLOntologyInputSourceException e) {
       throw new CedarProcessingException("Error while reading OWL value sets ontology: " + e);
     }
+  }
+
+  /**
+   * Each indexing process loads its own ontology on first use, including the projection worker.
+   * A missing ontology must fail the projection before it replaces a previously populated index
+   * document. The explicit administrative load still reloads a file that changed in place.
+   */
+  public synchronized PossibleValues extractPossibleValues(Collection<String> valueSetURIs, String ontologyFilePath)
+      throws CedarProcessingException
+  {
+    if (valueSetURIs.stream().noneMatch(uri -> uri.startsWith(OntologyAndValueSetConstants.CADSR_VALUE_SETS_ONTOLOGY_IRI))) {
+      return new PossibleValues();
+    }
+    String sourcePath = ontologyFilePath == null || ontologyFilePath.isBlank() ? null
+        : new File(ontologyFilePath).getAbsoluteFile().toPath().normalize().toString();
+    if (sourcePath == null || !sourcePath.equals(snapshot.sourcePath())) {
+      loadValueSetsOntology(ontologyFilePath);
+    }
+    Snapshot current = snapshot;
+    Set<String> labels = new HashSet<>();
+    Set<String> concepts = new HashSet<>();
+    for (String uri : valueSetURIs) {
+      for (String value : current.classHierarchy().getOrDefault(uri, Set.of())) {
+        String label = current.annotations().get(Annotation.LABEL).get(value);
+        String notation = current.annotations().get(Annotation.NOTATION).get(value);
+        if (label != null) labels.add(label);
+        if (notation != null && (label == null || !label.equalsIgnoreCase(notation))) labels.add(notation);
+        String concept = current.annotations().get(Annotation.RELATED_MATCH).get(value);
+        if (concept != null) {
+          int fragment = concept.indexOf('#');
+          if (fragment >= 0 && fragment + 1 < concept.length()) concepts.add(concept.substring(fragment + 1));
+        }
+      }
+    }
+    return new PossibleValues(labels, concepts);
   }
 
   public Set<String> getBaseClassURIs()

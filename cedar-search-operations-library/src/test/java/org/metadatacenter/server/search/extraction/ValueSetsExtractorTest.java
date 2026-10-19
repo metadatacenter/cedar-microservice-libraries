@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.metadatacenter.exception.CedarProcessingException;
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.IRI;
 import org.semanticweb.owlapi.model.OWLClass;
@@ -14,6 +15,7 @@ import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
 import org.semanticweb.owlapi.vocab.SKOSVocabulary;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.Map;
 import java.util.Set;
 
@@ -32,6 +34,75 @@ class ValueSetsExtractorTest {
   @Test
   void returnsSameInstance() {
     assertSame(ValueSetsExtractor.getInstance(), ValueSetsExtractor.getInstance());
+  }
+
+  @Test
+  void firstProjectionLoadsOntologyAndSubsequentProjectionsUseTheSnapshot() throws Exception {
+    Path file = writeYesNoOntology("Yes");
+    ValueSetsExtractor extractor = new ValueSetsExtractor();
+    var values = extractor.extractPossibleValues(Set.of(NS + "yes-no"), file.toString());
+    assertEquals(Set.of("Yes", "Y"), values.getValueLabels());
+    assertEquals(Set.of("C49488"), values.getValueConcepts());
+    Files.delete(file);
+    assertEquals(values, extractor.extractPossibleValues(Set.of(NS + "yes-no"), file.toString()));
+  }
+
+  @Test
+  void unrelatedFieldsDoNotNeedTheCadsrOntology() throws Exception {
+    ValueSetsExtractor extractor = new ValueSetsExtractor();
+    assertTrue(extractor.extractPossibleValues(Set.of(), null).getValueLabels().isEmpty());
+    assertTrue(extractor.extractPossibleValues(Set.of("https://example.org/another-valueset"), null)
+        .getValueLabels().isEmpty());
+  }
+
+  @Test
+  void missingOntologyRefusesProjectionAndCanRecoverWhenFileArrives() throws Exception {
+    ValueSetsExtractor extractor = new ValueSetsExtractor();
+    Path file = tempDir.resolve("yes-no.owl");
+    assertThrows(CedarProcessingException.class,
+        () -> extractor.extractPossibleValues(Set.of(NS + "yes-no"), null));
+    assertThrows(CedarProcessingException.class,
+        () -> extractor.extractPossibleValues(Set.of(NS + "yes-no"), file.toString()));
+    writeYesNoOntology("Yes");
+    assertEquals(Set.of("Yes", "Y"),
+        extractor.extractPossibleValues(Set.of(NS + "yes-no"), file.toString()).getValueLabels());
+  }
+
+  @Test
+  void explicitReloadUpdatesTheSnapshotAndFailedReloadPreservesIt() throws Exception {
+    Path file = writeYesNoOntology("Yes");
+    ValueSetsExtractor extractor = new ValueSetsExtractor();
+    extractor.extractPossibleValues(Set.of(NS + "yes-no"), file.toString());
+    writeYesNoOntology("Affirmative");
+    extractor.loadValueSetsOntology(file.toString());
+    assertEquals(Set.of("Affirmative", "Y"),
+        extractor.extractPossibleValues(Set.of(NS + "yes-no"), file.toString()).getValueLabels());
+    Files.delete(file);
+    assertThrows(CedarProcessingException.class, () -> extractor.loadValueSetsOntology(file.toString()));
+    assertThrows(CedarProcessingException.class, () -> extractor.extractPossibleValues(Set.of(NS + "yes-no"),
+        tempDir.resolve("different.owl").toString()));
+    assertEquals(Set.of("Affirmative", "Y"),
+        extractor.extractPossibleValues(Set.of(NS + "yes-no"), file.toString()).getValueLabels());
+  }
+
+  private Path writeYesNoOntology(String label) throws Exception {
+    OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+    OWLDataFactory data = manager.getOWLDataFactory();
+    OWLOntology ontology = manager.createOntology();
+    OWLClass base = data.getOWLClass(IRI.create(NS + "yes-no"));
+    OWLClass value = data.getOWLClass(IRI.create(NS + "yes"));
+    manager.addAxiom(ontology, data.getOWLSubClassOfAxiom(value, base));
+    manager.addAxiom(ontology, data.getOWLAnnotationAssertionAxiom(data.getRDFSLabel(), value.getIRI(),
+        data.getOWLLiteral(label)));
+    manager.addAxiom(ontology, data.getOWLAnnotationAssertionAxiom(
+        data.getOWLAnnotationProperty(IRI.create("http://www.w3.org/2004/02/skos/core#notation")),
+        value.getIRI(), data.getOWLLiteral("Y")));
+    manager.addAxiom(ontology, data.getOWLAnnotationAssertionAxiom(
+        data.getOWLAnnotationProperty(SKOSVocabulary.RELATEDMATCH.getIRI()), value.getIRI(),
+        IRI.create("http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#C49488")));
+    Path path = tempDir.resolve("yes-no.owl");
+    manager.saveOntology(ontology, IRI.create(path.toUri()));
+    return path;
   }
 
   @Test
@@ -129,7 +200,7 @@ class ValueSetsExtractorTest {
   private ValueSetsExtractor load(OWLOntologyManager manager, OWLOntology ontology, String fileName) throws Exception {
     Path ontologyPath = tempDir.resolve(fileName);
     manager.saveOntology(ontology, IRI.create(ontologyPath.toUri()));
-    ValueSetsExtractor extractor = ValueSetsExtractor.getInstance();
+    ValueSetsExtractor extractor = new ValueSetsExtractor();
     extractor.loadValueSetsOntology(ontologyPath.toString());
     return extractor;
   }
