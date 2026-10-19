@@ -93,6 +93,17 @@ class ArtifactContentQueryIT {
     index("title-only", List.of(), false, "Astronomy register", "corpus Astronomy register");
     index("description-only", List.of(), false, "Record metadata", "corpus Astronomy register");
     index("value-only", List.of(field("Notes", "Notes", "Astronomy register")), false);
+    index("rad-word", List.of(field("Notes", "Notes", "Rad dose")), false, "Rad dose", "corpus Rad dose");
+    index("rad-substring", List.of(field("Notes", "Notes", "Radiation grade")), false, "Radiation grade", "corpus Radiation grade");
+    index("slash", List.of(field("Units", "Units", "Moles/volume")), false,
+        "Moles/volume in Dried blood spot", "corpus Moles/volume in Dried blood spot");
+    index("hyphen", List.of(), false, "2-Dimensional Electrophoresis", "corpus 2-Dimensional Electrophoresis");
+    index("pv-word", List.of(), false);
+    index("pv-substring", List.of(), false);
+    client.update(new org.opensearch.action.update.UpdateRequest(INDEX, "pv-word").doc(Map.of(
+        "possibleValues", Map.of("valueLabels", List.of("Rad", "Yes", "Not available")))), RequestOptions.DEFAULT);
+    client.update(new org.opensearch.action.update.UpdateRequest(INDEX, "pv-substring").doc(Map.of(
+        "possibleValues", Map.of("valueLabels", List.of("Radiation", "Yes indeed", "Not always available")))), RequestOptions.DEFAULT);
     indexSharing("owner-private", "owner", List.of(key("owner")), null);
     indexSharing("reader-owned", "reader", List.of(key("reader")), null);
     for (ResourceRole role : List.of(ResourceRole.VIEWER, ResourceRole.EDITOR, ResourceRole.MANAGER))
@@ -168,7 +179,33 @@ class ArtifactContentQueryIT {
         c("\"Astronomy register\"", "title-only", "description-only"),
         c("Notes:Astronomy", "value-only"),
         c("Astronomy AND Notes:Astronomy"),
-        c("Astronomy OR Notes:Astronomy", "title-only", "description-only", "value-only"));
+        c("Astronomy OR Notes:Astronomy", "title-only", "description-only", "value-only"),
+        c("Rad", "rad-word", "rad-substring"),
+        c("\"Rad\"", "rad-word"),
+        c("\"RAD\"", "rad-word"),
+        c("(\"Rad\" OR Astronomy) AND NOT grade", "rad-word", "title-only", "description-only"),
+        c("rad*", "rad-word", "rad-substring"),
+        c("rad\\*"),
+        c("r\\?d"),
+        c("\"rad*\"", "rad-word"),
+        c("\"2-Dimensional\"", "hyphen"),
+        c("\"2-Dimensional Electrophoresis\"", "hyphen"),
+        c("\"Moles/volume\"", "slash"),
+        c("\"Moles/volume in Dried\"", "slash"),
+        c("\"Moles volume in Dried\"", "slash"),
+        c("Units:\"Moles/volume\"", "slash"),
+        c("Notes:\"Rad\"", "rad-word"),
+        c("Notes:Rad\\*", "rad-word"),
+        c("Notes: Rad", "rad-word"),
+        c("Notes: AND \"Rad\"", "rad-word"),
+        c("[pv]Rad", "pv-word"),
+        c("[pv]rad*", "pv-word", "pv-substring"),
+        c("[pv]\"rad*\"", "pv-word"),
+        c("[pv]=YES", "pv-word"),
+        c("[pv]=\"Yes\"", "pv-word"),
+        c("[pv]\"Not available\"", "pv-word"),
+        c("[pv]=\"Not available\"", "pv-word"),
+        c("[pv]Yes AND NOT [pv]=\"Yes indeed\"", "pv-word"));
     return cases.stream().flatMap(test -> Stream.of(false, true).flatMap(wrapped ->
         Stream.of("owner", "reader").flatMap(user -> Stream.of(false, true).map(deep -> Arguments.of(
             wrapped ? "corpus AND (" + test.query + ")" : test.query, user, deep,

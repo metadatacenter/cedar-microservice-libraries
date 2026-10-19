@@ -258,6 +258,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
             ResourcePublicationStatusFilter.ALL, null, null, 10, 0));
 
     assertTrue(error.getMessage().contains("Error processing query"), error.getMessage());
+    assertEquals(CedarResponseStatus.BAD_REQUEST, error.getErrorPack().getStatus());
     assertEquals(null, capturedRequest.get());
   }
 
