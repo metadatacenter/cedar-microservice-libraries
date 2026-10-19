@@ -2,6 +2,7 @@ package org.metadatacenter.util.test;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
@@ -23,6 +24,7 @@ import org.metadatacenter.server.security.model.user.CedarUser;
 import java.util.Map;
 
 /** Direct tests of role inheritance and precedence against an in-process Neo4j. */
+@Tag("integration")
 public class WorkspacePermissionInheritanceIntegrationTest {
 
   private static CedarConfig cedarConfig;

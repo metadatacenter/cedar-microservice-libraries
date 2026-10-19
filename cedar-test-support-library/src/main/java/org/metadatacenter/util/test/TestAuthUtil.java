@@ -1,5 +1,7 @@
 package org.metadatacenter.util.test;
 
+import java.util.Locale;
+
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.server.security.Authorization;
 import org.metadatacenter.server.security.CedarApiKeyAuthRequest;
@@ -143,7 +145,7 @@ public final class TestAuthUtil {
     user.setId(id);
     user.setFirstName(firstName);
     user.setLastName("User");
-    user.setEmail(firstName.toLowerCase() + "@test.com");
+    user.setEmail(firstName.toLowerCase(Locale.ROOT) + "@test.com");
 
     CedarUserApiKey apiKeyObject = new CedarUserApiKey();
     apiKeyObject.setId(UUID.randomUUID().toString());

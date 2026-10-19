@@ -1,10 +1,8 @@
 package org.metadatacenter.util.artifact;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.metadatacenter.artifacts.model.reader.ArtifactSourceParser;
 import org.metadatacenter.artifacts.model.core.Artifact;
 import org.metadatacenter.artifacts.model.core.TemplateInstanceArtifact;
 import org.metadatacenter.artifacts.model.core.TemplateSchemaArtifact;
@@ -68,7 +66,6 @@ public final class ArtifactYamlTranscoder {
     JsonNode templateFor(String templateIri) throws IOException;
   }
 
-  private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
 
   private static final Logger log = LoggerFactory.getLogger(ArtifactYamlTranscoder.class);
 
@@ -217,8 +214,7 @@ public final class ArtifactYamlTranscoder {
   public static String yamlToJsonString(String yamlContent, CedarResourceType resourceType,
                                         TemplateResolver templateResolver) throws IOException {
     LinkedHashMap<String, Object> yamlMap =
-        YAML_MAPPER.readValue(yamlContent, new TypeReference<LinkedHashMap<String, Object>>() {
-        });
+        ArtifactSourceParser.yaml(yamlContent);
     if (yamlMap.get("id") != null && SYSTEM_RECORDED_KEYS.stream().noneMatch(yamlMap::containsKey)) {
       throw new CompactYamlBodyException("The YAML body appears to be the compact form: it carries an id but none "
           + "of the system-recorded keys (version, status, modelVersion, provenance). The compact form is a lossy "
@@ -251,8 +247,30 @@ public final class ArtifactYamlTranscoder {
       throw new IllegalArgumentException(
           "the template this instance says it isBasedOn can not be found: " + templateIri);
     }
-    TemplateSchemaArtifact schema = new JsonArtifactReader().readTemplateSchemaArtifact((ObjectNode) template);
+    // Completion supplies empty slots, never defaults. A legacy template can have an inconsistent
+    // default without making the answers in an instance invalid. Read only the schema needed for
+    // this conversion; the original template still supplies every constraint at the save gate.
+    ObjectNode completionSchema = ((ObjectNode) template).deepCopy();
+    omitDefaultsForInstanceCompletion(completionSchema);
+    TemplateSchemaArtifact schema = new JsonArtifactReader().readTemplateSchemaArtifact(completionSchema);
     return renderer.renderTemplateInstanceArtifact(schema, instance);
+  }
+
+  /** Remove only unused defaults from the private copy, including repeated and nested fields. */
+  private static void omitDefaultsForInstanceCompletion(JsonNode schema) {
+    if (schema.path("items").isObject()) {
+      omitDefaultsForInstanceCompletion(schema.get("items"));
+      return;
+    }
+    if (schema.path("_ui").has("inputType") && schema.path("_valueConstraints") instanceof ObjectNode constraints) {
+      constraints.remove("defaultValue");
+    }
+    schema.path("properties").fields().forEachRemaining(child -> {
+      JsonNode definition = child.getValue();
+      if (definition.path("_ui").isObject() || definition.path("items").path("_ui").isObject()) {
+        omitDefaultsForInstanceCompletion(definition);
+      }
+    });
   }
 
   /**

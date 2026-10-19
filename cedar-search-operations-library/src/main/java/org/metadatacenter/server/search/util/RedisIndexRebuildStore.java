@@ -9,6 +9,7 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -61,6 +62,31 @@ public final class RedisIndexRebuildStore implements IndexRebuildStore {
   /** The set cap, as {@link InMemoryIndexRebuildStore#MAX_TRACKED}, enforced here with SCARD. */
   static final int MAX_TRACKED = InMemoryIndexRebuildStore.MAX_TRACKED;
 
+  // Each transition is one Redis operation: other processes must never observe its midpoint.
+  private static final String BEGIN = """
+      redis.call('DEL', KEYS[2], KEYS[3])
+      redis.call('SETEX', KEYS[1], ARGV[2], ARGV[1])
+      return 1
+      """;
+  private static final String END = """
+      if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+      return redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
+      """;
+  private static final String SNAPSHOT = """
+      return {redis.call('SMEMBERS', KEYS[1]), redis.call('SMEMBERS', KEYS[2])}
+      """;
+  private static final String MOVE = """
+      if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+      local tracked = redis.call('SISMEMBER', KEYS[2], ARGV[2]) == 1
+          or redis.call('SISMEMBER', KEYS[3], ARGV[2]) == 1
+      if not tracked and redis.call('SCARD', KEYS[2]) + redis.call('SCARD', KEYS[3]) >= tonumber(ARGV[3])
+          then return 0 end
+      redis.call('SADD', KEYS[2], ARGV[2])
+      redis.call('SREM', KEYS[3], ARGV[2])
+      for i = 1, 3 do redis.call('EXPIRE', KEYS[i], ARGV[4]) end
+      return 1
+      """;
+
   private static final int POOL_MAX_TOTAL = 8;
   private static final Duration POOL_MAX_WAIT = Duration.ofMillis(100);
 
@@ -109,11 +135,8 @@ public final class RedisIndexRebuildStore implements IndexRebuildStore {
 
   @Override
   public void begin(String indexName) {
-    withRedis(jedis -> {
-      jedis.del(KEY_WRITTEN, KEY_DELETED);
-      jedis.setex(KEY_INDEX, KEY_TTL_SECONDS, indexName);
-      return null;
-    }, null, "announcing the index being rebuilt");
+    withRedis(jedis -> jedis.eval(BEGIN, List.of(KEY_INDEX, KEY_WRITTEN, KEY_DELETED),
+        List.of(indexName, Integer.toString(KEY_TTL_SECONDS))), null, "announcing the index being rebuilt");
     cachedIndex = indexName;
     cachedUntilNanos = System.nanoTime() + FRESH_FOR.toNanos();
   }
@@ -123,14 +146,9 @@ public final class RedisIndexRebuildStore implements IndexRebuildStore {
     if (indexName == null) {
       return;
     }
-    withRedis(jedis -> {
-      // Only the rebuild that owns the key may clear it, or a failed older rebuild reaching its
-      // cleanup would switch off the mirroring a newer one depends on.
-      if (indexName.equals(jedis.get(KEY_INDEX))) {
-        jedis.del(KEY_INDEX, KEY_WRITTEN, KEY_DELETED);
-      }
-      return null;
-    }, null, "clearing the index being rebuilt");
+    // An abandoned job may finish after its replacement starts. Compare and clear atomically.
+    withRedis(jedis -> jedis.eval(END, List.of(KEY_INDEX, KEY_WRITTEN, KEY_DELETED),
+        List.of(indexName)), null, "clearing the index being rebuilt");
     if (indexName.equals(cachedIndex)) {
       cachedIndex = null;
     }
@@ -149,19 +167,28 @@ public final class RedisIndexRebuildStore implements IndexRebuildStore {
 
   /** Add to one set and remove from the other, so the two never both hold the same resource. */
   private void move(String into, String outOf, String cedarId) {
-    if (cedarId == null || inProgressIndex().isEmpty()) {
+    if (cedarId == null) {
       return;
     }
-    withRedis(jedis -> {
-      if (jedis.scard(into) + jedis.scard(outOf) >= MAX_TRACKED) {
-        return null;
-      }
-      jedis.sadd(into, cedarId);
-      jedis.srem(outOf, cedarId);
-      jedis.expire(into, KEY_TTL_SECONDS);
-      jedis.expire(KEY_INDEX, KEY_TTL_SECONDS);
-      return null;
-    }, null, "recording a live write");
+    Optional<String> index = inProgressIndex();
+    if (index.isEmpty()) {
+      return;
+    }
+    // A cached name can outlive its rebuild. Such a write must not contaminate a replacement's
+    // tracking sets. Already tracked identifiers may still change sides when the cap is reached.
+    withRedis(jedis -> jedis.eval(MOVE, List.of(KEY_INDEX, into, outOf),
+        List.of(index.get(), cedarId, Integer.toString(MAX_TRACKED), Integer.toString(KEY_TTL_SECONDS))),
+        null, "recording a live write");
+  }
+
+  @Override
+  public Snapshot snapshot() {
+    return withRedis(jedis -> {
+      @SuppressWarnings("unchecked")
+      List<List<String>> sets = (List<List<String>>) jedis.eval(SNAPSHOT,
+          List.of(KEY_WRITTEN, KEY_DELETED), List.of());
+      return new Snapshot(Set.copyOf(sets.get(0)), Set.copyOf(sets.get(1)));
+    }, new Snapshot(Set.of(), Set.of()), "reading live changes");
   }
 
   @Override

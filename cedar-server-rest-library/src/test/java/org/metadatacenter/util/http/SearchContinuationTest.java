@@ -37,6 +37,13 @@ class SearchContinuationTest {
   }
 
   @Test
+  void tokenBoundaryPreservesIntegerSortKeysBeyondDoublePrecision() throws Exception {
+    Object[] after = {9007199254740993L, "id"};
+    String token = SearchContinuation.of(PIT, after, USER, fingerprint(), 0, 1).encode();
+    assertArrayEquals(after, SearchContinuation.decode(token, USER, fingerprint()).getSearchAfterValues());
+  }
+
+  @Test
   void aTokenTravelsInAQueryParameterWithoutEscaping() {
     String token = SearchContinuation.of(PIT, AFTER, USER, fingerprint(), 0, 1).encode();
 

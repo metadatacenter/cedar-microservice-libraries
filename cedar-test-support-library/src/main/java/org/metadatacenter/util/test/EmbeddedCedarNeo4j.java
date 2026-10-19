@@ -10,6 +10,7 @@ import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.logging.AppLogger;
 import org.metadatacenter.server.logging.AppLoggerQueueService;
 import org.metadatacenter.server.security.model.user.CedarUser;
+import org.neo4j.configuration.GraphDatabaseInternalSettings;
 import org.neo4j.harness.Neo4j;
 import org.neo4j.harness.Neo4jBuilders;
 
@@ -35,11 +36,15 @@ import java.util.Map;
  * Seeding creates the graph skeleton the way provisioning does: the global objects (root
  * folders, Everybody group, root category) through the admin session, then the TestAuthUtil
  * users with Everybody membership and home folders.
+ *
+ * The harness is closed when the JVM exits. It deletes its store directory only on close, so
+ * without the close every test JVM left its whole store in the temporary directory.
  */
 public final class EmbeddedCedarNeo4j {
 
-  private static Neo4j embedded;
+  private static volatile Neo4j embedded;
   private static boolean seeded;
+  private static boolean closesAtExit;
 
   private EmbeddedCedarNeo4j() {
   }
@@ -50,7 +55,13 @@ public final class EmbeddedCedarNeo4j {
 
   public static synchronized void startAndRedirectEnvironment(Map<String, String> extraEnvironment) {
     if (embedded == null) {
-      embedded = Neo4jBuilders.newInProcessBuilder().withDisabledServer().build();
+      // Closing the harness shuts Bolt's Netty event-loop group down gracefully: every loop closes
+      // its connections, then all of them wait out a five-second quiet period together, so a close
+      // took about six seconds. The connections are already closed when the period starts, so a
+      // zero period changes nothing a client can observe, and the close takes under one second.
+      embedded = Neo4jBuilders.newInProcessBuilder().withDisabledServer()
+          .withConfig(GraphDatabaseInternalSettings.netty_server_shutdown_quiet_period, 0).build();
+      closeAtExit();
     }
     // Re-applied even when the server is already up: in a shared JVM a later test class may
     // have replaced the override, and its own extra entries must land as well
@@ -74,6 +85,23 @@ public final class EmbeddedCedarNeo4j {
       embedded = null;
     }
     seeded = false;
+  }
+
+  /**
+   * Registered once, and deliberately unsynchronized: a shutdown hook that waited for this class's
+   * lock could hang the JVM's exit behind a test thread that holds it.
+   */
+  private static void closeAtExit() {
+    if (closesAtExit) {
+      return;
+    }
+    closesAtExit = true;
+    Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+      Neo4j current = embedded;
+      if (current != null) {
+        current.close();
+      }
+    }, "embedded-neo4j-close"));
   }
 
   public static synchronized void startRedirectAndSeed(SystemComponent systemComponent) {

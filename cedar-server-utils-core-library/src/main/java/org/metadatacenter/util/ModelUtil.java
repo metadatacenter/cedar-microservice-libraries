@@ -111,7 +111,9 @@ public class ModelUtil {
   /**
    * Gives every child at every depth an identifier, and provenance describing what this write actually did to it.
    * <p>
-   * Three cases, distinguished by comparing each child against the same property in the stored artifact.
+   * Three cases, distinguished by comparing each child against its stored counterpart. A unique
+   * identifier follows a renamed property; reused identifiers can be disambiguated by property IRI.
+   * Otherwise the existing property-based comparison applies.
    * A child with no counterpart there is new and gets a full creation record. A child whose content
    * differs keeps the creation record it already had and takes a fresh last-modified stamp. A child whose
    * content is identical keeps all four values unchanged, so its dates continue to describe the last write
@@ -139,6 +141,7 @@ public class ModelUtil {
                                                 ProvenanceInfo pi, ProvenanceUtil provenanceUtil,
                                                 LinkedDataUtil linkedDataUtil, List<MintedChildId> minted) {
     Map<String, JsonNode> storedChildren = childrenByName(storedArtifact);
+    Map<String, JsonNode> counterparts = renamedChildCounterparts(artifact, storedArtifact, storedChildren);
     // A malformed multi-instance child carrying no 'items' object is skipped rather than dereferenced:
     // enforceChildArtifactTypes rejects the artifact with a 400 that names the property.
     forEachChild(artifact, (name, child) -> {
@@ -150,7 +153,7 @@ public class ModelUtil {
         minted.add(new MintedChildId(path,
             replaced == null || replaced.isNull() ? null : replaced.asText(), newId));
       }
-      JsonNode stored = storedChildren.get(name);
+      JsonNode stored = counterparts.getOrDefault(name, storedChildren.get(name));
       if (stored == null) {
         provenanceUtil.addProvenanceInfo(child, pi);
       } else if (childContentDiffers(child, stored)) {
@@ -161,6 +164,43 @@ public class ModelUtil {
       }
       ensureChildIdsRecursively(child, stored, path, pi, provenanceUtil, linkedDataUtil, minted);
     });
+  }
+
+  private record ChildIdentity(String id, String propertyIri) {}
+
+  /** Unique within this parent on both sides; copies never borrow another placement's history. */
+  private static Map<ChildIdentity, String> uniqueChildKeys(Map<String, JsonNode> children,
+                                                            JsonNode parent, boolean placement) {
+    Map<ChildIdentity, String> keys = new HashMap<>();
+    children.forEach((name, child) -> {
+      if (!hasUsableChildId(child)) return;
+      String iri = null;
+      if (placement) {
+        JsonNode mapping = parent.path("properties").path("@context").path("properties").path(name)
+            .path("enum").path(0);
+        if (!mapping.isTextual() || mapping.textValue().isEmpty()) return;
+        iri = mapping.textValue();
+      }
+      ChildIdentity identity = new ChildIdentity(child.path("@id").asText(), iri);
+      keys.put(identity, keys.containsKey(identity) ? null : name);
+    });
+    return keys;
+  }
+
+  private static Map<String, JsonNode> renamedChildCounterparts(JsonNode artifact, JsonNode storedArtifact,
+                                                                Map<String, JsonNode> storedChildren) {
+    Map<String, JsonNode> counterparts = new HashMap<>();
+    if (storedArtifact == null) return counterparts;
+    Map<String, JsonNode> currentChildren = childrenByName(artifact);
+    for (boolean placement : new boolean[]{false, true}) {
+      Map<ChildIdentity, String> before = uniqueChildKeys(storedChildren, storedArtifact, placement);
+      uniqueChildKeys(currentChildren, artifact, placement).forEach((identity, name) -> {
+        String storedName = before.get(identity);
+        if (name != null && storedName != null)
+          counterparts.putIfAbsent(name, storedChildren.get(storedName));
+      });
+    }
+    return counterparts;
   }
 
   /**
@@ -359,4 +399,3 @@ public class ModelUtil {
     return doiInRequest;
   }
 }
-

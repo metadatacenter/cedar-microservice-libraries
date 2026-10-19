@@ -1,5 +1,7 @@
 package org.metadatacenter.server.neo4j.cypher.parameter;
 
+import java.util.Locale;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.constant.CedarConstants;
 import org.metadatacenter.id.*;
@@ -33,7 +35,7 @@ public abstract class AbstractCypherParamBuilder {
 
     params.put(NodeProperty.ID, newResource.getId());
     params.put(NodeProperty.NAME, newResource.getName());
-    params.put(NodeProperty.NAME_LOWER, newResource.getName().toLowerCase());
+    params.put(NodeProperty.NAME_LOWER, newResource.getName().toLowerCase(Locale.ROOT));
     params.put(NodeProperty.DESCRIPTION, newResource.getDescription());
     params.put(NodeProperty.IDENTIFIER, newResource.getIdentifier());
     params.put(NodeProperty.CREATED_BY, newResource.getCreatedBy());

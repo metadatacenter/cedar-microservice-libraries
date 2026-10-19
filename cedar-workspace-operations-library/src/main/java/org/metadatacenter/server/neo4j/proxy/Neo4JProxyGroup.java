@@ -12,6 +12,7 @@ import org.metadatacenter.server.RevisionConflictException;
 import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.VersionedGroupUsers;
 import org.metadatacenter.server.VersionedResource;
+import org.metadatacenter.server.GroupCallerMembership;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.cypher.parameter.AbstractCypherParamBuilder;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderGroup;
@@ -143,6 +144,19 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
         CypherQueryBuilderGroup.getVersionedGroupUsers(), CypherParamBuilderGroup.matchId(groupId));
     return executeInReadTransaction(tx -> readVersionedGroupUsers(run(tx, query)),
         "reading versioned group users");
+  }
+
+  GroupCallerMembership findCallerMembership(CedarGroupId groupId, CedarUserId callerId) {
+    CypherParameters params = CypherParamBuilderGroup.matchId(groupId);
+    params.put(org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder.USER_ID, callerId);
+    CypherQueryWithParameters query = new CypherQueryWithParameters(
+        CypherQueryBuilderGroup.getCallerMembership(), params);
+    return executeInReadTransaction(tx -> {
+      Result result = run(tx, query);
+      if (!result.hasNext()) return null;
+      Record record = result.next();
+      return new GroupCallerMembership(record.get("member").asBoolean(), record.get("administrator").asBoolean());
+    }, "reading the caller's group membership");
   }
 
   /**

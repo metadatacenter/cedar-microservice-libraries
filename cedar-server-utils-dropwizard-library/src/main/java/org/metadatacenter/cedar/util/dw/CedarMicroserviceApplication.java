@@ -155,7 +155,8 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     // Dropwizard 2 ignores unknown request-body properties by default; CEDAR's API contract
     // predates that change and rejects them, so restore the strict behavior.
-    environment.getObjectMapper().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+    org.metadatacenter.util.json.JsonMapper.applySourcePolicy(environment.getObjectMapper())
+        .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
     CedarRequestContextFactory.init(cedarConfig.getLinkedDataUtil());
 
@@ -299,8 +300,19 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
   }
 
+  /**
+   * The conversions every service applies to request parameters before Jersey's own, also exercised
+   * through HTTP by the response contract suite. A value they refuse reaches the mappers as a
+   * parameter Jersey could not convert.
+   */
+  static void registerParameterConverters(Environment environment) {
+    environment.jersey().register(new CedarBooleanParamConverterProvider());
+  }
+
   protected void setupEnvironment(Environment environment) {
+    registerHttpConnectionPolicy(environment);
     registerExceptionMappers(environment);
+    registerParameterConverters(environment);
 
     registerSharedHealthChecks(environment);
 
@@ -318,6 +330,12 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     });
     // Add URL mapping
     cors.addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), true, "/*");
+  }
+
+  /** Includes servlet refusals and routing/authentication failures before Jersey reads an entity. */
+  public static void registerHttpConnectionPolicy(Environment environment) {
+    environment.servlets().addFilter("CedarUnreadRequestBody", UnreadRequestBodyFilter.class)
+        .addMappingForUrlPatterns(EnumSet.allOf(DispatcherType.class), false, "/*");
   }
 
   /**

@@ -1,6 +1,7 @@
 package org.metadatacenter.server.search.elasticsearch.worker;
 
 import org.apache.http.HttpHost;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.id.CedarUntypedFilesystemResourceId;
 import org.metadatacenter.util.json.JsonMapper;
@@ -18,6 +19,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Explicit opt-in OpenSearch check; the normal backend-free build does not run *IT classes. */
+@Tag("integration")
 class ElasticsearchPermissionProjectionIT {
   @Test
   void projectionPreservesContentReplacesPermissionsAndRemovesLegacyCopies() throws Exception {

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.*;
+import org.metadatacenter.util.http.CedarError;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
@@ -117,6 +118,32 @@ class ChunkUploadMatrixTest {
     Files.write(root.resolve("data.xml"),new byte[100]);
     accept(chunk(1,4,4,4,1),new byte[]{1,2,3,4});
     assertEquals(4,Files.size(root.resolve("data.xml")));
+  }
+  static Stream<Arguments> refusals() {
+    return Stream.of(
+        Arguments.of(chunk(0,4,4,8,2), new byte[4], "Invalid chunk number"),
+        Arguments.of(chunk(1,4,4,8,3), new byte[4], "Invalid total chunk count"),
+        Arguments.of(chunk(1,4,4,8,2), new byte[3], "File chunk is shorter than declared"),
+        Arguments.of(chunk(1,4,4,8,2), null, "Missing file chunk"));
+  }
+  /**
+   * A refusal carries its message in the shared error body. A BadRequestException without an entity
+   * reached the client as a 400 whose body carried no message, so a client could not tell which check
+   * had failed.
+   */
+  @ParameterizedTest(name="{2}") @MethodSource("refusals")
+  void refusalsKeepTheirMessageInTheSharedErrorBody(ChunkUploadStore.Chunk chunk, byte[] bytes, String message) {
+    BadRequestException refusal = assertThrows(BadRequestException.class, () -> store.accept("owner", "upload", 1,
+        root, chunk, bytes == null ? null : new ByteArrayInputStream(bytes)));
+    assertSharedErrorBody(refusal, message);
+    assertSharedErrorBody(assertThrows(BadRequestException.class, () -> ChunkUploadStore.basename("..")),
+        "Invalid file name");
+  }
+  private static void assertSharedErrorBody(BadRequestException refusal, String message) {
+    CedarError body = assertInstanceOf(CedarError.class, refusal.getResponse().getEntity());
+    assertEquals(400, body.statusCode);
+    assertEquals(message, body.message);
+    assertEquals(message, refusal.getMessage());
   }
   @Test void symbolicLinkTargetCannotBeOverwritten() throws Exception {
     Path elsewhere = root.resolve("elsewhere"); Files.writeString(elsewhere,"keep");

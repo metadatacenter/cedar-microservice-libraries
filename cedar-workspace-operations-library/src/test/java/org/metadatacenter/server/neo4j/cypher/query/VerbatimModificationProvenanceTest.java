@@ -5,25 +5,25 @@ import org.metadatacenter.id.CedarTemplateId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.server.ArtifactModificationProvenance;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
+import org.metadatacenter.server.neo4j.ScratchNeo4j;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderArtifact;
 import org.metadatacenter.util.json.JsonMapper;
 import org.neo4j.driver.*;
-import org.neo4j.harness.*;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Executes the same update query as the graph repository, including null removal and numeric sort keys. */
+@Tag("integration")
 class VerbatimModificationProvenanceTest {
-  static Neo4j neo;
   static Driver database;
   @BeforeAll static void start() {
-    neo = Neo4jBuilders.newInProcessBuilder().withDisabledServer().build();
-    database = GraphDatabase.driver(neo.boltURI(), AuthTokens.none());
+    ScratchNeo4j.blank();
+    database = GraphDatabase.driver(ScratchNeo4j.boltURI(), AuthTokens.none());
   }
-  @AfterAll static void stop() { database.close(); neo.close(); }
+  @AfterAll static void stop() { database.close(); }
   @BeforeEach void seed() {
     try (var session = database.session()) {
       session.run("MATCH (n) DETACH DELETE n").consume();

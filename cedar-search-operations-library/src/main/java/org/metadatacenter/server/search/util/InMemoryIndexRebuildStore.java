@@ -60,14 +60,14 @@ public final class InMemoryIndexRebuildStore implements IndexRebuildStore {
   }
 
   @Override
-  public void recordWrite(String cedarId) {
+  public synchronized void recordWrite(String cedarId) {
     if (track(written, cedarId)) {
       deleted.remove(cedarId);
     }
   }
 
   @Override
-  public void recordDelete(String cedarId) {
+  public synchronized void recordDelete(String cedarId) {
     if (track(deleted, cedarId)) {
       written.remove(cedarId);
     }
@@ -77,7 +77,8 @@ public final class InMemoryIndexRebuildStore implements IndexRebuildStore {
     if (cedarId == null || inProgressIndex == null) {
       return false;
     }
-    if (written.size() + deleted.size() >= MAX_TRACKED) {
+    if (!written.contains(cedarId) && !deleted.contains(cedarId)
+        && written.size() + deleted.size() >= MAX_TRACKED) {
       if (!overflowed) {
         overflowed = true;
         log.warn("More than {} resources have been written while the index was rebuilding; the rebuild"
@@ -91,12 +92,17 @@ public final class InMemoryIndexRebuildStore implements IndexRebuildStore {
   }
 
   @Override
-  public Set<String> written() {
+  public synchronized Snapshot snapshot() {
+    return new Snapshot(written, deleted);
+  }
+
+  @Override
+  public synchronized Set<String> written() {
     return Set.copyOf(written);
   }
 
   @Override
-  public Set<String> deleted() {
+  public synchronized Set<String> deleted() {
     return Set.copyOf(deleted);
   }
 

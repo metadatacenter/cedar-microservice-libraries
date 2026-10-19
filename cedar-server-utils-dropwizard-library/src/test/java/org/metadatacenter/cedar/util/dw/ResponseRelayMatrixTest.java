@@ -26,6 +26,7 @@ import java.util.zip.GZIPOutputStream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** A real HTTP peer, the production buffered client/relay, then Jetty serialization. */
+@Tag("integration")
 class ResponseRelayMatrixTest {
   static HttpServer peer; static DropwizardTestSupport<Configuration> server; static java.nio.file.Path config;
   static final AtomicInteger calls = new AtomicInteger();

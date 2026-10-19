@@ -47,5 +47,8 @@ public interface GroupServiceSession {
 
   boolean userAdministersGroup(CedarGroupId groupId);
 
+  /** Returns only this session's caller's relationships, or null if the group does not exist. */
+  GroupCallerMembership findCallerMembership(CedarGroupId groupId);
+
   long getGroupCount();
 }

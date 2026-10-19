@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.apache.hc.core5.http.message.BasicClassicHttpResponse;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import java.net.InetSocketAddress;
@@ -13,6 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+@Tag("integration")
 class ProxyRelayContractTest {
   @ParameterizedTest @ValueSource(strings={"Retry-After", "WWW-Authenticate", "Allow", "Location", "Cache-Control"})
   void preservesProtocolHeaders(String name) {

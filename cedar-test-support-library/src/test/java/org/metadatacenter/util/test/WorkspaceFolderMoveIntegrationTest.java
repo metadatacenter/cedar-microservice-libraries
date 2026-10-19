@@ -2,6 +2,7 @@ package org.metadatacenter.util.test;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
@@ -41,6 +42,7 @@ import java.util.Set;
  * at query time. The session applies no ACL check; the resource server's command layer
  * authorizes before calling.
  */
+@Tag("integration")
 public class WorkspaceFolderMoveIntegrationTest {
 
   private static CedarConfig cedarConfig;

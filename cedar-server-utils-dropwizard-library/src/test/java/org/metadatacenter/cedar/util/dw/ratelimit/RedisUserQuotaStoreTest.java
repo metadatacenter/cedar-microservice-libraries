@@ -1,6 +1,7 @@
 package org.metadatacenter.cedar.util.dw.ratelimit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.config.CacheServerConnection;
 import org.metadatacenter.config.RateLimitConfig;
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+@Tag("integration")
 class RedisUserQuotaStoreTest {
   private final ObjectMapper mapper = new ObjectMapper();
   private RateLimitConfig config(int total, int reads, int writes) {

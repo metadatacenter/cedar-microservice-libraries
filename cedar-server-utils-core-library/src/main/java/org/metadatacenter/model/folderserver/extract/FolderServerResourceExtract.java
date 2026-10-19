@@ -20,7 +20,7 @@ import java.io.IOException;
 
 @JsonTypeInfo(
     use = JsonTypeInfo.Id.NAME,
-    include = JsonTypeInfo.As.PROPERTY,
+    include = JsonTypeInfo.As.EXISTING_PROPERTY,
     property = "resourceType")
 @JsonSubTypes({
     @JsonSubTypes.Type(value = FolderServerFolderExtract.class, name = CedarResourceType.Types.FOLDER),

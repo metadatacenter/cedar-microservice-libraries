@@ -126,6 +126,19 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
         """;
   }
 
+  /** Group existence and the caller's two relationships in one read, without reading a roster. */
+  public static String getCallerMembership() {
+    return """
+        MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})
+        RETURN EXISTS {
+          MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})-[:<REL.MEMBEROF>]->(group)
+        } AS member,
+        EXISTS {
+          MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})-[:<REL.ADMINISTERS>]->(group)
+        } AS administrator
+        """;
+  }
+
   /** Acquires the aggregate lock and returns the revision that must still match If-Match. */
   public static String lockGroupMembership() {
     return """

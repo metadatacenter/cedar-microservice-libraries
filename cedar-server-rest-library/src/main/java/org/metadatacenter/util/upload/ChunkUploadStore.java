@@ -1,6 +1,7 @@
 package org.metadatacenter.util.upload;
 
 import jakarta.ws.rs.BadRequestException;
+import org.metadatacenter.util.http.CedarResponse;
 
 import java.io.*;
 import java.nio.file.*;
@@ -165,7 +166,11 @@ public final class ChunkUploadStore {
     Upload upload = uploads.get(new Key(owner, id));
     if (upload != null) synchronized (upload) { upload.retired = true; upload.files.clear(); }
   }
+  /**
+   * Refuses the chunk when a check fails, in the shared error body with a message naming the check. A
+   * BadRequestException without an entity reached the client as a 400 whose body carried no message.
+   */
   private static void require(boolean valid, String message) {
-    if (!valid) throw new BadRequestException(message);
+    if (!valid) throw new BadRequestException(message, CedarResponse.badRequest().message(message).build());
   }
 }

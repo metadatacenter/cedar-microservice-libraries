@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.HttpHost;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.rest.context.CedarRequestContext;
@@ -41,6 +42,7 @@ import static org.mockito.Mockito.when;
  * shape of the request; this class proves what that request actually matches, which is the security
  * boundary a mocked {@code RestHighLevelClient} cannot exercise.
  */
+@Tag("integration")
 class ElasticsearchPermissionEnabledContentSearchingWorkerIT {
 
   private static final String OWNER_ID = "https://metadatacenter.org/users/search-owner";

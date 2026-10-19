@@ -1,8 +1,12 @@
 package org.metadatacenter.util.artifact;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
+import org.metadatacenter.artifacts.model.reader.JsonArtifactReader;
+import org.metadatacenter.artifacts.model.renderer.JsonArtifactRenderer;
 import org.metadatacenter.model.CedarResourceType;
+import org.metadatacenter.model.validation.CedarValidator;
 import org.metadatacenter.util.json.JsonMapper;
 
 import java.io.IOException;
@@ -132,6 +136,41 @@ public class ArtifactYamlTranscoderConversionTest {
     for (JsonNode property : template.get("required")) {
       assertTrue(completed.has(property.asText()), "the completed instance lacks " + property.asText());
     }
+  }
+
+  @Test
+  public void instanceCompletionIgnoresUnusedLegacyDefaultsWithoutChangingTemplateOrAnswers() throws IOException {
+    // Use the current schema rendering: the historic fixture predates array-wrapped multiselect fields.
+    ObjectNode template = new JsonArtifactRenderer().renderTemplateSchemaArtifact(new JsonArtifactReader()
+        .readTemplateSchemaArtifact((ObjectNode) JsonMapper.STRICT_MAPPER.readTree(readFixture("SimpleTemplate.json"))));
+    var validator = new CedarValidator();
+    assertTrue(validator.validateTemplate(template).canSave());
+    template.withObject("/properties/Text Field/_valueConstraints")
+        .put("regex", "^valid$").put("defaultValue", "invalid");
+    template.withObject("/properties/Numeric - Min and Max/_valueConstraints").put("defaultValue", "101");
+    template.withObject("/properties/Text Field - Default Value/_valueConstraints")
+        .put("defaultValue", "Never seed this default during conversion");
+    ObjectNode original = template.deepCopy();
+    String yaml = "type: instance\nname: Metadata\nisBasedOn: " + template.path("@id").asText()
+        + "\nchildren:\n  Text Field:\n    value: valid\n"
+        + "  Numeric - Min and Max:\n    value: '25'\n    datatype: xsd:decimal\n";
+
+    ObjectNode completed = (ObjectNode) JsonMapper.STRICT_MAPPER.readTree(
+        ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.INSTANCE, iri -> template));
+    assertEquals(original, template, "The resolved template must never be changed");
+    assertEquals("valid", completed.at("/Text Field/@value").asText());
+    assertEquals("25", completed.at("/Numeric - Min and Max/@value").asText());
+    assertTrue(completed.at("/Text Field - Default Value/@value").isNull(), "Omissions stay unanswered");
+    assertFalse(validator.validateTemplate(template).canSave(), "Template writes still reject inconsistent defaults");
+    var instanceReport = validator.validateTemplateInstance(completed, template);
+    assertTrue(instanceReport.canSave(), instanceReport.toString());
+
+    completed.withObject("/Numeric - Min and Max").put("@value", "not a number");
+    assertFalse(validator.validateTemplateInstance(completed, template).canSave(), "Malformed answers still fail");
+    template.withObject("/properties/Numeric - Min and Max/_valueConstraints").put("maxValue", 1);
+    assertThrows(RuntimeException.class,
+        () -> ArtifactYamlTranscoder.yamlToJsonString(yaml, CedarResourceType.INSTANCE, iri -> template),
+        "Only defaults are omitted; inconsistent constraint definitions must still fail");
   }
 
   @Test

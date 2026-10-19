@@ -1,5 +1,7 @@
 package org.metadatacenter.util;
 
+import java.util.Locale;
+
 import org.apache.commons.lang3.StringUtils;
 
 import java.text.Normalizer;
@@ -35,7 +37,7 @@ public class StringUtil {
     if (str == null) {
       return null;
     }
-    return normalizeSpace(removeSpecialCharacters(stripAccents(str.toLowerCase())));
+    return normalizeSpace(removeSpecialCharacters(stripAccents(str.toLowerCase(Locale.ROOT))));
   }
 }
 

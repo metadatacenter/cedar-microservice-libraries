@@ -2,6 +2,7 @@ package org.metadatacenter.util.test;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
@@ -45,6 +46,7 @@ import java.util.Map;
  * applied on top of them, which is how every other conditioned listing treats it. Filtering the listing
  * without honouring the waiver would have quietly narrowed what a filesystem administrator can see.
  */
+@Tag("integration")
 public class InclusionSubgraphListingPermissionIntegrationTest {
 
   private static CedarConfig cedarConfig;

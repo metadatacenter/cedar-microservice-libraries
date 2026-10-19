@@ -1,5 +1,7 @@
 package org.metadatacenter.server.neo4j.cypher.parameter;
 
+import java.util.Locale;
+
 import org.metadatacenter.id.*;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
@@ -32,7 +34,7 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
   public static CypherParameters getResourceByParentIdAndName(CedarFolderId parentId, String name) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.ID, parentId);
-    params.put(ParameterPlaceholder.NAME, name == null ? null : name.toLowerCase());
+    params.put(ParameterPlaceholder.NAME, name == null ? null : name.toLowerCase(Locale.ROOT));
     return params;
   }
 

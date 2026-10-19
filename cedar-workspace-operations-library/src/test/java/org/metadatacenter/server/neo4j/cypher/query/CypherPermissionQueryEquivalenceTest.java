@@ -2,16 +2,16 @@ package org.metadatacenter.server.neo4j.cypher.query;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
+import org.metadatacenter.server.neo4j.ScratchNeo4j;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Record;
-import org.neo4j.harness.Neo4j;
-import org.neo4j.harness.Neo4jBuilders;
 
 import java.util.HashSet;
 import java.util.List;
@@ -22,18 +22,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Tag("integration")
 class CypherPermissionQueryEquivalenceTest {
 
   private static final String RESOURCE_ID = "resource-special-nested";
   private static final String ROOT_NAME = "CEDAR";
 
-  private static Neo4j neo4j;
   private static Driver driver;
 
+  /**
+   * The fixture is seeded once for the whole class and never cleared, and the unrestricted lookups
+   * and counts read every matching node. The shared graph is therefore blanked before seeding, so
+   * nothing another class left behind can reach them.
+   */
   @BeforeAll
   static void startGraph() {
-    neo4j = Neo4jBuilders.newInProcessBuilder().withDisabledServer().build();
-    driver = GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none());
+    ScratchNeo4j.blank();
+    driver = GraphDatabase.driver(ScratchNeo4j.boltURI(), AuthTokens.none());
     try (var session = driver.session()) {
       session.run("""
           CREATE (owner:User:Resource {_id: 'user-owner'})
@@ -44,6 +49,12 @@ class CypherPermissionQueryEquivalenceTest {
           CREATE (outsider:User:Resource {_id: 'user-outsider'})
           CREATE (otherOwner:User:Resource {_id: 'user-other-owner'})
           CREATE (group:Group:Resource {_id: 'group-shared'})
+          CREATE (canonicalViewer:User:Resource {_id: 'user-canonical-viewer'})
+          CREATE (canonicalManager:User:Resource {_id: 'user-canonical-manager'})
+          CREATE (canonicalViewerMember:User:Resource {_id: 'user-canonical-viewer-member'})
+          CREATE (canonicalManagerMember:User:Resource {_id: 'user-canonical-manager-member'})
+          CREATE (canonicalViewerGroup:Group:Resource {_id: 'group-canonical-viewer'})
+          CREATE (canonicalManagerGroup:Group:Resource {_id: 'group-canonical-manager'})
           CREATE (root:Folder:FileSystemResource:Resource {
             _id: 'folder-root', schema_name: 'CEDAR', schema_name_lower: 'cedar',
             nodeSortOrder: 1, isRoot: true, isOpen: true})
@@ -81,6 +92,12 @@ class CypherPermissionQueryEquivalenceTest {
           CREATE (overlap)-[:MEMBEROF]->(group)
           CREATE (group)-[:CANREAD]->(root)
           CREATE (group)-[:CANREAD]->(shared)
+          CREATE (canonicalViewer)-[:VIEWER_ROLE]->(shared)
+          CREATE (canonicalManager)-[:MANAGER_ROLE]->(shared)
+          CREATE (canonicalViewerMember)-[:MEMBEROF]->(canonicalViewerGroup)
+          CREATE (canonicalManagerMember)-[:MEMBEROF]->(canonicalManagerGroup)
+          CREATE (canonicalViewerGroup)-[:VIEWER_ROLE]->(shared)
+          CREATE (canonicalManagerGroup)-[:MANAGER_ROLE]->(shared)
           """).consume();
     }
   }
@@ -89,9 +106,6 @@ class CypherPermissionQueryEquivalenceTest {
   static void stopGraph() {
     if (driver != null) {
       driver.close();
-    }
-    if (neo4j != null) {
-      neo4j.close();
     }
   }
 
@@ -196,6 +210,25 @@ class CypherPermissionQueryEquivalenceTest {
     assertRoleEquivalent("user-manager", "MANAGER");
     assertRoleEquivalent("user-overlap", "VIEWER");
     assertRoleEquivalent("user-outsider", "VIEWER");
+  }
+
+  /**
+   * Production writes only CANREAD, EDITOR_ROLE and CANWRITE, but the role checks also accept the
+   * canonical VIEWER_ROLE and MANAGER_ROLE labels, which a planned data migration would write. Each
+   * row names one user and the answer each production role query must give for them. The canonical
+   * grants are held both directly and through a group.
+   */
+  @Test
+  void roleChecksAnswerEveryGrantLabelHeldDirectlyOrThroughAGroup() {
+    assertRoles("user-canonical-viewer", true, false, false);
+    assertRoles("user-canonical-viewer-member", true, false, false);
+    assertRoles("user-canonical-manager", true, true, true);
+    assertRoles("user-canonical-manager-member", true, true, true);
+    assertRoles("user-viewer", true, false, false);
+    assertRoles("user-editor", true, true, false);
+    assertRoles("user-manager", true, true, true);
+    assertRoles("user-owner", true, true, true);
+    assertRoles("user-outsider", false, false, false);
   }
 
   @Test
@@ -308,6 +341,16 @@ class CypherPermissionQueryEquivalenceTest {
     Map<String, Object> parameters = Map.of("userId", userId, "fsResourceId", RESOURCE_ID);
     assertEquals(rowCount(oldRoleCheck(labels), parameters) > 0,
         rowCount(replacement, parameters) > 0, userId + " " + role);
+  }
+
+  private static void assertRoles(String userId, boolean viewer, boolean editor, boolean manager) {
+    Map<String, Object> parameters = Map.of("userId", userId, "fsResourceId", RESOURCE_ID);
+    assertEquals(viewer, rowCount(CypherQueryBuilderFilesystemResourcePermission
+        .userHasViewerRoleOnFilesystemResource(), parameters) > 0, userId + " VIEWER");
+    assertEquals(editor, rowCount(CypherQueryBuilderFilesystemResourcePermission
+        .userHasEditorRoleOnFilesystemResource(), parameters) > 0, userId + " EDITOR");
+    assertEquals(manager, rowCount(CypherQueryBuilderFilesystemResourcePermission
+        .userHasManagerRoleOnFilesystemResource(), parameters) > 0, userId + " MANAGER");
   }
 
   private static Set<String> stringSet(String query, String resourceId) {

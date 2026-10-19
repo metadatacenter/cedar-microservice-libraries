@@ -2,6 +2,7 @@ package org.metadatacenter.util.test;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
@@ -53,6 +54,7 @@ import java.util.Map;
  * by the caller (the resource server flips them after creating a version); nothing recomputes
  * them.
  */
+@Tag("integration")
 public class WorkspaceCategoryAndVersionIntegrationTest {
 
   private static CedarConfig cedarConfig;

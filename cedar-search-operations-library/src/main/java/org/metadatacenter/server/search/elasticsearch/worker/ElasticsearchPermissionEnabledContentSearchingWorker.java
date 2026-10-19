@@ -1,10 +1,14 @@
 package org.metadatacenter.server.search.elasticsearch.worker;
 
+import java.util.Locale;
+
 import org.metadatacenter.model.request.ModifiedDateRange;
+import org.metadatacenter.model.request.SearchSharingFilter;
 import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.queryparser.flexible.core.QueryNodeException;
+import org.apache.lucene.queryparser.flexible.precedence.PrecedenceQueryParser;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.join.ScoreMode;
 import org.metadatacenter.config.OpensearchConfig;
@@ -83,10 +87,16 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
                                      ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                      int offset, ModifiedDateRange modified) throws CedarProcessingException {
+    return search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, modified, SearchSharingFilter.ALL);
+  }
+
+  public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
+                                     ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
+                                     int offset, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarProcessingException {
 
     try {
       SearchSourceBuilder searchSourceBuilder =
-          getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, modified);
+          getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, modified, sharing);
       SearchRequest searchRequest = new SearchRequest(indexName).source(searchSourceBuilder);
 
       // Set pagination parameters
@@ -124,12 +134,18 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
                                          ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                          int offset, ModifiedDateRange modified) throws CedarProcessingException {
+    return searchDeep(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, modified, SearchSharingFilter.ALL);
+  }
+
+  public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
+                                         ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
+                                         int offset, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarProcessingException {
     String pointInTimeId = null;
     try {
       pointInTimeId = openPointInTime();
 
       SearchSourceBuilder searchSourceBuilder = getDeepSearchSourceBuilder(rctx, query, resourceTypes, version,
-          publicationStatus, categoryId, sortList, pointInTimeId, modified);
+          publicationStatus, categoryId, sortList, pointInTimeId, modified, sharing);
       searchSourceBuilder.trackTotalHits(true);
 
       // A point in time carries the indices it was opened on, and OpenSearch rejects a request naming both.
@@ -192,6 +208,14 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                        ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
                                        String categoryId, List<String> sortList, int limit, String pointInTimeId,
                                        Object[] searchAfter, ModifiedDateRange modified) throws CedarException {
+    return searchDeepPage(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit,
+        pointInTimeId, searchAfter, modified, SearchSharingFilter.ALL);
+  }
+
+  public DeepSearchPage searchDeepPage(CedarRequestContext rctx, String query, List<String> resourceTypes,
+                                       ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                       String categoryId, List<String> sortList, int limit, String pointInTimeId,
+                                       Object[] searchAfter, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarException {
     boolean walkStarts = pointInTimeId == null;
     String walkPointInTimeId;
     try {
@@ -201,7 +225,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     }
     try {
       SearchSourceBuilder searchSourceBuilder = getDeepSearchSourceBuilder(rctx, query, resourceTypes, version,
-          publicationStatus, categoryId, sortList, walkPointInTimeId, modified);
+          publicationStatus, categoryId, sortList, walkPointInTimeId, modified, sharing);
       // Only the first page counts the result set. Every page after it is handed the total the walk
       // began with, which is also what makes the pages agree with each other.
       searchSourceBuilder.trackTotalHits(walkStarts);
@@ -246,9 +270,9 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                                          List<String> resourceTypes, ResourceVersionFilter version,
                                                          ResourcePublicationStatusFilter publicationStatus,
                                                          String categoryId, List<String> sortList,
-                                                         String pointInTimeId, ModifiedDateRange modified) throws CedarProcessingException {
+                                                         String pointInTimeId, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarProcessingException {
     SearchSourceBuilder searchSourceBuilder =
-        getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, modified);
+        getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, modified, sharing);
     // search_after resumes at a sort position, so the sort must order the hits totally. The caller's
     // sort fields do not: cid does, and appending it leaves the requested ordering intact. With no
     // caller sort the ordering is relevance, which has to be named explicitly to be sorted on.
@@ -292,7 +316,8 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                                      List<String> resourceTypes,
                                                      ResourceVersionFilter version,
                                                      ResourcePublicationStatusFilter publicationStatus,
-                                                     String categoryId, List<String> sortList, ModifiedDateRange modified) throws CedarProcessingException {
+                                                     String categoryId, List<String> sortList, ModifiedDateRange modified,
+                                                     SearchSharingFilter sharing) throws CedarProcessingException {
 
     SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
 
@@ -303,16 +328,26 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
       // Parse the query and rewrite it to query the right index fields. The whitespace analyzer divides text into
       // terms whenever it encounters any whitespace character. It does not lowercase terms.
-      QueryParser parser = new QueryParser("", new WhitespaceAnalyzer());
+      PrecedenceQueryParser parser = new PrecedenceQueryParser(new WhitespaceAnalyzer());
       try {
-        Query queryParsed = parser.parse(query);
+        Query queryParsed = parser.parse(query, "");
         mainQuery.must(rewriteQuery(queryParsed));
-      } catch (ParseException e) {
+      } catch (QueryNodeException e) {
         throw new CedarProcessingException("Error processing query: " + query, e);
       }
     }
 
     String userId = rctx.getCedarUser().getId();
+    // Constrain before counting, sorting and paging, never by filtering a returned page. Shared
+    // searches include descendants accessible through a shared folder; ownership is still excluded.
+    if (sharing == SearchSharingFilter.SHARED_WITH_EVERYBODY) {
+      mainQuery.filter(QueryBuilders.termsQuery(COMPUTED_EVERYBODY_PERMISSION,
+          NodeSharePermission.READ.getValue(), NodeSharePermission.WRITE.getValue()));
+    } else if (sharing == SearchSharingFilter.SHARED_WITH_ME) {
+      mainQuery.filter(QueryBuilders.termsQuery(USERS, accessibleRoleKeys(userId, ResourceRole.VIEWER)));
+      mainQuery.mustNot(QueryBuilders.termQuery("info.ownedBy", userId));
+      mainQuery.mustNot(QueryBuilders.existsQuery(COMPUTED_EVERYBODY_PERMISSION));
+    }
     if (!rctx.getCedarUser().has(CedarPermission.READ_NOT_READABLE_NODE)) {
       // Filter by user
       QueryBuilder userIdQuery = QueryBuilders.termsQuery(USERS, accessibleRoleKeys(userId, ResourceRole.VIEWER));
@@ -524,46 +559,40 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
       // QUERY TYPE: General (schema:name, summaryText)
       else {
         query = QueryBuilders.boolQuery();
+        // Unquoted single words are documented substring searches. Explicit wildcard patterns and
+        // quoted phrases retain their meaning in both title and description/version summary text.
+        String pattern = enclosedByQuotes(fieldValue) ? fieldValue
+            : withPrefix ? fieldValue + "*"
+            : fieldValue.contains("*") || fieldValue.contains("?") ? fieldValue
+            : "*" + QueryParser.escape(fieldValue) + "*";
         // schema:name. We use boost to give schema:name more importance
-        ((BoolQueryBuilder) query).should((QueryBuilders.queryStringQuery(fieldValue)).field(INFO_SCHEMA_NAME + ".raw").boost(10));
+        ((BoolQueryBuilder) query).should((QueryBuilders.queryStringQuery(pattern)).field(INFO_SCHEMA_NAME + ".raw").boost(10));
         // summary text
-        ((BoolQueryBuilder) query).should(QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, fieldValue));
+        ((BoolQueryBuilder) query).should(QueryBuilders.queryStringQuery(pattern).field(SUMMARY_RAW_TEXT));
       }
     }
     // QUERY TYPE: Field name/value
     else {
-      QueryBuilder infoFieldsQueryString = QueryBuilders.queryStringQuery(generateInfoFieldsQueryString(fieldName, fieldValue, withPrefix));
-      query = QueryBuilders.nestedQuery(INFO_FIELDS, infoFieldsQueryString, ScoreMode.None);
+      BoolQueryBuilder fieldQuery = QueryBuilders.boolQuery();
+      if (!ANY_STRING.equals(fieldName)) {
+        fieldQuery.must(QueryBuilders.queryStringQuery(fieldName)
+            .field(INFO_FIELDS_FIELD_NAME).field(INFO_FIELDS_FIELD_PREFERRED_LABEL));
+      }
+      if (!ANY_STRING.equals(fieldValue)) {
+        String value = enclosedByQuotes(fieldValue) ? removeEnclosingQuotes(fieldValue) : fieldValue;
+        if (value.startsWith("http%3A%2F%2F") || value.startsWith("https%3A%2F%2F")) {
+          fieldQuery.must(QueryBuilders.termQuery(INFO_FIELDS_FIELD_VALUE_URI, value));
+        } else if (!enclosedByQuotes(fieldValue) && (withPrefix || value.contains("*") || value.contains("?"))) {
+          fieldQuery.must(QueryBuilders.queryStringQuery(value + (withPrefix ? "*" : "")).field(INFO_FIELDS_FIELD_VALUE));
+        } else {
+          // Lucene represents a one-token quoted value as a TermQuery. Do not feed its text through
+          // a second query parser: email addresses and dates would become disjunctions of tokens.
+          fieldQuery.must(QueryBuilders.matchPhraseQuery(INFO_FIELDS_FIELD_VALUE, value));
+        }
+      }
+      query = QueryBuilders.nestedQuery(INFO_FIELDS, fieldQuery, ScoreMode.None);
     }
     return query;
-  }
-
-  private String generateInfoFieldsQueryString(String fieldName, String fieldValue, boolean withPrefix) throws CedarProcessingException {
-    String result;
-    // Generate field name query. Example: '(infoFields.fieldName:title1 OR infoFields.fieldName:title2)'
-    String fieldNameQueryFragment = "(".concat(INFO_FIELDS_FIELD_NAME).concat(":").concat(fieldName)
-        .concat(" OR ").concat(INFO_FIELDS_FIELD_PREFERRED_LABEL).concat(":").concat(fieldName).concat(")");
-    String infoFieldsFieldValue = INFO_FIELDS_FIELD_VALUE;
-    if (fieldValue.contains("http")) {
-      infoFieldsFieldValue = INFO_FIELDS_FIELD_VALUE_URI;
-    }
-    // Generate field value query. Example: 'infoFields.fieldValue:value1'
-    String fieldValueQueryFragment = infoFieldsFieldValue.concat(":").concat(fieldValue);
-    String andQueryFragment = " AND ";
-    if ((fieldName.compareTo(ANY_STRING) != 0) && (fieldValue.compareTo(ANY_STRING) != 0)) {
-      result = fieldNameQueryFragment.concat(andQueryFragment).concat(fieldValueQueryFragment);
-    } else if ((fieldName.compareTo(ANY_STRING) != 0) && (fieldValue.compareTo(ANY_STRING) == 0)) {
-      result = fieldNameQueryFragment;
-    } else if ((fieldName.compareTo(ANY_STRING) == 0) && (fieldValue.compareTo(ANY_STRING) != 0)) {
-      result = fieldValueQueryFragment;
-    } else { //fieldName:_any_ AND fieldValue:_any -> Return everything
-      return "*";
-    }
-
-    if (withPrefix) {
-      result = result.concat("*");
-    }
-    return result;
   }
 
   private String preprocessQuery(String query) throws CedarProcessingException {
@@ -585,7 +614,9 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
       boolean unescapedQuote = current == '"' && (i == 0 || query.charAt(i - 1) != '\\');
       if (unescapedQuote) {
         if (!insideQuotes) {
-          processedQuery.append(encodeWildcardsInUnquotedSegment(unquotedSegment.toString()));
+          // This segment ends at an opening quote, not at the end of a value. In publisher:"City",
+          // inserting the existence wildcard here would detach the phrase from its field.
+          processedQuery.append(encodeWildcardsInUnquotedSegment(unquotedSegment.toString(), processedQuery.isEmpty(), false));
           unquotedSegment.setLength(0);
         }
         processedQuery.append(current);
@@ -596,28 +627,30 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
         unquotedSegment.append(current);
       }
     }
-    processedQuery.append(encodeWildcardsInUnquotedSegment(unquotedSegment.toString()));
+    processedQuery.append(encodeWildcardsInUnquotedSegment(unquotedSegment.toString(), processedQuery.isEmpty(), true));
     return processedQuery.toString();
   }
 
-  private String encodeWildcardsInUnquotedSegment(String query) {
+  private String encodeWildcardsInUnquotedSegment(String query, boolean startOfQuery, boolean endOfQuery) {
     String processedQuery = query;
 
     /**
      * Insert a star if missing for the cases t1: and :t1
      */
-    processedQuery = processedQuery.replaceAll("^:", "*:");
+    if (startOfQuery) processedQuery = processedQuery.replaceAll("^:", "*:");
+    processedQuery = processedQuery.replace("(:", "(*:");
     processedQuery = processedQuery.replaceAll("\\s+:", " *:");
-    processedQuery = processedQuery.replaceAll(":$", ":*");
+    if (endOfQuery) processedQuery = processedQuery.replaceAll(":$", ":*");
+    processedQuery = processedQuery.replaceAll(":(?=\\))", ":*");
     processedQuery = processedQuery.replaceAll(":\\s+", ":* ");
 
 
     /**
      * Replace stars by '_any_' for the cases *:v1, f1:*, and *:*
      */
-    processedQuery = processedQuery.replaceAll("(^|\\()\\*:", ANY_STRING + ":");
-    processedQuery = processedQuery.replaceAll("\\s\\*:", ANY_STRING + " :");
-    processedQuery = processedQuery.replaceAll(":\\*($|\\()", ":" + ANY_STRING);
+    processedQuery = processedQuery.replaceAll("(^|\\()\\*:", "$1" + ANY_STRING + ":");
+    processedQuery = processedQuery.replaceAll("\\s\\*:", " " + ANY_STRING + ":");
+    processedQuery = processedQuery.replaceAll(":\\*(?=$|\\))", ":" + ANY_STRING);
     processedQuery = processedQuery.replaceAll(":\\*\\s", ":" + ANY_STRING + " ");
 
     /**
@@ -647,18 +680,29 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
         "([).!';/?:,][[:blank:]])?";
 
     Matcher matcher = Pattern.compile(URL_REGEX).matcher(query);
-    String processedQuery = query;
+    StringBuffer processedQuery = new StringBuffer();
     while (matcher.find()) {
       String matchString = query.substring(matcher.start(), matcher.end());
+      String originalMatch = matchString;
+      // A URI may contain balanced parentheses, but the closing parenthesis of the surrounding
+      // query is syntax. Encoding that delimiter both changes the URI and leaves the query open.
+      long opening = matchString.chars().filter(c -> c == '(').count();
+      long closing = matchString.chars().filter(c -> c == ')').count();
+      while (closing > opening && matchString.endsWith(")")) {
+        matchString = matchString.substring(0, matchString.length() - 1);
+        closing--;
+      }
       try {
         // Encode Url
         String replacement = URLEncoder.encode(matchString, StandardCharsets.UTF_8.toString());
-        processedQuery = processedQuery.replace(matchString, replacement);
+        matcher.appendReplacement(processedQuery, Matcher.quoteReplacement(
+            replacement + originalMatch.substring(matchString.length())));
       } catch (UnsupportedEncodingException e) {
         throw new CedarProcessingException(e);
       }
     }
-    return processedQuery;
+    matcher.appendTail(processedQuery);
+    return processedQuery.toString();
   }
 
   /**
@@ -707,7 +751,7 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
    */
   private String preprocessPossibleValuesQuery(String query) {
     // Convert to lower case [PV] -> [pv]
-    query = query.replace(POSSIBLE_VALUES_PREFIX.toUpperCase(), POSSIBLE_VALUES_PREFIX);
+    query = query.replace(POSSIBLE_VALUES_PREFIX.toUpperCase(Locale.ROOT), POSSIBLE_VALUES_PREFIX);
     if (query.contains(POSSIBLE_VALUES_PREFIX)) {
       // Translates [pv]"Not available" -> "[pv]Not available", so that the query is not identified as a boolean query
       // Also [pv]="Not available" -> "[pv]=Not available"

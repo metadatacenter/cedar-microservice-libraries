@@ -2,6 +2,7 @@ package org.metadatacenter.util.test;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
@@ -43,6 +44,7 @@ import java.util.Map;
  * <p>Running against embedded Neo4j is the point: these are Cypher traversals, and an assertion on a
  * mocked session would not notice a clause that matches nothing, matches too much, or fails to parse.
  */
+@Tag("integration")
 public class MaterializedPermissionIntegrationTest {
 
   private static CedarConfig cedarConfig;

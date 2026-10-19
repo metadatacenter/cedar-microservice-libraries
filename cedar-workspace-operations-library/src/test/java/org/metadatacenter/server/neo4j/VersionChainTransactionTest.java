@@ -4,20 +4,19 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.neo4j.driver.*;
-import org.neo4j.harness.*;
 import java.util.*;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+@Tag("integration")
 class VersionChainTransactionTest {
-  static Neo4j neo;
   static Driver driver;
   @BeforeAll static void start() {
-    neo=Neo4jBuilders.newInProcessBuilder().withDisabledServer().build();
-    driver=GraphDatabase.driver(neo.boltURI(),AuthTokens.none());
+    ScratchNeo4j.blank();
+    driver=GraphDatabase.driver(ScratchNeo4j.boltURI(),AuthTokens.none());
     VersionChainTransaction.initialize(driver);
   }
-  @AfterAll static void stop() { driver.close(); neo.close(); }
+  @AfterAll static void stop() { driver.close(); }
   @BeforeEach void clear() {
     try(var s=driver.session()) { s.run("MATCH (n) WHERE NOT n:CedarVersionLock DETACH DELETE n").consume(); }
   }

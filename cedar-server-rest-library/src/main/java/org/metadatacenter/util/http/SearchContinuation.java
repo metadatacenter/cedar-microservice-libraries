@@ -1,6 +1,7 @@
 package org.metadatacenter.util.http;
 
 import org.metadatacenter.model.request.ModifiedDateRange;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -131,7 +132,10 @@ public final class SearchContinuation {
     SearchContinuation continuation;
     try {
       byte[] json = Base64.getUrlDecoder().decode(value);
-      continuation = JsonMapper.STRICT_MAPPER.readValue(json, SearchContinuation.class);
+      // OpenSearch emits IEEE-754 scores and rejects BigDecimal in search_after.
+      // This protocol-only reader retains those native sort values; artifact parsing stays exact.
+      continuation = JsonMapper.STRICT_MAPPER.readerFor(SearchContinuation.class)
+          .without(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readValue(json);
     } catch (IllegalArgumentException | IOException e) {
       throw refuse("The continuation is not a token this server issued!");
     }

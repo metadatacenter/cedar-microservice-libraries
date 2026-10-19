@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * The aggregation engine. Each {@code @UnitOfWork} method is one DB transaction, so a batch's rollup
@@ -141,30 +142,30 @@ public class LogAggregationService {
    * rollups, and mark the batch's raw rows {@code aggregatedAt} — all in this one transaction, so a
    * crash rolls the whole batch back (rows stay unmarked, deltas undone) for clean reprocessing.
    *
-   * @return rows read this batch; 0 means the day is fully aggregated
+   * @return rows owned by this batch; 0 means no complete, unlocked rows were available
    */
   @UnitOfWork
   public long aggregateLiveRequestBatch(Instant dayStart, Instant dayEnd, int batchSize) {
     RollupAccumulators acc = new RollupAccumulators();
-    long[] res = rollupDAO.foldLiveRequestBatch(acc, dayStart, dayEnd, batchSize);
-    if (res[0] == 0) {
+    List<Long> ids = rollupDAO.foldLiveRequestBatch(acc, dayStart, dayEnd, batchSize);
+    if (ids.isEmpty()) {
       return 0;
     }
     rollupDAO.flush(acc);
-    rollupDAO.markLiveRequestRows(dayStart, dayEnd, res[1], Instant.now());
-    return res[0];
+    rollupDAO.markLiveRequestRows(ids, Instant.now());
+    return ids.size();
   }
 
   @UnitOfWork
   public long aggregateLiveCypherBatch(Instant dayStart, Instant dayEnd, int batchSize) {
     RollupAccumulators acc = new RollupAccumulators();
-    long[] res = rollupDAO.foldLiveCypherBatch(acc, dayStart, dayEnd, batchSize);
-    if (res[0] == 0) {
+    List<Long> ids = rollupDAO.foldLiveCypherBatch(acc, dayStart, dayEnd, batchSize);
+    if (ids.isEmpty()) {
       return 0;
     }
     rollupDAO.flush(acc);
-    rollupDAO.markLiveCypherRows(dayStart, dayEnd, res[1], Instant.now());
-    return res[0];
+    rollupDAO.markLiveCypherRows(ids, Instant.now());
+    return ids.size();
   }
 
   // ---- prune (deletes only rows that are aggregated AND past retention) ---------------------------

@@ -1,5 +1,7 @@
 package org.metadatacenter.server.neo4j.cypher.parameter;
 
+import java.util.Locale;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.constant.CedarConstants;
 import org.metadatacenter.id.CedarGroupId;
@@ -25,7 +27,7 @@ public class CypherParamBuilderGroup extends AbstractCypherParamBuilder {
     CypherParameters params = new CypherParameters();
     params.put(NodeProperty.ID, groupURL);
     params.put(NodeProperty.NAME, name);
-    params.put(NodeProperty.NAME_LOWER, name.toLowerCase());
+    params.put(NodeProperty.NAME_LOWER, name.toLowerCase(Locale.ROOT));
     params.put(NodeProperty.DESCRIPTION, description);
     params.put(NodeProperty.CREATED_BY, ownerId);
     params.put(NodeProperty.CREATED_ON, nowString);
@@ -43,7 +45,7 @@ public class CypherParamBuilderGroup extends AbstractCypherParamBuilder {
     CypherParameters params = new CypherParameters();
     // Lowercased to match the NAME_LOWER property the query looks at. A null name matches no node,
     // which is the right answer to "is this name taken".
-    params.put(ParameterPlaceholder.NAME, groupName == null ? null : groupName.toLowerCase());
+    params.put(ParameterPlaceholder.NAME, groupName == null ? null : groupName.toLowerCase(Locale.ROOT));
     return params;
   }
 

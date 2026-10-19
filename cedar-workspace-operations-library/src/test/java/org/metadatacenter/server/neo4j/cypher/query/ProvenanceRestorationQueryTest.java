@@ -1,26 +1,26 @@
 package org.metadatacenter.server.neo4j.cypher.query;
 
 import org.junit.jupiter.api.*;
+import org.metadatacenter.server.neo4j.ScratchNeo4j;
 import org.neo4j.driver.*;
-import org.neo4j.harness.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Proves the exact prepared operator query on Neo4j without touching an application artifact. */
+@Tag("integration")
 class ProvenanceRestorationQueryTest {
-  static Neo4j neo;
   static Driver database;
   static String query;
   @BeforeAll static void start() throws Exception {
-    neo = Neo4jBuilders.newInProcessBuilder().withDisabledServer().build();
-    database = GraphDatabase.driver(neo.boltURI(), AuthTokens.none());
+    ScratchNeo4j.blank();
+    database = GraphDatabase.driver(ScratchNeo4j.boltURI(), AuthTokens.none());
     try (var resource = ProvenanceRestorationQueryTest.class.getResourceAsStream(
         "/org/metadatacenter/server/restore-artifact-provenance.cypher")) {
       assertNotNull(resource); query = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
     }
   }
-  @AfterAll static void stop() { database.close(); neo.close(); }
+  @AfterAll static void stop() { database.close(); }
   @BeforeEach void seed() {
     try (var session = database.session()) {
       session.run("MATCH (n) DETACH DELETE n").consume();

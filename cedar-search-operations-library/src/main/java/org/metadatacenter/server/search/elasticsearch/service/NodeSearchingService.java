@@ -1,6 +1,7 @@
 package org.metadatacenter.server.search.elasticsearch.service;
 
 import org.metadatacenter.model.request.ModifiedDateRange;
+import org.metadatacenter.model.request.SearchSharingFilter;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.OpensearchConfig;
@@ -134,9 +135,17 @@ public class NodeSearchingService extends AbstractSearchingService {
   public FolderServerNodeListResponse search(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
                                              ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
                                              List<String> sortList, int limit, int offset, String absoluteUrl, ModifiedDateRange modified) throws CedarProcessingException {
+    return search(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
+        absoluteUrl, modified, SearchSharingFilter.ALL);
+  }
+
+  public FolderServerNodeListResponse search(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
+                                             ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
+                                             List<String> sortList, int limit, int offset, String absoluteUrl, ModifiedDateRange modified,
+                                             SearchSharingFilter sharing) throws CedarProcessingException {
     try {
       SearchResponseResult searchResult = permissionEnabledSearchWorker.search(rctx, query, resourceTypes, version, publicationStatus, categoryId,
-          sortList, limit, offset, modified);
+          sortList, limit, offset, modified, sharing);
       FolderServerNodeListResponse response = assembleResponse(rctx, searchResult, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
           absoluteUrl);
       response.getRequest().setModified(modified);
@@ -175,9 +184,17 @@ public class NodeSearchingService extends AbstractSearchingService {
   public FolderServerNodeListResponse searchDeep(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
                                                  ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
                                                  String categoryId, List<String> sortList, int limit, int offset, String absoluteUrl, ModifiedDateRange modified) throws CedarProcessingException {
+    return searchDeep(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
+        absoluteUrl, modified, SearchSharingFilter.ALL);
+  }
+
+  public FolderServerNodeListResponse searchDeep(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
+                                                 ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                                 String categoryId, List<String> sortList, int limit, int offset, String absoluteUrl, ModifiedDateRange modified,
+                                                 SearchSharingFilter sharing) throws CedarProcessingException {
     try {
       SearchResponseResult searchResult = permissionEnabledSearchWorker.searchDeep(rctx, query, resourceTypes, version, publicationStatus,
-          categoryId, sortList, limit, offset, modified);
+          categoryId, sortList, limit, offset, modified, sharing);
       FolderServerNodeListResponse response = assembleResponse(rctx, searchResult, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
           absoluteUrl);
       response.getRequest().setModified(modified);
@@ -207,9 +224,18 @@ public class NodeSearchingService extends AbstractSearchingService {
                                                String categoryId, List<String> sortList, int limit, long rowsSeen,
                                                long knownTotalCount, String pointInTimeId, Object[] searchAfter,
                                                String absoluteUrl, ModifiedDateRange modified) throws CedarException {
+    return searchDeepPage(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit,
+        rowsSeen, knownTotalCount, pointInTimeId, searchAfter, absoluteUrl, modified, SearchSharingFilter.ALL);
+  }
+
+  public DeepSearchPageResponse searchDeepPage(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
+                                               ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
+                                               String categoryId, List<String> sortList, int limit, long rowsSeen,
+                                               long knownTotalCount, String pointInTimeId, Object[] searchAfter,
+                                               String absoluteUrl, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarException {
     try {
       DeepSearchPage page = permissionEnabledSearchWorker.searchDeepPage(rctx, query, resourceTypes, version,
-          publicationStatus, categoryId, sortList, limit, pointInTimeId, searchAfter, modified);
+          publicationStatus, categoryId, sortList, limit, pointInTimeId, searchAfter, modified, sharing);
       SearchResponseResult result = page.result();
       if (pointInTimeId != null) {
         result.setTotalCount(knownTotalCount);

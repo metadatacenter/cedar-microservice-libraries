@@ -7,6 +7,7 @@ import io.dropwizard.core.setup.Environment;
 import io.dropwizard.testing.DropwizardTestSupport;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Response;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.cedar.util.dw.ratelimit.*;
 import org.metadatacenter.config.*;
@@ -25,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real Jetty/Jersey request injection, authentication, quota admission and exception mapping. */
+@Tag("integration")
 class UserQuotaHttpTest {
   static int redisPort;
   static AtomicInteger mutations = new AtomicInteger();

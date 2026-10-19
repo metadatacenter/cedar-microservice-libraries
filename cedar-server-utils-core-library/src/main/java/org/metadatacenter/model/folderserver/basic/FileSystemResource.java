@@ -19,7 +19,7 @@ import java.util.List;
 
 @JsonTypeInfo(
     use = JsonTypeInfo.Id.NAME,
-    include = JsonTypeInfo.As.PROPERTY,
+    include = JsonTypeInfo.As.EXISTING_PROPERTY,
     property = "resourceType")
 @JsonSubTypes({
     @JsonSubTypes.Type(value = FolderServerFolder.class, name = CedarResourceType.Types.FOLDER),

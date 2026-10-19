@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.metadatacenter.config.CacheServerPersistent;
@@ -30,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * is that a whole batch comes back in one poll, in order, and that the queue is left empty.
  */
 @Timeout(30)
+@Tag("integration")
 class ValuerecommenderReindexQueueServiceTest {
 
   private static final String TEMPLATE_IRI = "https://repo.metadatacenter.orgx/templates/template-1";
