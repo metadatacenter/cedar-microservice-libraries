@@ -33,16 +33,6 @@
       <artifactId>jackson-databind</artifactId>
     </dependency>
 
-    <dependency>
-      <groupId>com.fasterxml.jackson.datatype</groupId>
-      <artifactId>jackson-datatype-jsr310</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>org.mongodb</groupId>
-      <artifactId>mongodb-driver-sync</artifactId>
-    </dependency>
-
     <!--
       ApiKeyLookupCache is a plain in-memory structure, and the service's use of it is checked
       against a stubbed graph proxy, so neither needs a database. Versions come from cedar-parent.

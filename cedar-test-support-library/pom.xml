@@ -78,9 +78,11 @@
     </dependency>
 
     <!--
-      A transitive dependency of the server stack pins the ancient JNA 4.2.1, whose native
-      library lacks an arm64 slice; the embedded Neo4j needs a JNA that runs on Apple Silicon.
-      Declared here so consumers inherit the working version on their test classpath.
+      The embedded Neo4j loads native code through JNA and needs a release with an arm64 library
+      for Apple silicon. cedar-parent manages that version on every path, so this declaration
+      makes the dependency explicit rather than choosing a version. Jetty's setuid helper also
+      brings jna-jpms, a second copy of the same classes, so leave this in place unless the
+      embedded-database suites prove otherwise on Apple silicon and in CI.
     -->
     <dependency>
       <groupId>net.java.dev.jna</groupId>

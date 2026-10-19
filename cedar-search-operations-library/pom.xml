@@ -60,11 +60,6 @@
       <artifactId>jackson-databind</artifactId>
     </dependency>
 
-    <dependency>
-      <groupId>org.apache.httpcomponents.client5</groupId>
-      <artifactId>httpclient5</artifactId>
-    </dependency>
-
     <!-- ElasticsearchManagementService names org.apache.http.HttpHost, which is HttpClient 4 and
          reaches us through the OpenSearch client below rather than through anything we chose.
          Declared so the compile dependency is visible here instead of resting on OpenSearch's
