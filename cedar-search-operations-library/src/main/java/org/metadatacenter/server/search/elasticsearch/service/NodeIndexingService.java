@@ -56,8 +56,9 @@ public class NodeIndexingService extends AbstractIndexingService {
   NodeIndexingService(CedarConfig cedarConfig, String indexName, RestHighLevelClient client) {
     Map<String, String> environment = CedarEnvironmentVariableProvider.getFor(SystemComponent.SERVER_RESOURCE);
 
-    nciCADSRValueSetsOntologyFilePath = environment.get(CedarEnvironmentVariable.CEDAR_CADSR_ONTOLOGIES_FOLDER.getName())
-        + "/" + OntologyAndValueSetConstants.CADSR_VALUE_SETS_ONTOLOGY_FILE;
+    String ontologyFolder = environment.get(CedarEnvironmentVariable.CEDAR_CADSR_ONTOLOGIES_FOLDER.getName());
+    nciCADSRValueSetsOntologyFilePath = ontologyFolder == null || ontologyFolder.isBlank() ? null
+        : java.nio.file.Path.of(ontologyFolder, OntologyAndValueSetConstants.CADSR_VALUE_SETS_ONTOLOGY_FILE).toString();
 
     indexWorker = new ElasticsearchIndexingWorker(indexName, client);
     instanceContentExtractor = new TemplateInstanceContentExtractor(cedarConfig);
@@ -156,41 +157,10 @@ public class NodeIndexingService extends AbstractIndexingService {
 
     if (node.getType().equals(CedarResourceType.FIELD)) {
       List<String> valueSetURIs = instanceContentExtractor.generateValueSetsURIs(node, requestContext);
-      Set<String> valueLabels = new HashSet<>();
-      Set<String> valueConcepts = new HashSet<>();
-
-      for (String valueSetURI : valueSetURIs) {
-        Set<String> valueSetValueURIs = ValueSetsExtractor.getInstance().getSubClassURIs(valueSetURI);
-
-        for (String valueSetValueURI : valueSetValueURIs) {
-          // Extract value labels (both prefLabel and notation) and add them to the set
-          Optional<String> valueLabel = ValueSetsExtractor.getInstance().getAnnotation(valueSetValueURI, ValueSetsExtractor.Annotation.LABEL);
-          if (valueLabel.isPresent()) {
-            valueLabels.add(valueLabel.get());
-          }
-          Optional<String> valueNotation = ValueSetsExtractor.getInstance().getAnnotation(valueSetValueURI, ValueSetsExtractor.Annotation.NOTATION);
-          if (valueNotation.isPresent()) {
-            if (!valueLabel.isPresent() || (valueLabel.isPresent() && !valueLabel.get().equalsIgnoreCase(valueNotation.get()))) {
-              valueLabels.add(valueNotation.get());
-            }
-          }
-
-          Optional<String> valueConcept = ValueSetsExtractor.getInstance().getAnnotation(valueSetValueURI, ValueSetsExtractor.Annotation.RELATED_MATCH);
-          if (valueConcept.isPresent()) { // We store only the fragment of the value concept URI
-            String valueConceptURI = valueConcept.get();
-            String[] components = valueConceptURI.split("#", 2);
-            if (components.length == 2) {
-              String namespace = components[0];
-              String fragment = components[1];
-              if (!fragment.isEmpty()) {
-                valueConcepts.add(fragment);
-              }
-            }
-          }
-        }
-      }
-      if (!valueLabels.isEmpty() || !valueConcepts.isEmpty()) {
-        ir.setPossibleValues(new PossibleValues(valueLabels, valueConcepts));
+      PossibleValues possibleValues = ValueSetsExtractor.getInstance()
+          .extractPossibleValues(valueSetURIs, nciCADSRValueSetsOntologyFilePath);
+      if (!possibleValues.getValueLabels().isEmpty() || !possibleValues.getValueConcepts().isEmpty()) {
+        ir.setPossibleValues(possibleValues);
       }
     }
     return ir;
