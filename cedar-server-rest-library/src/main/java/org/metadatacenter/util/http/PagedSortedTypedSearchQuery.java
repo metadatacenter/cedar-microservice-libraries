@@ -179,6 +179,10 @@ public class PagedSortedTypedSearchQuery extends PagedSortedTypedQuery {
   protected void validateResourceTypesWithTemplateId() throws CedarException {
     validateTemplateId();
     if (isBasedOn != null) {
+      if (q != null) {
+        throw new CedarAssertionException("Combine 'is_based_on' with filters, not a text query; 'q' and 'is_based_on' cannot be used together.")
+            .badRequest().parameter("q", q).parameter("is_based_on", isBasedOn);
+      }
       if (resourceTypesInput.isPresent()) {
         throw new CedarAssertionException(
             "You must not specify 'resource_types' if the 'is_based_on' is specified!")

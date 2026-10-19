@@ -50,6 +50,15 @@ class PagedQueryValidationTest {
   }
 
   @ParameterizedTest
+  @ValueSource(strings = {"Sex:Male", "*"})
+  void templateSelectorCannotBeDiscardedByAQuery(String text) {
+    CedarAssertionException error = assertThrows(CedarAssertionException.class,
+        () -> new PagedSortedTypedSearchQuery(config).q(Optional.of(text))
+            .isBasedOn(Optional.of("https://repo.example/templates/example")).validate());
+    assertBadRequest(error);
+  }
+
+  @ParameterizedTest
   @ValueSource(ints = {1, 25, 99, 100})
   void acceptsPositiveLimitsThroughConfiguredMaximum(int limit) throws Exception {
     PagedQuery query = new PagedQuery(config).limit(Optional.of(limit));

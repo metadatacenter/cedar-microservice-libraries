@@ -271,13 +271,6 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
                                                          String pointInTimeId, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarProcessingException {
     SearchSourceBuilder searchSourceBuilder =
         getSearchSourceBuilder(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, modified, sharing);
-    // search_after resumes at a sort position, so the sort must order the hits totally. The caller's
-    // sort fields do not: cid does, and appending it leaves the requested ordering intact. With no
-    // caller sort the ordering is relevance, which has to be named explicitly to be sorted on.
-    if (searchSourceBuilder.sorts() == null || searchSourceBuilder.sorts().isEmpty()) {
-      searchSourceBuilder.sort(SortBuilders.scoreSort());
-    }
-    searchSourceBuilder.sort(SortBuilders.fieldSort(DOCUMENT_CEDAR_ID).order(SortOrder.ASC));
     searchSourceBuilder.pointInTimeBuilder(new PointInTimeBuilder(pointInTimeId).setKeepAlive(pointInTimeKeepAlive));
     return searchSourceBuilder;
   }
@@ -439,6 +432,12 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
         }
       }
     }
+    // Use the same total ordering for ordinary pages and search_after. Equal names or
+    // timestamps must not move between pages or change order when switching endpoints.
+    if (searchSourceBuilder.sorts() == null || searchSourceBuilder.sorts().isEmpty()) {
+      searchSourceBuilder.sort(SortBuilders.scoreSort());
+    }
+    searchSourceBuilder.sort(SortBuilders.fieldSort(DOCUMENT_CEDAR_ID).order(SortOrder.ASC));
     return searchSourceBuilder;
   }
 
