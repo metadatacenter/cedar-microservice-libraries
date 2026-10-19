@@ -1,7 +1,5 @@
 package org.metadatacenter.util.http;
 
-import org.apache.hc.core5.http.NameValuePair;
-import org.apache.hc.core5.net.URIBuilder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -123,6 +121,24 @@ class LinkHeaderUtilTest {
     }
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"Sex:Male AND Sex:Female", "\"Dried blood spot\"", "C++ & café", "rad\\*"})
+  void followsOffsetAndContinuationLinksWithoutChangingTheSearchExpression(String expression) throws Exception {
+    String encoded = java.net.URLEncoder.encode(expression, java.nio.charset.StandardCharsets.UTF_8);
+    for (String query : List.of(encoded, encoded.replace("+", "%20"))) {
+      String base = "https://resource.example/search-deep?q=" + query + "&limit=3";
+      for (String link : LinkHeaderUtil.getPagingLinkHeaders(base, 20L, 3, 3).values()) {
+        assertEquals(List.of(expression), values(link, "q"));
+        for (String next : LinkHeaderUtil.getPagingLinkHeaders(link, 20L, 3, 6).values())
+          assertEquals(List.of(expression), values(next, "q"));
+      }
+      for (String link : LinkHeaderUtil.getContinuationLinkHeaders(base, 3, "token+/%=").values())
+        assertEquals(List.of(expression), values(link, "q"));
+      assertEquals(List.of("token+/%="), values(
+          LinkHeaderUtil.getContinuationLinkHeaders(base, 3, "token+/%=").get("next"), "continuation"));
+    }
+  }
+
   private static void assertOptionalOffset(Map<String, String> links, String relation, Long expected) throws Exception {
     if (expected == null) {
       assertFalse(links.containsKey(relation));
@@ -136,9 +152,11 @@ class LinkHeaderUtilTest {
   }
 
   private static List<String> values(String uri, String name) throws Exception {
-    return new URIBuilder(uri).getQueryParams().stream()
-        .filter(p -> name.equals(p.getName()))
-        .map(NameValuePair::getValue)
+    // Decode independently of the builder under test, with HTTP query/form semantics.
+    return java.util.Arrays.stream(URI.create(uri).getRawQuery().split("&"))
+        .map(pair -> pair.split("=", 2))
+        .filter(pair -> name.equals(java.net.URLDecoder.decode(pair[0], java.nio.charset.StandardCharsets.UTF_8)))
+        .map(pair -> java.net.URLDecoder.decode(pair[1], java.nio.charset.StandardCharsets.UTF_8))
         .toList();
   }
 }

@@ -83,7 +83,8 @@ public final class LinkHeaderUtil {
 
   private static String createOneContinuationLink(String baseUrl, Integer limit, String continuation) {
     try {
-      URIBuilder ub = new URIBuilder(baseUrl);
+      // JAX-RS encodes query spaces as +; HttpCore 5 otherwise reads them as literal plus.
+      URIBuilder ub = new URIBuilder(baseUrl, StandardCharsets.UTF_8).setPlusAsBlank(true);
       ub.setParameter(PARAM_CONTINUATION, continuation);
       if (limit != null) {
         ub.setParameter(PARAM_LIMIT, String.valueOf(limit));
@@ -113,7 +114,8 @@ public final class LinkHeaderUtil {
   private static URI createOnePagingLink(String baseUrl, long offset, long limit) {
     URI uri = null;
     try {
-      URIBuilder ub = new URIBuilder(baseUrl);
+      // JAX-RS encodes query spaces as +; HttpCore 5 otherwise reads them as literal plus.
+      URIBuilder ub = new URIBuilder(baseUrl, StandardCharsets.UTF_8).setPlusAsBlank(true);
       ub.setParameter(PARAM_OFFSET, String.valueOf(offset));
       ub.setParameter(PARAM_LIMIT, String.valueOf(limit));
       ub.setCharset(StandardCharsets.UTF_8);
