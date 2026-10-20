@@ -75,7 +75,7 @@ public class LogAggregationService {
     }
     rollupDAO.flush(acc);
     s.setCursorId(res[1]);
-    s.setRowsIn(s.getRowsIn() + rowsRead);
+    s.setRowsIn(s.getRowsIn() + res[2]);
     s.setRowsOut(s.getRowsOut() + acc.requests.size() + acc.users.size());
     stateDAO.save(s);
     return rowsRead;
@@ -93,16 +93,16 @@ public class LogAggregationService {
     }
     rollupDAO.flush(acc);
     s.setCursorId(res[1]);
-    s.setRowsIn(s.getRowsIn() + rowsRead);
+    s.setRowsIn(s.getRowsIn() + res[2]);
     s.setRowsOut(s.getRowsOut() + acc.cyphers.size());
     stateDAO.save(s);
     return rowsRead;
   }
 
   /**
-   * Verify row-count parity and mark the source ready to drop. We compare rows read against the live
-   * source count; a small shortfall from rows with no timestamp (unbucketable, skipped) is logged, not
-   * failed. The actual DROP stays a deliberate manual step — never automatic.
+   * Verify row-count parity and mark the source ready to drop. We compare rows aggregated against the
+   * live source count; a small shortfall from rows with no timestamp (unbucketable, skipped) is logged,
+   * not failed. The actual DROP stays a deliberate manual step — never automatic.
    */
   @UnitOfWork
   public void markBackfillComplete(String sourceTable) {

@@ -127,13 +127,15 @@ public class AggregationRollupDAO extends AbstractDAO<AggRequestHourly> {
   /**
    * Read a batch of frozen request rows and fold them into {@code acc}.
    *
-   * @return {@code {rowsRead, maxIdInBatch}}; {@code maxIdInBatch == fromId} when nothing was read.
+   * @return {@code {rowsRead, maxIdInBatch, rowsFolded}}; {@code maxIdInBatch == fromId} when nothing was read. A
+   * row without a timestamp is read but not folded, since no hour bucket can hold it.
    */
   @SuppressWarnings("unchecked")
   public long[] foldHistoricalRequestBatch(RollupAccumulators acc, long fromId, int limit) {
     List<Object[]> rows = currentSession().createNativeQuery(SELECT_HIST_REQUEST)
         .setParameter("fromId", fromId).setParameter("lim", limit).getResultList();
     long maxId = fromId;
+    long folded = 0;
     for (Object[] r : rows) {
       long id = num(r[0]);
       maxId = Math.max(maxId, id);
@@ -155,15 +157,18 @@ public class AggregationRollupDAO extends AbstractDAO<AggRequestHourly> {
       String statusClass = hasError ? "err" : "unknown";
       acc.foldRequest(when, component, className, methodName, httpMethod, statusClass, authSource,
           userId, null, handlerNanos, preNanos, hasError, path);
+      folded++;
     }
-    return new long[]{rows.size(), maxId};
+    return new long[]{rows.size(), maxId, folded};
   }
 
+  /** The Cypher counterpart of {@link #foldHistoricalRequestBatch}, with the same result. */
   @SuppressWarnings("unchecked")
   public long[] foldHistoricalCypherBatch(RollupAccumulators acc, long fromId, int limit) {
     List<Object[]> rows = currentSession().createNativeQuery(SELECT_HIST_CYPHER)
         .setParameter("fromId", fromId).setParameter("lim", limit).getResultList();
     long maxId = fromId;
+    long folded = 0;
     for (Object[] r : rows) {
       long id = num(r[0]);
       maxId = Math.max(maxId, id);
@@ -181,8 +186,9 @@ public class AggregationRollupDAO extends AbstractDAO<AggRequestHourly> {
       }
       acc.foldCypher(when, component, operation, runnableHash, nanos, runnable, interpolated,
           className, methodName);
+      folded++;
     }
-    return new long[]{rows.size(), maxId};
+    return new long[]{rows.size(), maxId, folded};
   }
 
   // ---- live path (current tables, per settled UTC day) ------------------------------------------

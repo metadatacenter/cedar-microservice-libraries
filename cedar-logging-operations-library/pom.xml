@@ -15,8 +15,8 @@
   <name>CEDAR Logging Operations Library</name>
 
   <properties>
-    <!-- Line coverage measured on 2026-10-19: 36.7%. The build fails below this floor. -->
-    <cedar.coverage.line.minimum>0.34</cedar.coverage.line.minimum>
+    <!-- Line coverage measured on 2026-10-19: 86.5%. The build fails below this floor. -->
+    <cedar.coverage.line.minimum>0.84</cedar.coverage.line.minimum>
   </properties>
 
   <dependencies>
@@ -62,6 +62,75 @@
       <scope>test</scope>
     </dependency>
 
+    <!--
+      The DAOs run native SQL written for the log database, so their tests run it against an
+      in-process MariaDB through the driver the servers use. The test support library has the same
+      fixture, but it depends on this library.
+    -->
+    <dependency>
+      <groupId>ch.vorburger.mariaDB4j</groupId>
+      <artifactId>mariaDB4j</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>com.mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <scope>test</scope>
+    </dependency>
+
   </dependencies>
+
+  <!-- The embedded MariaDB's platform binaries come from an OS-activated profile, since profiles do not travel with
+       dependencies. -->
+  <profiles>
+    <profile>
+      <id>embedded-mariadb-mac-arm64</id>
+      <activation>
+        <os>
+          <family>mac</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>ch.vorburger.mariaDB4j</groupId>
+          <artifactId>mariaDB4j-db-macos-arm64</artifactId>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>embedded-mariadb-linux64</id>
+      <activation>
+        <os>
+          <name>Linux</name>
+          <arch>amd64</arch>
+        </os>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>ch.vorburger.mariaDB4j</groupId>
+          <artifactId>mariaDB4j-db-linux64</artifactId>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>embedded-mariadb-winx64</id>
+      <activation>
+        <os>
+          <family>windows</family>
+        </os>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>ch.vorburger.mariaDB4j</groupId>
+          <artifactId>mariaDB4j-db-winx64</artifactId>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 
 </project>
