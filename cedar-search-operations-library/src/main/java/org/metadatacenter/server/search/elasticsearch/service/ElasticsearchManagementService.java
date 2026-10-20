@@ -143,7 +143,7 @@ public class ElasticsearchManagementService {
       } else {
         log.info("The index " + indexName + " has been created");
       }
-    } catch (IOException e) {
+    } catch (IOException | OpenSearchStatusException e) {
       throw new CedarProcessingException("Error creating the index " + indexName, e);
     }
   }
@@ -152,7 +152,7 @@ public class ElasticsearchManagementService {
     GetIndexRequest request = new GetIndexRequest(indexName);
     try {
       return getClient().indices().exists(request, RequestOptions.DEFAULT);
-    } catch (IOException e) {
+    } catch (IOException | OpenSearchStatusException e) {
       log.error("Error checking if index exists: " + indexName, e);
       return false;
     }
@@ -168,7 +168,7 @@ public class ElasticsearchManagementService {
         log.info("The index '" + indexName + "' has been deleted");
         return true;
       }
-    } catch (IOException e) {
+    } catch (IOException | OpenSearchStatusException e) {
       throw new CedarProcessingException("Error deleting index '" + indexName + "'", e);
     }
   }
@@ -188,7 +188,7 @@ public class ElasticsearchManagementService {
         log.info("The alias '" + aliasName + "' has been added to index '" + indexName + "'");
         return true;
       }
-    } catch (IOException e) {
+    } catch (IOException | OpenSearchStatusException e) {
       throw new CedarProcessingException("Error adding alias '" + aliasName + "' to index '" + indexName + "'", e);
     }
   }
@@ -215,7 +215,7 @@ public class ElasticsearchManagementService {
       }
       log.info("The alias '" + aliasName + "' now points to index '" + indexName + "'");
       return true;
-    } catch (IOException e) {
+    } catch (IOException | OpenSearchStatusException e) {
       throw new CedarProcessingException(
           "Error replacing alias '" + aliasName + "' with index '" + indexName + "'", e);
     }
@@ -231,7 +231,7 @@ public class ElasticsearchManagementService {
                 + response.getFailedShards() + " shard(s) failed");
       }
       log.info("The index '" + indexName + "' has been refreshed");
-    } catch (IOException e) {
+    } catch (IOException | OpenSearchStatusException e) {
       throw new CedarProcessingException("Error refreshing index '" + indexName + "'", e);
     }
   }
@@ -245,7 +245,7 @@ public class ElasticsearchManagementService {
                 + response.getFailedShards() + " shard(s) failed");
       }
       return response.getCount();
-    } catch (IOException e) {
+    } catch (IOException | OpenSearchStatusException e) {
       throw new CedarProcessingException("Error counting documents in index '" + indexName + "'", e);
     }
   }
@@ -265,7 +265,7 @@ public class ElasticsearchManagementService {
         log.info("The alias '" + aliasName + "' has been removed from the index '" + indexName + "'");
         return true;
       }
-    } catch (IOException e) {
+    } catch (IOException | OpenSearchStatusException e) {
       throw new CedarProcessingException("Error removing alias '" + aliasName + "' from index '" + indexName + "'", e);
     }
   }

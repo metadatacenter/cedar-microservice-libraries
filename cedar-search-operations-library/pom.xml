@@ -15,8 +15,8 @@
   <name>CEDAR Search Operations Library</name>
 
   <properties>
-    <!-- Line coverage measured on 2026-10-19: 63.8%. The build fails below this floor. -->
-    <cedar.coverage.line.minimum>0.61</cedar.coverage.line.minimum>
+    <!-- Line coverage measured on 2026-10-19: 69.9%. The build fails below this floor. -->
+    <cedar.coverage.line.minimum>0.67</cedar.coverage.line.minimum>
   </properties>
 
   <dependencies>
