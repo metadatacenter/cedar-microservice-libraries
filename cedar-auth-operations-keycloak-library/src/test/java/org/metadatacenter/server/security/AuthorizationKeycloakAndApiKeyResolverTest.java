@@ -1,8 +1,11 @@
 package org.metadatacenter.server.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
 import jakarta.servlet.http.HttpServletRequest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.keycloak.adapters.KeycloakDeployment;
 import org.keycloak.adapters.rotation.HardcodedPublicKeyLocator;
@@ -25,6 +28,10 @@ import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.CedarUserAuthSource;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Proxy;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -43,6 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * it; any other bad token is invalid. Either way the caller must be a known user, and an operation then requires the
  * user to hold its permission.
  */
+@Tag("integration")
 class AuthorizationKeycloakAndApiKeyResolverTest {
 
   private static final String USERS_BASE = "https://metadatacenter.org/users/";
@@ -56,14 +64,33 @@ class AuthorizationKeycloakAndApiKeyResolverTest {
   private AuthorizationKeycloakAndApiKeyResolver resolver;
   private CedarUser knownUser;
   private IUserService userService;
+  private HttpServer keycloak;
 
   @BeforeEach
   void setUp() throws Exception {
     realmKey = keyPair();
+    // The deployment learns the realm's issuer from its discovery document, so a Keycloak answers for that alone.
+    keycloak = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+    String base = "http://127.0.0.1:" + keycloak.getAddress().getPort();
+    String realm = base + "/realms/CEDAR";
+    keycloak.createContext("/realms/CEDAR/.well-known/openid-configuration", exchange -> {
+      byte[] body = """
+          {"issuer": "%1$s", "authorization_endpoint": "%1$s/protocol/openid-connect/auth",
+           "token_endpoint": "%1$s/protocol/openid-connect/token",
+           "end_session_endpoint": "%1$s/protocol/openid-connect/logout",
+           "jwks_uri": "%1$s/protocol/openid-connect/certs"}
+          """.formatted(realm).getBytes(StandardCharsets.UTF_8);
+      exchange.getResponseHeaders().set("Content-Type", "application/json");
+      exchange.sendResponseHeaders(200, body.length);
+      try (OutputStream out = exchange.getResponseBody()) {
+        out.write(body);
+      }
+    });
+    keycloak.start();
     deployment = new KeycloakDeploymentProvider().buildDeployment(objectMapper.readValue("""
-        {"realm": "CEDAR", "authServerUrl": "https://auth.metadatacenter.orgx", "sslRequired": "ALL",
+        {"realm": "CEDAR", "authServerUrl": "%s", "sslRequired": "external",
          "resource": "cedar-angular-app", "publicClient": true}
-        """, KeycloakConfig.class));
+        """.formatted(base), KeycloakConfig.class));
     deployment.setPublicKeyLocator(new HardcodedPublicKeyLocator(realmKey.getPublic()));
     linkedDataUtil = new LinkedDataUtil(objectMapper.readValue("""
         {"base": "https://repo.metadatacenter.orgx/", "usersBase": "%s"}
@@ -73,6 +100,11 @@ class AuthorizationKeycloakAndApiKeyResolverTest {
     knownUser.setId(USERS_BASE + UUID);
     knownUser.setPermissions(List.of(CedarPermission.TEMPLATE_READ.getPermissionName()));
     userService = users(Map.of(USERS_BASE + UUID, knownUser));
+  }
+
+  @AfterEach
+  void stopKeycloak() {
+    keycloak.stop(0);
   }
 
   @Test
@@ -98,7 +130,7 @@ class AuthorizationKeycloakAndApiKeyResolverTest {
   @Test
   void aTokenTheRealmDidNotSignOrIssueIsInvalid() throws Exception {
     AccessToken otherRealm = token();
-    otherRealm.issuer("https://auth.metadatacenter.orgx/realms/OTHER");
+    otherRealm.issuer(deployment.getRealmInfoUrl().replace("/realms/CEDAR", "/realms/OTHER"));
     for (String token : List.of(signed(token(), keyPair()), signed(otherRealm, realmKey),
         new JWSBuilder().jsonContent(token()).none(), "not-a-token")) {
       assertThrows(InvalidOfflineAccessTokenException.class,
