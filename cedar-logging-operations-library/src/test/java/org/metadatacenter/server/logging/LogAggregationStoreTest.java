@@ -14,6 +14,7 @@ import org.metadatacenter.server.logging.model.AppLogType;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -153,13 +154,125 @@ class LogAggregationStoreTest {
     assertEquals(1, store.aggregation.aggregateLiveRequestBatch(DAY, NEXT_DAY, 10));
     assertEquals(1, store.aggregation.aggregateLiveCypherBatch(DAY, NEXT_DAY, 10));
 
-    assertEquals(0, store.aggregation.pruneRequests(DAY, 10), "nothing is past a cutoff before the day");
-    assertEquals(1, store.aggregation.pruneRequests(NEXT_DAY, 10));
-    assertEquals(1, store.aggregation.pruneCypher(NEXT_DAY, 10));
+    assertEquals(0, prune(true, DAY, 10), "nothing is past a cutoff before the day");
+    assertEquals(1, prune(true, NEXT_DAY.plus(1, ChronoUnit.DAYS), 10), "an unfolded row is kept past the cutoff");
+    assertEquals(1, prune(false, NEXT_DAY, 10));
 
     assertEquals(List.of("r-unfolded"), store.column("SELECT localRequestId FROM log_request"));
     assertEquals(3, store.count("SELECT COUNT(*) FROM log_event_receipt"),
         "the pruned rows' receipts still fence a replay of them");
+  }
+
+  @Test
+  void aPrunePassWalksIdWindowsUpToTheFirstRowItMustKeep() {
+    // Ids 101-107 are aggregated requests of the day, 103 and 104 already gone. 110 arrived late: it is from the day
+    // before and still waits for aggregation. 111 is an incomplete request, which waits for its last fragment.
+    for (long id : new long[]{101, 102, 105, 106, 107}) {
+      raw(id, DAY.plus(id - 100, ChronoUnit.HOURS), true, true);
+    }
+    raw(110, DAY.minus(1, ChronoUnit.HOURS), true, false);
+    raw(111, DAY.minus(2, ChronoUnit.HOURS), false, false);
+    Instant cutoff = NEXT_DAY.plus(5, ChronoUnit.DAYS);
+
+    long[] range = store.aggregation.requestPruneRange(cutoff);
+    assertEquals(101, range[0]);
+    assertEquals(110, range[1], "the walk ends at the earliest row still waiting for aggregation");
+    List<Long> deletedPerWindow = new ArrayList<>();
+    for (long from = range[0]; from >= 0; ) {
+      long[] window = store.aggregation.pruneRequestWindow(from, range[1], cutoff, 2);
+      deletedPerWindow.add(window[1]);
+      from = window[0];
+    }
+    assertEquals(List.of(2L, 2L, 1L, 0L), deletedPerWindow,
+        "windows of two ids, the gap crossed in one lookup, and a last lookup that finds nothing left");
+    assertEquals(List.of(110L, 111L), ids());
+
+    store.execute("UPDATE log_request SET aggregatedAt = UTC_TIMESTAMP() WHERE id = 110");
+    range = store.aggregation.requestPruneRange(cutoff);
+    assertEquals(110, range[0]);
+    assertEquals(112, range[1], "with nothing complete waiting, the walk runs past the last row");
+    assertEquals(1, prune(true, cutoff, 2));
+    assertEquals(List.of(111L), ids(), "the incomplete request is never pruned");
+  }
+
+  @Test
+  void aRequestThatNeverReachedAHandlerIsAggregatedAndPruned() {
+    // A 404 or a rejected token: both filters log the request, but no resource built a context, so no handler START.
+    List<AppLogMessage> fragments = request("r-404", DAY.plus(3, ChronoUnit.HOURS), 2, 404);
+    store.writer.handleLog(fragments.get(0));
+    store.writer.handleLog(fragments.get(2));
+
+    assertEquals(DAY.plus(3, ChronoUnit.HOURS), store.aggregation.earliestUnaggregatedRequestTime());
+    assertEquals(1, store.aggregation.aggregateLiveRequestBatch(DAY, NEXT_DAY, 10));
+    List<Object[]> hourly = store.rows("SELECT statusClass, reqCount, errorCount FROM agg_request_hourly");
+    assertEquals(List.of("4xx", 1L, 1L), List.of(hourly.get(0)[0], num(hourly.get(0)[1]), num(hourly.get(0)[2])));
+    assertEquals(1, prune(true, NEXT_DAY, 10));
+  }
+
+  @Test
+  void aLiveDayIsAUtcDayWhateverTheConnectionTimeZone() {
+    // The connection runs in America/Los_Angeles; the columns hold UTC. Read and bound through that zone, the "day"
+    // of 2026-03-10 ran from 17:00 UTC on the 9th to 17:00 UTC on the 10th (PDT), so it took r-before, not r-late.
+    Instant lateTheDayBefore = DAY.minus(30, ChronoUnit.MINUTES);
+    write(request("r-before", lateTheDayBefore, 100, 200));
+    write(request("r-early", DAY.plus(30, ChronoUnit.MINUTES), 100, 200));
+    write(request("r-late", NEXT_DAY.minus(30, ChronoUnit.MINUTES), 100, 200));
+
+    assertEquals(lateTheDayBefore, store.aggregation.earliestUnaggregatedRequestTime());
+    assertEquals(2, store.aggregation.aggregateLiveRequestBatch(DAY, NEXT_DAY, 10));
+    assertEquals(List.of("r-before"), store.column("SELECT localRequestId FROM log_request WHERE aggregatedAt IS NULL"));
+    assertEquals(List.of("2026-03-10 00:00:00", "2026-03-10 23:00:00"),
+        store.column("SELECT DATE_FORMAT(hourUtc, '%Y-%m-%d %H:%i:%s') FROM agg_request_hourly ORDER BY hourUtc"));
+    assertEquals(2, store.count("SELECT COUNT(*) FROM log_request "
+        + "WHERE ABS(TIMESTAMPDIFF(MINUTE, aggregatedAt, UTC_TIMESTAMP())) < 10"),
+        "aggregatedAt is UTC, like every other time in the table");
+  }
+
+  @Test
+  void theSpringForwardHourIsAggregatedLikeAnyOther() {
+    // 02:30 on 2027-03-14 is a valid UTC time but does not exist on a Los Angeles clock. Read as a Timestamp through
+    // the connection's zone it failed with "HOUR_OF_DAY: 2 -> 3", on every pass, for good.
+    Instant gap = Instant.parse("2027-03-14T02:30:00Z");
+    write(request("r-gap", gap, 100, 200));
+    store.writer.handleLog(cypher(gap, "MATCH (n) RETURN n", "h-1", 40));
+    Instant day = gap.truncatedTo(ChronoUnit.DAYS);
+
+    assertEquals(gap, store.aggregation.earliestUnaggregatedRequestTime());
+    assertEquals(gap, store.aggregation.earliestUnaggregatedCypherTime());
+    assertEquals(1, store.aggregation.aggregateLiveRequestBatch(day, day.plus(1, ChronoUnit.DAYS), 10));
+    assertEquals(1, store.aggregation.aggregateLiveCypherBatch(day, day.plus(1, ChronoUnit.DAYS), 10));
+    assertEquals(List.of("2027-03-14 02:00:00"),
+        store.column("SELECT DATE_FORMAT(hourUtc, '%Y-%m-%d %H:%i:%s') FROM agg_cypher_hourly"));
+  }
+
+  @Test
+  void aLiveBatchFindsItsRowsThroughTheCompositeIndexWithoutSorting() {
+    // Shaped like prod: many aggregated rows of earlier days below the ids of the day being aggregated.
+    write(request("template", DAY.minus(1, ChronoUnit.DAYS), 100, 200));
+    store.writer.handleLog(cypher(DAY.minus(1, ChronoUnit.DAYS), "MATCH (n) RETURN n", "h-1", 40));
+    copy("log_request", "requestTime", 20_000, "- INTERVAL seq MINUTE", true);
+    copy("log_cypher", "logTime", 20_000, "- INTERVAL seq MINUTE", true);
+    store.execute("UPDATE log_request SET aggregatedAt = UTC_TIMESTAMP() WHERE localRequestId = 'template'");
+    store.execute("UPDATE log_cypher SET aggregatedAt = UTC_TIMESTAMP() WHERE aggregatedAt IS NULL");
+    copy("log_request", "requestTime", 300, "+ INTERVAL 1 DAY + INTERVAL seq MINUTE", false);
+    copy("log_cypher", "logTime", 300, "+ INTERVAL 1 DAY + INTERVAL seq MINUTE", false);
+    store.rows("ANALYZE TABLE log_request, log_cypher");
+
+    long sorted = sortedRows();
+    assertEquals(10, store.aggregation.aggregateLiveRequestBatch(DAY, NEXT_DAY, 10));
+    assertEquals(10, store.aggregation.aggregateLiveCypherBatch(DAY, NEXT_DAY, 10));
+    assertEquals(sorted, sortedRows(), "no batch sorted the day's rows to find its ten");
+    assertEquals(290, store.count("SELECT COUNT(*) FROM log_cypher WHERE aggregatedAt IS NULL"));
+  }
+
+  @Test
+  void theAggregatorsCompositeIndexesAreDeclaredUnderTheirProdNames() {
+    assertEquals(List.of("aggregatedAt,requestTime"), store.column("SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY "
+        + "SEQ_IN_INDEX) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
+        + "AND TABLE_NAME = 'log_request' AND INDEX_NAME = 'IDX_log_request_aggregatedAt_requestTime'"));
+    assertEquals(List.of("aggregatedAt,logTime"), store.column("SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY "
+        + "SEQ_IN_INDEX) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
+        + "AND TABLE_NAME = 'log_cypher' AND INDEX_NAME = 'IDX_log_cypher_aggregatedAt_logTime'"));
   }
 
   @Test
@@ -214,6 +327,51 @@ class LogAggregationStoreTest {
     assertEquals(4, store.count("SELECT COUNT(*) FROM agg_request_outlier WHERE kind = 'SLOW'"));
     assertEquals(1, store.count("SELECT COUNT(*) FROM agg_request_outlier WHERE kind = 'ERROR'"));
     assertEquals(1, store.count("SELECT COUNT(*) FROM agg_cypher_outlier"));
+  }
+
+  /** One prune pass over a table, window by window, the way the worker's prune job walks it. */
+  private long prune(boolean request, Instant cutoff, int step) {
+    long[] range = request ? store.aggregation.requestPruneRange(cutoff) : store.aggregation.cypherPruneRange(cutoff);
+    long deleted = 0;
+    for (long from = range[0]; from >= 0 && from < range[1]; ) {
+      long[] window = request ? store.aggregation.pruneRequestWindow(from, range[1], cutoff, step)
+          : store.aggregation.pruneCypherWindow(from, range[1], cutoff, step);
+      deleted += window[1];
+      from = window[0];
+    }
+    return deleted;
+  }
+
+  /** A request row as the worker leaves it, inserted directly so that its id is known. */
+  private void raw(long id, Instant requestTime, boolean complete, boolean aggregated) {
+    String time = "'" + requestTime.toString().replace('T', ' ').replace("Z", "") + "'";
+    store.execute("INSERT INTO log_request (id, localRequestId, requestTime, startTime, endTime, status, "
+        + "handlerDuration, preHandlerDuration, lineNumber, aggregatedAt) VALUES (" + id + ", 'r-" + id + "', " + time
+        + ", " + time + ", " + (complete ? time : "NULL") + ", 200, 0, 0, 0, "
+        + (aggregated ? "UTC_TIMESTAMP()" : "NULL") + ")");
+  }
+
+  private List<Long> ids() {
+    return store.column("SELECT id FROM log_request ORDER BY id").stream().map(LogAggregationStoreTest::num).toList();
+  }
+
+  /**
+   * Insert {@code n} copies of the table's first row, numbered 1 to n, its time moved by {@code shift} (an SQL interval
+   * expression in {@code seq}), aggregated or not.
+   */
+  private void copy(String table, String timeColumn, int n, String shift, boolean aggregated) {
+    String columns = (String) store.column("SELECT GROUP_CONCAT(COLUMN_NAME) FROM information_schema.COLUMNS "
+        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '" + table + "' "
+        + "AND COLUMN_NAME NOT IN ('id', 'localRequestId', 'aggregatedAt', '" + timeColumn + "')").get(0);
+    store.execute("INSERT INTO " + table + " (" + columns + ", localRequestId, aggregatedAt, " + timeColumn + ") "
+        + "SELECT " + columns + ", CONCAT(localRequestId, '-" + (aggregated ? "old" : "new") + "-', seq), "
+        + (aggregated ? "UTC_TIMESTAMP()" : "NULL") + ", " + timeColumn + " " + shift + " FROM " + table
+        + " JOIN seq_1_to_" + n + " WHERE id = (SELECT MIN(id) FROM " + table + ")");
+  }
+
+  /** How many rows MariaDB has sorted since it started. */
+  private long sortedRows() {
+    return Long.parseLong(store.rows("SHOW GLOBAL STATUS LIKE 'Sort_rows'").get(0)[1].toString());
   }
 
   private void write(List<AppLogMessage> fragments) {
