@@ -25,4 +25,11 @@ public interface AdminServiceSession {
   boolean createIndex(NodeLabel nodeLabel, NodeProperty property);
 
   boolean removeAllConstraintsAndIndices();
+
+  /**
+   * Restores the constraints the servers create when they start, for the version lifecycle and the
+   * artifact-create cleanup. Removing every constraint removes these as well, and a running server
+   * does not create them again until it restarts.
+   */
+  void ensureServerSchema();
 }

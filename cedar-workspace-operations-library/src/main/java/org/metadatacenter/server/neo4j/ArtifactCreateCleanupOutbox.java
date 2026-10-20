@@ -59,6 +59,16 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
     this.driver = driver;
     this.delayMillis = delayMillis;
     this.recheckMillis = recheckMillis;
+    initializeSchema(driver);
+  }
+
+  /**
+   * Creates what the outbox and the version lifecycle rely on in the graph: the lifecycle lock with
+   * its two uniqueness constraints, and the cleanup job's constraint. Repeating it changes nothing.
+   * The admin tool calls it after rebuilding the graph's schema, which removes every constraint,
+   * these included, and a running server creates them only once.
+   */
+  public static void initializeSchema(Driver driver) {
     VersionChainTransaction.initialize(driver);
     try (var session = driver.session()) {
       session.run("CREATE CONSTRAINT cedar_create_cleanup_job IF NOT EXISTS "
