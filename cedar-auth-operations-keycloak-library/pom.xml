@@ -15,8 +15,8 @@
   <name>CEDAR Auth Operations Keycloak Library</name>
 
   <properties>
-    <!-- Line coverage measured on 2026-10-19: 16.9%. The build fails below this floor. -->
-    <cedar.coverage.line.minimum>0.14</cedar.coverage.line.minimum>
+    <!-- Line coverage measured on 2026-10-19: 96.4%. The build fails below this floor. -->
+    <cedar.coverage.line.minimum>0.94</cedar.coverage.line.minimum>
   </properties>
 
   <dependencies>
@@ -107,6 +107,11 @@
     <dependency>
       <groupId>org.jboss.resteasy</groupId>
       <artifactId>resteasy-client</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.jboss.resteasy</groupId>
+      <artifactId>resteasy-jackson2-provider</artifactId>
     </dependency>
 
     <dependency>

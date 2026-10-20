@@ -1,16 +1,9 @@
 package org.metadatacenter.server.security;
 
-import org.metadatacenter.util.json.JsonMapper;
-
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.deser.DeserializationProblemHandler;
-import com.fasterxml.jackson.jakarta.rs.json.JacksonJsonProvider;
-import com.fasterxml.jackson.jakarta.rs.json.JacksonXmlBindJsonProvider;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import jakarta.ws.rs.client.Client;
 import org.jboss.resteasy.client.jaxrs.internal.ResteasyClientBuilderImpl;
+import org.jboss.resteasy.plugins.providers.jackson.ResteasyJackson2Provider;
 import org.keycloak.adapters.KeycloakDeployment;
 import org.keycloak.adapters.rotation.AdapterTokenVerifier;
 import org.keycloak.admin.client.Keycloak;
@@ -19,7 +12,6 @@ import org.keycloak.common.VerificationException;
 import org.keycloak.common.util.Base64Url;
 import org.keycloak.exceptions.TokenNotActiveException;
 import org.keycloak.representations.AccessToken;
-import org.keycloak.representations.AccessTokenResponse;
 import org.keycloak.representations.JsonWebToken;
 import org.keycloak.util.JsonSerialization;
 import org.metadatacenter.config.CedarConfig;
@@ -120,28 +112,16 @@ public class KeycloakUtils {
     return kcInfo;
   }
 
-  private static JacksonJsonProvider getCustomizedJacksonJsonProvider() {
-    ObjectMapper m = JsonMapper.TOLERANT_MAPPER.copy();
-    JacksonJsonProvider jacksonJsonProvider = new JacksonXmlBindJsonProvider();
-    jacksonJsonProvider.setMapper(m);
-
-    m.addHandler(new DeserializationProblemHandler() {
-      @Override
-      public boolean handleUnknownProperty(DeserializationContext ctxt, JsonParser jp, JsonDeserializer<?>
-          deserializer, Object beanOrClass, String propertyName) throws IOException {
-        //out.info("Run into unknown property:" + propertyName + "=>" + ctxt.getParser().getText());
-        if ("access_token".equals(propertyName)) {
-          if (beanOrClass instanceof AccessTokenResponse atr) {
-            String text = ctxt.getParser().getText();
-            atr.setToken(text);
-          }
-        } else {
-          super.handleUnknownProperty(ctxt, jp, deserializer, beanOrClass, propertyName);
-        }
-        return true;
-      }
-    });
-    return jacksonJsonProvider;
+  /**
+   * Reads Keycloak's responses without failing on a property the client's representations do not define, so a
+   * Keycloak newer than this client still answers it. The provider is RESTEasy's own, registered on the client: a
+   * provider declared for every media type loses to the built-in one, which declares {@code application/json}, and
+   * the built-in one fails on an unknown property.
+   */
+  static final class TolerantJacksonProvider extends ResteasyJackson2Provider {
+    TolerantJacksonProvider() {
+      configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    }
   }
 
   static SSLContext buildInsecureSslContext(boolean allowInsecureTls) {
@@ -174,15 +154,13 @@ public class KeycloakUtils {
   public static Keycloak buildKeycloak(KeycloakUtilInfo kcInfo) {
     SSLContext insecureSslContext = buildInsecureSslContext(kcInfo.isAllowInsecureTls());
 
-    JacksonJsonProvider jacksonJsonProvider = getCustomizedJacksonJsonProvider();
-
     // TODO: add connectionPoolSize(10)
     // Instantiate the RESTEasy builder concretely rather than via ResteasyClientBuilder.newBuilder():
     // under jakarta ws.rs 3.0 the ClientBuilder ServiceLoader also finds Jersey on the classpath and
     // may resolve to it, and the Keycloak admin client requires a genuine RESTEasy client (it casts
     // the WebTarget to ResteasyWebTarget).
     ResteasyClientBuilderImpl resteasyClientBuilder = new ResteasyClientBuilderImpl();
-    resteasyClientBuilder.register(jacksonJsonProvider);
+    resteasyClientBuilder.register(new TolerantJacksonProvider());
     if (insecureSslContext != null) {
       log.warn("Keycloak admin-client certificate verification is disabled by explicit development opt-in");
       resteasyClientBuilder.sslContext(insecureSslContext);
