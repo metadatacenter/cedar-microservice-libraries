@@ -3,6 +3,7 @@ package org.metadatacenter.server.neo4j.cypher.parameter;
 import java.util.Locale;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.constant.CedarConstants;
 import org.metadatacenter.exception.CedarProcessingException;
@@ -25,6 +26,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.metadatacenter.model.ModelPaths.SCHEMA_NAME;
 
 public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
 
@@ -79,6 +82,16 @@ public class CypherParamBuilderUser extends AbstractCypherParamBuilder {
     }
 
     return params;
+  }
+
+  /**
+   * Completes the parameters of a user read back from an export, which holds the user's display name and home
+   * folder but not the lower-cased name that lookups match.
+   */
+  public static void tweakUserProperties(JsonNode node, CypherParameters params) {
+    String name = node.at(SCHEMA_NAME).textValue();
+    params.put(NodeProperty.NAME_LOWER, name == null ? null : name.toLowerCase(Locale.ROOT));
+    params.put(NodeProperty.HOME_FOLDER_ID, node.at("/" + NodeProperty.HOME_FOLDER_ID.getValue()).textValue());
   }
 
   public static CypherParameters matchUserId(CedarUserId userId) {

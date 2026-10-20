@@ -43,8 +43,32 @@ public class CypherParameters {
     map.put(parameter, value);
   }
 
+  /**
+   * A JSON value is stored as the plain value the Neo4j driver writes as a property. The driver would otherwise take
+   * the Jackson node for an iterable, and store a text, a number or a flag as an empty list.
+   */
   public void put(CypherQueryParameter parameter, JsonNode value) {
-    map.put(parameter, value);
+    map.put(parameter, plainValue(value));
+  }
+
+  private static Object plainValue(JsonNode value) {
+    if (value == null || value.isNull() || value.isMissingNode()) {
+      return null;
+    } else if (value.isTextual()) {
+      return value.textValue();
+    } else if (value.isBoolean()) {
+      return value.booleanValue();
+    } else if (value.isIntegralNumber()) {
+      return value.longValue();
+    } else if (value.isNumber()) {
+      return value.doubleValue();
+    } else if (value.isArray()) {
+      List<Object> items = new ArrayList<>();
+      value.forEach(item -> items.add(plainValue(item)));
+      return items;
+    } else {
+      return value.toString();
+    }
   }
 
   public void put(ParameterPlaceholder parameter, List<String> value) {

@@ -15,8 +15,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-import static org.metadatacenter.model.ModelPaths.CREATED_BY;
-import static org.metadatacenter.model.ModelPaths.LAST_UPDATED_BY;
+import static org.metadatacenter.model.ModelPaths.OSLC_MODIFIED_BY;
+import static org.metadatacenter.model.ModelPaths.PAV_CREATED_BY;
+import static org.metadatacenter.model.ModelPaths.SCHEMA_NAME;
 
 public class CypherParamBuilderGroup extends AbstractCypherParamBuilder {
 
@@ -74,8 +75,15 @@ public class CypherParamBuilderGroup extends AbstractCypherParamBuilder {
     return params;
   }
 
+  /**
+   * Completes the parameters of a group read back from an export. The export holds the group's creator and
+   * modifier under their JSON-LD names, and its name but not the lower-cased copy that name lookups match, which
+   * createGroup's query requires.
+   */
   public static void tweakGroupProperties(JsonNode node, CypherParameters params) {
-    params.put(NodeProperty.CREATED_BY, node.at(CREATED_BY).textValue());
-    params.put(NodeProperty.LAST_UPDATED_BY, node.at(LAST_UPDATED_BY).textValue());
+    params.put(NodeProperty.CREATED_BY, node.at(PAV_CREATED_BY).textValue());
+    params.put(NodeProperty.LAST_UPDATED_BY, node.at(OSLC_MODIFIED_BY).textValue());
+    String name = node.at(SCHEMA_NAME).textValue();
+    params.put(NodeProperty.NAME_LOWER, name == null ? null : name.toLowerCase(Locale.ROOT));
   }
 }

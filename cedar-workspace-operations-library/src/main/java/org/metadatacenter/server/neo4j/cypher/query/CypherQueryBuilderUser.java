@@ -27,6 +27,11 @@ public class CypherQueryBuilderUser extends AbstractCypherQueryBuilder {
         " RETURN user";
   }
 
+  /** Creates a user read back from an export, which, unlike a new user, may already have a home folder. */
+  public static String importUser() {
+    return createUser().replace(" })", "," + buildCreateAssignment(NodeProperty.HOME_FOLDER_ID) + " })");
+  }
+
   public static String setUserHomeFolderId() {
     StringBuilder sb = new StringBuilder();
     sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.ID>}})");
