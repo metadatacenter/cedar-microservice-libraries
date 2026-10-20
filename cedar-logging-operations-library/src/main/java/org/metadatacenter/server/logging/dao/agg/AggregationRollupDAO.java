@@ -4,12 +4,10 @@ import io.dropwizard.hibernate.AbstractDAO;
 import org.hibernate.SessionFactory;
 import org.metadatacenter.server.logging.agg.LatencyHistogram;
 import org.metadatacenter.server.logging.agg.RollupAccumulators;
+import org.metadatacenter.server.logging.dao.LogSqlTime;
 import org.metadatacenter.server.logging.dbmodel.agg.AggRequestHourly;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -571,21 +569,19 @@ public class AggregationRollupDAO extends AbstractDAO<AggRequestHourly> {
     return o == null ? null : o.toString();
   }
 
-  private static final DateTimeFormatter SQL_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
-
   /** Select a DATETIME column (or expression) as its stored text, so that no driver time zone touches it. */
   private static String asText(String column) {
-    return "DATE_FORMAT(" + column + ", '%Y-%m-%d %H:%i:%s.%f')";
+    return LogSqlTime.asText(column);
   }
 
   /** An instant as the UTC wall-clock text the log tables store; MariaDB compares and stores it as a DATETIME. */
   static String sqlTime(Instant instant) {
-    return instant == null ? null : SQL_TIME.format(instant.atOffset(ZoneOffset.UTC));
+    return LogSqlTime.bind(instant);
   }
 
   /** The instant of a time selected {@link #asText}. */
   static Instant ts(Object o) {
-    return o == null ? null : LocalDateTime.parse(o.toString(), SQL_TIME).toInstant(ZoneOffset.UTC);
+    return LogSqlTime.parse(o);
   }
 
   private static List<List<Long>> chunks(List<Long> ids) {
