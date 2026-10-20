@@ -15,6 +15,11 @@
   <name>CEDAR Cache Operations Library</name>
 
 
+  <properties>
+    <!-- Line coverage measured on 2026-10-19: 25.3%. The build fails below this floor. -->
+    <cedar.coverage.line.minimum>0.23</cedar.coverage.line.minimum>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.metadatacenter</groupId>

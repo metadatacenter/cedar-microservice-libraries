@@ -14,6 +14,11 @@
 
   <name>CEDAR Auth Operations Library</name>
 
+  <properties>
+    <!-- Line coverage measured on 2026-10-19: 6.5%. The build fails below this floor. -->
+    <cedar.coverage.line.minimum>0.04</cedar.coverage.line.minimum>
+  </properties>
+
   <dependencies>
 
     <dependency>

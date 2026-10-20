@@ -16,6 +16,11 @@
     graph seeding. Consumed by the servers in test scope only; never a runtime dependency.
   </description>
 
+  <properties>
+    <!-- Line coverage measured on 2026-10-19: 41.7%. The build fails below this floor. -->
+    <cedar.coverage.line.minimum>0.39</cedar.coverage.line.minimum>
+  </properties>
+
   <dependencies>
 
     <!-- Classpath discovery for an independent inventory of compiled JAX-RS resources. -->

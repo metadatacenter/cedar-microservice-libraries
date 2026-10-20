@@ -14,6 +14,11 @@
 
   <name>CEDAR Auth Operations Keycloak Library</name>
 
+  <properties>
+    <!-- Line coverage measured on 2026-10-19: 16.9%. The build fails below this floor. -->
+    <cedar.coverage.line.minimum>0.14</cedar.coverage.line.minimum>
+  </properties>
+
   <dependencies>
 
     <dependency>

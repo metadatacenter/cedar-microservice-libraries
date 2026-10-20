@@ -15,6 +15,11 @@
 
   <name>CEDAR Inclusion Subgraph Operations Library</name>
 
+  <properties>
+    <!-- Line coverage measured on 2026-10-19: 79.6%. The build fails below this floor. -->
+    <cedar.coverage.line.minimum>0.77</cedar.coverage.line.minimum>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.metadatacenter</groupId>
