@@ -24,8 +24,6 @@ import org.metadatacenter.server.neo4j.cypher.sort.QuerySortOptions;
 import org.metadatacenter.server.search.elasticsearch.service.NodeIndexingService;
 import org.metadatacenter.server.service.UserService;
 import org.metadatacenter.server.url.MicroserviceUrlUtil;
-import org.metadatacenter.server.valuerecommender.ValuerecommenderReindexQueueService;
-import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexMessageActionType;
 import org.metadatacenter.util.ModelUtil;
 import org.metadatacenter.util.http.CedarUrlUtil;
 import org.metadatacenter.util.http.HttpTimeouts;
@@ -58,7 +56,6 @@ public class CloneInstancesExecutorService implements AutoCloseable {
   private final ArtifactCreateCleanupService cleanupService;
 
   protected static NodeIndexingService nodeIndexingService;
-  protected static ValuerecommenderReindexQueueService valuerecommenderReindexQueueService;
 
   public CloneInstancesExecutorService(CedarConfig cedarConfig) {
     artifactClient = new ArtifactServiceClient(cedarConfig);
@@ -83,10 +80,8 @@ public class CloneInstancesExecutorService implements AutoCloseable {
     this.linkedDataUtil = linkedDataUtil;
   }
 
-  public static void injectServices(NodeIndexingService nodeIndexingService,
-                                    ValuerecommenderReindexQueueService valuerecommenderReindexQueueService) {
+  public static void injectServices(NodeIndexingService nodeIndexingService) {
     CloneInstancesExecutorService.nodeIndexingService = nodeIndexingService;
-    CloneInstancesExecutorService.valuerecommenderReindexQueueService = valuerecommenderReindexQueueService;
   }
 
   public void start() { cleanupService.start(); }
@@ -293,8 +288,6 @@ public class CloneInstancesExecutorService implements AutoCloseable {
         if (templateProxyResponse.getEntity() != null) {
           // index the artifact that has been created
           ArtifactCopyOperations.indexCreatedArtifact(nodeIndexingService, folderServerCreatedResource, c);
-          ArtifactCopyOperations.enqueueValuerecommenderUpdate(valuerecommenderReindexQueueService,
-              folderServerCreatedResource, ValuerecommenderReindexMessageActionType.CREATED);
           URI location = CedarUrlUtil.getLocationURI(templateProxyResponse);
           return Response.created(location).entity(templateProxyResponse.getEntity().getContent()).build();
         } else {

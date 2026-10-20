@@ -40,9 +40,7 @@ public class ElasticsearchManagementService {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchManagementService.class);
 
   private final Map<String, Object> searchIndexSettings;
-  private final Map<String, Object> rulesIndexSettings;
   private final OpensearchMappingsConfig searchIndexMappings;
-  private final OpensearchMappingsConfig rulesIndexMappings;
   private final RestHighLevelClient elasticClient;
   private final AtomicBoolean closed = new AtomicBoolean();
 
@@ -54,9 +52,7 @@ public class ElasticsearchManagementService {
                                   RestHighLevelClient elasticClient) {
     System.setProperty("es.set.netty.runtime.available.processors", "false");
     this.searchIndexSettings = (cedarConfig.getSearchSettingsMappingsConfig().getSettings());
-    this.rulesIndexSettings = cedarConfig.getRulesSettingsMappingsConfig().getSettings();
     this.searchIndexMappings = cedarConfig.getSearchSettingsMappingsConfig().getMappings();
-    this.rulesIndexMappings = cedarConfig.getRulesSettingsMappingsConfig().getMappings();
     this.elasticClient = elasticClient;
   }
 
@@ -107,10 +103,6 @@ public class ElasticsearchManagementService {
 
   public void createSearchIndex(String indexName) throws CedarProcessingException {
     createIndex(indexName, searchIndexSettings, searchIndexMappings);
-  }
-
-  public void createRulesIndex(String indexName) throws CedarProcessingException {
-    createIndex(indexName, rulesIndexSettings, rulesIndexMappings);
   }
 
   private void createIndex(String indexName, Map<String, Object> indexSettings,

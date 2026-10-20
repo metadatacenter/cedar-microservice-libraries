@@ -6,8 +6,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.config.SubmissionConfig;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.id.CedarTemplateId;
@@ -17,7 +15,6 @@ import org.metadatacenter.model.folderserver.datagroup.ResourceWithOpenFlag;
 import org.metadatacenter.outcome.OutcomeWithReason;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.VersionServiceSession;
-import org.metadatacenter.server.security.model.InstanceArtifactWithIsBasedOn;
 import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
 import org.metadatacenter.server.security.model.auth.FilesystemResourceWithCurrentUserPermissions;
 import org.metadatacenter.server.security.model.permission.resource.ResourceAuthority;
@@ -25,7 +22,6 @@ import org.metadatacenter.server.security.model.permission.resource.ResourceActi
 import org.metadatacenter.server.security.model.permission.resource.ResourceCapability;
 import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 
-import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -157,39 +153,6 @@ class CurrentUserPermissionUpdaterForGraphDbResourceTest {
   }
 
   @Test
-  void instanceBasedOnConfiguredTemplateIsSubmittable() {
-    Fixture f = new Fixture();
-    FilesystemResourceWithCurrentUserPermissions instance = f.instance("template-1");
-    when(f.submissionConfig.getSubmittableTemplateIds()).thenReturn(List.of("template-1"));
-
-    assertTrue(f.update(instance).isCanSubmit());
-  }
-
-  @Test
-  void instanceBasedOnOtherTemplateIsNotSubmittable() {
-    Fixture f = new Fixture();
-    FilesystemResourceWithCurrentUserPermissions instance = f.instance("template-2");
-    when(f.submissionConfig.getSubmittableTemplateIds()).thenReturn(List.of("template-1"));
-
-    assertFalse(f.update(instance).isCanSubmit());
-  }
-
-  @Test
-  void instanceWithoutBasedOnIsNotSubmittable() {
-    Fixture f = new Fixture();
-    assertFalse(f.update(f.instance(null)).isCanSubmit());
-  }
-
-  @Test
-  void nullSubmissionAllowlistMakesInstanceNotSubmittable() {
-    Fixture f = new Fixture();
-    FilesystemResourceWithCurrentUserPermissions instance = f.instance("template-1");
-    when(f.submissionConfig.getSubmittableTemplateIds()).thenReturn(null);
-
-    assertFalse(f.update(instance).isCanSubmit());
-  }
-
-  @Test
   void aReadableResourceMayBeUsedAsACopySource() {
     Fixture f = new Fixture();
     when(f.permissionSession.getResourceAuthority(any()))
@@ -234,11 +197,8 @@ class CurrentUserPermissionUpdaterForGraphDbResourceTest {
   private static final class Fixture {
     private final ResourcePermissionServiceSession permissionSession = mock(ResourcePermissionServiceSession.class);
     private final VersionServiceSession versionSession = mock(VersionServiceSession.class);
-    private final CedarConfig cedarConfig = mock(CedarConfig.class);
-    private final SubmissionConfig submissionConfig = mock(SubmissionConfig.class);
 
     private Fixture() {
-      when(cedarConfig.getSubmissionConfig()).thenReturn(submissionConfig);
       when(permissionSession.getResourceAuthority(any())).thenReturn(new ResourceAuthority(null, false));
     }
 
@@ -261,14 +221,6 @@ class CurrentUserPermissionUpdaterForGraphDbResourceTest {
       return resource;
     }
 
-    private FilesystemResourceWithCurrentUserPermissions instance(String basedOnId) {
-      FilesystemResourceWithCurrentUserPermissions resource = resource(
-          CedarResourceType.INSTANCE, InstanceArtifactWithIsBasedOn.class);
-      CedarTemplateId basedOn = basedOnId == null ? null : CedarTemplateId.build(basedOnId);
-      when(((InstanceArtifactWithIsBasedOn) resource).getIsBasedOn()).thenReturn(basedOn);
-      return resource;
-    }
-
     private FilesystemResourceWithCurrentUserPermissions openResource(boolean open) {
       FilesystemResourceWithCurrentUserPermissions resource = resource(
           CedarResourceType.TEMPLATE, ResourceWithOpenFlag.class);
@@ -283,7 +235,7 @@ class CurrentUserPermissionUpdaterForGraphDbResourceTest {
           .thenReturn(capabilities);
       CurrentUserResourcePermissions result = new CurrentUserResourcePermissions();
       CurrentUserPermissionUpdaterForGraphDbResource.get(
-          permissionSession, versionSession, cedarConfig, resource).update(result);
+          permissionSession, versionSession, resource).update(result);
       return result;
     }
   }

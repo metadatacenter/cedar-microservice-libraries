@@ -1,15 +1,11 @@
 package org.metadatacenter.server.permissions;
 
-import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarFilesystemResourceId;
-import org.metadatacenter.id.CedarTemplateId;
-import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.datagroup.ResourceWithOpenFlag;
 import org.metadatacenter.outcome.OutcomeWithReason;
 import org.metadatacenter.permission.currentuserpermission.CurrentUserPermissionUpdater;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.VersionServiceSession;
-import org.metadatacenter.server.security.model.InstanceArtifactWithIsBasedOn;
 import org.metadatacenter.server.security.model.auth.CurrentUserResourcePermissions;
 import org.metadatacenter.server.security.model.auth.FilesystemResourceWithCurrentUserPermissions;
 import org.metadatacenter.server.security.model.permission.resource.ResourceAuthority;
@@ -20,20 +16,18 @@ public class CurrentUserPermissionUpdaterForGraphDbResource extends CurrentUserP
 
   private final ResourcePermissionServiceSession permissionSession;
   private final VersionServiceSession versionSession;
-  private final CedarConfig cedarConfig;
   private final FilesystemResourceWithCurrentUserPermissions resource;
 
   private CurrentUserPermissionUpdaterForGraphDbResource(ResourcePermissionServiceSession permissionSession, VersionServiceSession versionSession,
-                                                         CedarConfig cedarConfig, FilesystemResourceWithCurrentUserPermissions resource) {
+                                                         FilesystemResourceWithCurrentUserPermissions resource) {
     this.permissionSession = permissionSession;
     this.versionSession = versionSession;
-    this.cedarConfig = cedarConfig;
     this.resource = resource;
   }
 
   public static CurrentUserPermissionUpdater get(ResourcePermissionServiceSession permissionSession, VersionServiceSession versionSession,
-                                                 CedarConfig cedarConfig, FilesystemResourceWithCurrentUserPermissions resource) {
-    return new CurrentUserPermissionUpdaterForGraphDbResource(permissionSession, versionSession, cedarConfig, resource);
+                                                 FilesystemResourceWithCurrentUserPermissions resource) {
+    return new CurrentUserPermissionUpdaterForGraphDbResource(permissionSession, versionSession, resource);
   }
 
   @Override
@@ -63,20 +57,6 @@ public class CurrentUserPermissionUpdaterForGraphDbResource extends CurrentUserP
         currentUserResourcePermissions.setCreateDraftErrorKey(createDraftOutcome.getReason());
       }
     }
-    if (resource.getType() == CedarResourceType.INSTANCE) {
-      InstanceArtifactWithIsBasedOn instance = (InstanceArtifactWithIsBasedOn) resource;
-      CedarTemplateId basedOnTemplate = instance.getIsBasedOn();
-      if (basedOnTemplate != null) {
-        String basedOnTemplateId = basedOnTemplate.getId();
-        if (isSubmittable(basedOnTemplateId)) {
-          currentUserResourcePermissions.setActionAvailable(ResourceAction.SUBMIT, true);
-        }
-      }
-    }
-  }
-
-  private boolean isSubmittable(String basedOnTemplateId) {
-    return cedarConfig.getSubmissionConfig().getSubmittableTemplateIds() != null && cedarConfig.getSubmissionConfig().getSubmittableTemplateIds().contains(basedOnTemplateId);
   }
 
 }

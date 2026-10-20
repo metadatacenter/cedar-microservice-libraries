@@ -1,9 +1,6 @@
 package org.metadatacenter.server.search.elasticsearch.permission;
 
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.config.SubmissionConfig;
-import org.metadatacenter.id.CedarTemplateId;
-import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.outcome.OutcomeWithReason;
 import org.metadatacenter.permission.currentuserpermission.CurrentUserPermissionUpdater;
 import org.metadatacenter.search.IndexedDocumentDocument;
@@ -49,23 +46,5 @@ public class CurrentUserPermissionUpdaterForSearchResource extends AbstractCurre
         currentUserResourcePermissions.setCreateDraftErrorKey(createDraftOutcome.getReason());
       }
     }
-
-    if (indexedDocument.getInfo().getType() == CedarResourceType.INSTANCE) {
-      if (isSubmittable()) {
-        currentUserResourcePermissions.setActionAvailable(ResourceAction.SUBMIT, true);
-      }
-    }
-
-  }
-
-  private boolean isSubmittable() {
-    CedarTemplateId basedOnTemplate = indexedDocument.getInfo().getIsBasedOnId();
-    if (basedOnTemplate != null) {
-      String basedOnTemplateId = basedOnTemplate.getId();
-      SubmissionConfig submissionConfig = cedarConfig.getSubmissionConfig();
-      return submissionConfig != null && submissionConfig.getSubmittableTemplateIds() != null
-          && submissionConfig.getSubmittableTemplateIds().contains(basedOnTemplateId);
-    }
-    return false;
   }
 }
