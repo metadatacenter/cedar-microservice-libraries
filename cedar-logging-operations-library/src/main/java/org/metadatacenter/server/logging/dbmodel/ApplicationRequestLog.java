@@ -127,6 +127,8 @@ public class ApplicationRequestLog {
 
   // Set by the aggregation job (not the logging path) once this row has been folded into the hourly
   // rollups. The prune job deletes only rows where this is non-null and past the retention window.
+  // A fragment that arrives after this is set still merges into the row, but the rollups keep what
+  // the row held when it was folded; see AppLoggerExecutorService.
   private Instant aggregatedAt;
 
   public static ApplicationRequestLog fromAppRequestFilter(AppLogMessage appLog) {
@@ -135,9 +137,9 @@ public class ApplicationRequestLog {
     return l;
   }
 
-  public void mergeFilterStartLog(AppLogMessage appLog) {
-    if (requestTime != null) return;
-    requireUnaggregated();
+  /** Each merge returns whether the fragment changed the row: a phase merges once, a repeat is ignored. */
+  public boolean mergeFilterStartLog(AppLogMessage appLog) {
+    if (requestTime != null) return false;
     globalRequestId = appLog.getGlobalRequestId();
     localRequestId = appLog.getLocalRequestId();
     systemComponentName = appLog.getSystemComponent().getStringValue();
@@ -156,19 +158,19 @@ public class ApplicationRequestLog {
       log.error("Error serializing parameters", e);
     }
     recalculateDurations();
+    return true;
   }
 
-  private void requireUnaggregated() {
-    if (aggregatedAt != null) throw new IllegalStateException("Incomplete request was already aggregated; reconcile its rollups before accepting late fragments");
+  public boolean wasAggregated() {
+    return aggregatedAt != null;
   }
 
   public Long getId() {
     return id;
   }
 
-  public void mergeStartLog(AppLogMessage appLog) {
-    if (startTime != null) return;
-    requireUnaggregated();
+  public boolean mergeStartLog(AppLogMessage appLog) {
+    if (startTime != null) return false;
     className = appLog.getParamAsString(AppLogParam.CLASS_NAME);
     methodName = appLog.getParamAsString(AppLogParam.METHOD_NAME);
     lineNumber = appLog.getParamAsInt(AppLogParam.LINE_NUMBER);
@@ -179,11 +181,11 @@ public class ApplicationRequestLog {
     authSource = appLog.getParamAsString(AppLogParam.AUTH_SOURCE);
     startTime = appLog.getLogTime();
     recalculateDurations();
+    return true;
   }
 
-  public void mergeEndLog(AppLogMessage appLog) {
-    if (endTime != null) return;
-    requireUnaggregated();
+  public boolean mergeEndLog(AppLogMessage appLog) {
+    if (endTime != null) return false;
     type = AppLogType.REQUEST_HANDLER.getValue();
     subType = AppLogSubType.FULL.getValue();
     // HTTP status is only known at response time (the response-filter END event). A real status is
@@ -194,6 +196,7 @@ public class ApplicationRequestLog {
     }
     endTime = appLog.getLogTime();
     recalculateDurations();
+    return true;
   }
 
   private void recalculateDurations() {

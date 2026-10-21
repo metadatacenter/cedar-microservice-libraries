@@ -11,11 +11,18 @@ import org.metadatacenter.server.logging.model.AppLogParam;
 import org.metadatacenter.server.logging.model.AppLogSubType;
 import org.metadatacenter.server.logging.model.AppLogType;
 import org.metadatacenter.util.json.JsonMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.atomic.AtomicLong;
 
 public class AppLoggerExecutorService {
 
+  private static final Logger log = LoggerFactory.getLogger(AppLoggerExecutorService.class);
+
   private ApplicationRequestLogDAO requestLogDAO;
   private ApplicationCypherLogDAO cypherLogDAO;
+  private final AtomicLong lateFragments = new AtomicLong();
 
   public AppLoggerExecutorService(ApplicationRequestLogDAO requestLogDAO,
                                   ApplicationCypherLogDAO cypherLogDAO) {
@@ -35,21 +42,40 @@ public class AppLoggerExecutorService {
         receipt.markProcessed(appLog);
         return;
       }
+      boolean wasAggregated = row.wasAggregated();
+      boolean changed = false;
       if (appLog.getType() == AppLogType.REQUEST_FILTER && appLog.getSubType() == AppLogSubType.START) {
-        row.mergeFilterStartLog(appLog);
+        changed = row.mergeFilterStartLog(appLog);
       } else if (appLog.getType() == AppLogType.REQUEST_FILTER && appLog.getSubType() == AppLogSubType.END) {
-        row.mergeEndLog(appLog);
+        changed = row.mergeEndLog(appLog);
       } else if (appLog.getType() == AppLogType.REQUEST_HANDLER) {
-        row.mergeStartLog(appLog);
+        changed = row.mergeStartLog(appLog);
       } else if (appLog.getType() == AppLogType.RESPONSE_EXCEPTION) {
         try {
           row.setErrorPack(JsonMapper.STRICT_MAPPER.writeValueAsString(appLog.getParamAsMap(AppLogParam.EXCEPTION)));
+          changed = true;
         } catch (JsonProcessingException e) {
-          throw new IllegalArgumentException("Cannot serialize log exception", e);
+          throw new AppLogNotRetryableException("Cannot serialize log exception", e);
         }
+      }
+      if (changed && wasAggregated) {
+        // The live aggregator folds a request once both filters have logged it, so the handler's START fragment
+        // or an exception can arrive after its row was folded, typically when a dead-lettered fragment is replayed.
+        // The raw row takes the fragment, the rollups keep the request as it was folded: its count, status and
+        // hour are right; its handler class, user, handler time and, without a status, its error flag are not.
+        // Refusing the fragment (2.9.25) could never succeed and only parked it in the dead-letter queue.
+        long total = lateFragments.incrementAndGet();
+        log.warn("A late {}/{} fragment of request {} was merged after the request was aggregated; its rollups "
+            + "do not include it ({} since start)", appLog.getType().getValue(), appLog.getSubType().getValue(),
+            appLog.getLocalRequestId(), total);
       }
     }
     // Dirty checking writes both the request fragment and its receipt in this UnitOfWork.
     receipt.markProcessed(appLog);
+  }
+
+  /** Fragments merged into a request after it was aggregated, since this service started. */
+  public long getLateFragmentCount() {
+    return lateFragments.get();
   }
 }
