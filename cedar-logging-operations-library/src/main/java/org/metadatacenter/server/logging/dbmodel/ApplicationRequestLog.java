@@ -36,6 +36,10 @@ import java.util.Map;
         @Index(columnList = "status", name = "IDX_log_request_status"),
         @Index(columnList = "apiKeyHash", name = "IDX_log_request_apiKeyHash"),
         @Index(columnList = "aggregatedAt", name = "IDX_log_request_aggregatedAt"),
+        // Drives the live aggregator: its MIN(requestTime) of unaggregated rows and its batch reads. The
+        // single-column aggregatedAt index has a cardinality of 2, so neither could use it. The name matches
+        // the index built by hand on prod on 2026-10-20, so hbm2ddl finds it there and does not build it again.
+        @Index(columnList = "aggregatedAt, requestTime", name = "IDX_log_request_aggregatedAt_requestTime"),
     })
 public class ApplicationRequestLog {
 

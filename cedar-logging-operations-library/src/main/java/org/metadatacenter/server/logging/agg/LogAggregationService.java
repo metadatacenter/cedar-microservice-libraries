@@ -169,15 +169,29 @@ public class LogAggregationService {
   }
 
   // ---- prune (deletes only rows that are aggregated AND past retention) ---------------------------
+  // A pass walks a table's ids in windows, one transaction per window, so no statement locks more than one window's
+  // rows. See AggregationRollupDAO for the bounds and for why the DELETE can only use the primary key.
 
+  /** @return {@code {fromId, toId}} of {@code log_request} for one prune pass at this cutoff */
   @UnitOfWork
-  public int pruneRequests(Instant cutoff, int batchSize) {
-    return rollupDAO.pruneRequests(cutoff, batchSize);
+  public long[] requestPruneRange(Instant cutoff) {
+    return rollupDAO.requestPruneRange(cutoff);
   }
 
   @UnitOfWork
-  public int pruneCypher(Instant cutoff, int batchSize) {
-    return rollupDAO.pruneCypher(cutoff, batchSize);
+  public long[] cypherPruneRange(Instant cutoff) {
+    return rollupDAO.cypherPruneRange(cutoff);
+  }
+
+  /** @return {@code {nextFromId, deleted}}; {@code nextFromId} is -1 when the pass has reached {@code toId} */
+  @UnitOfWork
+  public long[] pruneRequestWindow(long fromId, long toId, Instant cutoff, int step) {
+    return rollupDAO.pruneRequestWindow(fromId, toId, cutoff, step);
+  }
+
+  @UnitOfWork
+  public long[] pruneCypherWindow(long fromId, long toId, Instant cutoff, int step) {
+    return rollupDAO.pruneCypherWindow(fromId, toId, cutoff, step);
   }
 
   // ---- outlier retention (kept forever, so forensics survive the prune) --------------------------
