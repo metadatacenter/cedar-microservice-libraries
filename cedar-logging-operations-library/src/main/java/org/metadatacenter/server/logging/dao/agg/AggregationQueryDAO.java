@@ -8,9 +8,9 @@ import org.metadatacenter.server.logging.agg.AggQueryResults.TimeBucket;
 import org.metadatacenter.server.logging.agg.AggQueryResults.UsageTotals;
 import org.metadatacenter.server.logging.agg.AggQueryResults.UserStat;
 import org.metadatacenter.server.logging.agg.LatencyHistogram;
+import org.metadatacenter.server.logging.dao.LogSqlTime;
 import org.metadatacenter.server.logging.dbmodel.agg.AggRequestHourly;
 
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,6 +20,9 @@ import java.util.List;
  * (and the histogram bucket columns), then computing percentiles from the merged histogram in Java —
  * the merge-then-percentile contract. Timezone-day/week reports are just different [from,to) bounds the
  * caller supplies. Methods assume an active session (the resource is {@code @UnitOfWork}).
+ * <p>
+ * Times cross as text ({@link LogSqlTime}): {@code hourUtc} holds UTC wall-clock, and a {@code Timestamp} would be
+ * converted through the connection's Los Angeles zone, shifting every bound and every bucket.
  */
 public class AggregationQueryDAO extends AbstractDAO<AggRequestHourly> {
 
@@ -134,11 +137,11 @@ public class AggregationQueryDAO extends AbstractDAO<AggRequestHourly> {
   // ---- volume series -----------------------------------------------------------------------------
 
   public List<TimeBucket> volumeSeries(Instant from, Instant to) {
-    String sql = "SELECT hourUtc, SUM(reqCount), SUM(errorCount) FROM agg_request_hourly "
+    String sql = "SELECT " + LogSqlTime.asText("hourUtc") + ", SUM(reqCount), SUM(errorCount) FROM agg_request_hourly "
         + "WHERE hourUtc >= :from AND hourUtc < :to GROUP BY hourUtc ORDER BY hourUtc";
     List<TimeBucket> out = new ArrayList<>();
     for (Object[] r : rows(sql, from, to, Integer.MAX_VALUE)) {
-      out.add(new TimeBucket(String.valueOf(ts(r[0])), num(r[1]), num(r[2])));
+      out.add(new TimeBucket(LogSqlTime.iso(r[0]), num(r[1]), num(r[2])));
     }
     return out;
   }
@@ -168,7 +171,7 @@ public class AggregationQueryDAO extends AbstractDAO<AggRequestHourly> {
   @SuppressWarnings("unchecked")
   private List<Object[]> rows(String sql, Instant from, Instant to, int limit, int offset) {
     var q = currentSession().createNativeQuery(sql)
-        .setParameter("from", Timestamp.from(from)).setParameter("to", Timestamp.from(to));
+        .setParameter("from", LogSqlTime.bind(from)).setParameter("to", LogSqlTime.bind(to));
     if (sql.contains(":lim")) {
       q.setParameter("lim", limit);
     }
@@ -180,7 +183,7 @@ public class AggregationQueryDAO extends AbstractDAO<AggRequestHourly> {
 
   private long count(String sql, Instant from, Instant to) {
     Object result = currentSession().createNativeQuery(sql)
-        .setParameter("from", Timestamp.from(from)).setParameter("to", Timestamp.from(to))
+        .setParameter("from", LogSqlTime.bind(from)).setParameter("to", LogSqlTime.bind(to))
         .getSingleResult();
     return num(result);
   }
@@ -207,15 +210,5 @@ public class AggregationQueryDAO extends AbstractDAO<AggRequestHourly> {
 
   private static String str(Object o) {
     return o == null ? null : o.toString();
-  }
-
-  private static Instant ts(Object o) {
-    if (o instanceof Timestamp t) {
-      return t.toInstant();
-    }
-    if (o instanceof Instant i) {
-      return i;
-    }
-    return null;
   }
 }

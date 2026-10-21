@@ -224,4 +224,85 @@ class LogQueryStoreTest {
     QueryResult share = store.inTransaction(session -> queries.dbTimeShare(FROM, TO, 10));
     assertEquals(1, share.rowCount(), "one handler: " + share.rows());
   }
+
+  /**
+   * 02:30 on 2027-03-14 is a valid UTC time that does not exist on a Los Angeles clock. Read as a Timestamp through the
+   * connection's zone it threw "HOUR_OF_DAY: 2 -> 3", and every other time came back shifted by the offset, with every
+   * range bound shifted the other way. Every read path gets the gap hour, bounded to exactly that hour, and must
+   * return the row at its UTC instant.
+   */
+  @Test
+  void everyReadPathReturnsTheSpringForwardHourAtItsUtcInstant() {
+    Instant gap = Instant.parse("2027-03-14T02:30:00Z");
+    Instant hour = gap.truncatedTo(ChronoUnit.HOURS);
+    Instant hourEnd = hour.plus(1, ChronoUnit.HOURS);
+    Instant day = gap.truncatedTo(ChronoUnit.DAYS);
+    Instant dayEnd = day.plus(1, ChronoUnit.DAYS);
+    request("r-gap", gap, 900, 500).forEach(store.writer::handleLog);
+    store.writer.handleLog(cypher(gap, "MATCH (g) RETURN g", "h-gap", 80, "r-gap"));
+    store.aggregation.aggregateLiveRequestBatch(day, dayEnd, 100);
+    store.aggregation.aggregateLiveCypherBatch(day, dayEnd, 100);
+    store.aggregation.captureLiveRequestDayOutliers(day, dayEnd);
+    store.aggregation.captureLiveCypherDayOutliers(day, dayEnd);
+    String at = "2027-03-14T02:30:00Z";
+    String hourAt = "2027-03-14T02:00:00Z";
+
+    // the explorer: raw rows and kept outliers
+    assertEquals(at, store.inTransaction(session -> explorer.recentRequests("", 0, 1)).get(0).requestTime());
+    assertEquals(at, store.inTransaction(session -> explorer.recentCypher("", 0, 1)).get(0).logTime());
+    assertEquals(at, store.inTransaction(session -> explorer.requestOutliers("SLOW", 1)).get(0).requestTime());
+    assertEquals(at, store.inTransaction(session -> explorer.cypherOutliers(1)).get(0).logTime());
+
+    // the usage page: rollups bounded by exactly the gap hour
+    assertEquals(List.of(hourAt), store.inTransaction(session -> usage.volumeSeries(hour, hourEnd))
+        .stream().map(TimeBucket::hourUtc).toList());
+    assertEquals(1, store.inTransaction(session -> usage.totals(hour, hourEnd)).reqCount());
+    assertEquals(List.of(1L, 1L, 1L), store.inTransaction(session -> List.of(usage.countEndpoints(hour, hourEnd),
+        usage.countCypherStatements(hour, hourEnd), usage.countUsers(hour, hourEnd))));
+    assertEquals(0, store.inTransaction(session -> usage.totals(hourEnd, hourEnd.plus(1, ChronoUnit.HOURS)))
+        .reqCount(), "the next hour is empty");
+
+    // the query engine: raw rows, the keyset cursor, time buckets, time filters, the rollup source, a facet
+    LogQuerySpec raw = new LogQuerySpec("request", hour.toString(), hourEnd.toString(), null, null, null, null, 1,
+        null);
+    QueryResult rows = store.inTransaction(session -> queries.query(raw));
+    assertEquals(1, rows.rowCount(), rows.rows().toString());
+    assertEquals(at, rows.rows().get(0).get("requestTime"));
+    LogQuerySpec next = new LogQuerySpec("request", hour.toString(), hourEnd.toString(), null, null, null, null, 1,
+        rows.nextCursor());
+    assertEquals(0, store.inTransaction(session -> queries.query(next)).rowCount(), "the cursor pages past the row");
+    LogQuerySpec cypherRaw = new LogQuerySpec("cypher", hour.toString(), hourEnd.toString(), null, null, null, null,
+        10, null);
+    assertEquals(at, store.inTransaction(session -> queries.query(cypherRaw)).rows().get(0).get("logTime"));
+
+    LogQuerySpec buckets = new LogQuerySpec("request", hour.toString(), hourEnd.toString(),
+        List.of(new LogQuerySpec.Filter("requestTime", "gte", at, null)), List.of("tsHour", "tsMinute"),
+        List.of("count", "p50:handlerDuration"), null, 10, null);
+    Map<String, Object> bucket = store.inTransaction(session -> queries.query(buckets)).rows().get(0);
+    assertEquals(List.of(hourAt, at, 1L), List.of(bucket.get("tsHour"), bucket.get("tsMinute"), bucket.get("count")));
+    LogQuerySpec flat = new LogQuerySpec("request", hour.toString(), hourEnd.toString(),
+        List.of(new LogQuerySpec.Filter("requestTime", "eq", at, null)), List.of("tsMinute"), List.of("count"), null,
+        10, null);
+    assertEquals(List.of(Map.of("tsMinute", at, "count", 1L)), store.inTransaction(session -> queries.query(flat))
+        .rows());
+    LogQuerySpec rollup = new LogQuerySpec("request", hour.toString(), hourEnd.toString(), null, List.of("tsHour"),
+        List.of("count", "p95:handlerDuration"), null, 10, null, null, "rollup");
+    List<Map<String, Object>> hours = store.inTransaction(session -> queries.query(rollup)).rows();
+    assertEquals(1, hours.size(), hours.toString());
+    assertEquals(hourAt, hours.get(0).get("tsHour"));
+
+    FacetResult facet = store.inTransaction(session -> queries.facet("request", "tsMinute", hour, hourEnd));
+    assertEquals(List.of(at), facet.values().stream().map(v -> v.value()).toList());
+
+    // coverage, freshness, a trace, the db-time share
+    var coverage = store.inTransaction(session -> queries.coverage());
+    assertTrue(coverage.tables().stream().filter(table -> table.sqlTable().equals("log_request"))
+        .allMatch(table -> at.equals(table.newest())), coverage.toString());
+    var freshness = store.inTransaction(session -> queries.freshness());
+    assertTrue(freshness.stream().allMatch(table -> at.equals(table.newestAt())), freshness.toString());
+    TraceResult trace = store.inTransaction(session -> queries.trace("g-r-gap", 100));
+    assertEquals(List.of("2027-03-14T02:30:00.005Z", at), trace.spans().stream().map(s -> s.startedAt()).sorted()
+        .toList(), "the handler's start, 5 ms in, and the Cypher query's");
+    assertEquals(1, store.inTransaction(session -> queries.dbTimeShare(hour, hourEnd, 10)).rowCount());
+  }
 }

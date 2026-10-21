@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -207,6 +208,37 @@ class LogAggregationStoreTest {
     List<Object[]> hourly = store.rows("SELECT statusClass, reqCount, errorCount FROM agg_request_hourly");
     assertEquals(List.of("4xx", 1L, 1L), List.of(hourly.get(0)[0], num(hourly.get(0)[1]), num(hourly.get(0)[2])));
     assertEquals(1, prune(true, NEXT_DAY, 10));
+  }
+
+  @Test
+  void aFragmentThatArrivesAfterItsRequestWasAggregatedIsMergedAndTheRollupsKeepTheFoldedRequest() {
+    // The handler's START was dead-lettered and is replayed after both filters' fragments were folded.
+    Instant three = DAY.plus(3, ChronoUnit.HOURS);
+    List<AppLogMessage> fragments = request("r-late", three, 100, 500);
+    store.writer.handleLog(fragments.get(0));
+    store.writer.handleLog(fragments.get(2));
+    assertEquals(1, store.aggregation.aggregateLiveRequestBatch(DAY, NEXT_DAY, 10));
+    String rollups = "SELECT className, authSource, statusClass, reqCount, errorCount, sumHandlerNanos FROM agg_request_hourly";
+    List<Object[]> folded = store.rows(rollups);
+    long lateBefore = store.writer.getLateFragmentCount();
+
+    store.writer.handleLog(fragments.get(1));
+    store.writer.handleLog(exception("r-late", three.plusSeconds(1)));
+    store.writer.handleLog(fragments.get(1));
+
+    List<Object[]> raw = store.rows("SELECT className, userId, handlerDuration, (errorPack IS NOT NULL), "
+        + "(aggregatedAt IS NOT NULL) FROM log_request");
+    assertEquals(List.of("TemplatesResource", USER, Duration.ofMillis(100).toNanos(), 1L, 1L),
+        List.of(raw.get(0)[0], raw.get(0)[1], num(raw.get(0)[2]), num(raw.get(0)[3]), num(raw.get(0)[4])),
+        "the raw row takes the late fragments and stays aggregated");
+    List<Object[]> after = store.rows(rollups);
+    assertEquals(1, after.size());
+    assertArrayEquals(folded.get(0), after.get(0), "the rollups keep the request as it was folded");
+    assertEquals(List.of("unknown", "unknown", "5xx", 1L, 1L, 0L), List.of(after.get(0)[0], after.get(0)[1],
+        after.get(0)[2], num(after.get(0)[3]), num(after.get(0)[4]), num(after.get(0)[5])));
+    assertEquals(0, store.count("SELECT COUNT(*) FROM agg_request_user_hourly WHERE userId = '" + USER + "'"));
+    assertEquals(0, store.aggregation.aggregateLiveRequestBatch(DAY, NEXT_DAY, 10), "it is not folded twice");
+    assertEquals(2, store.writer.getLateFragmentCount() - lateBefore, "the repeated START is not counted again");
   }
 
   @Test

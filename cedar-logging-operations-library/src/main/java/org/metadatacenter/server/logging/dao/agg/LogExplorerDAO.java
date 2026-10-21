@@ -7,10 +7,9 @@ import org.hibernate.SessionFactory;
 import org.hibernate.query.NativeQuery;
 import org.metadatacenter.server.logging.agg.LogExplorerResults.CypherRow;
 import org.metadatacenter.server.logging.agg.LogExplorerResults.RequestRow;
+import org.metadatacenter.server.logging.dao.LogSqlTime;
 import org.metadatacenter.server.logging.dbmodel.ApplicationRequestLog;
 
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,8 +19,14 @@ import java.util.Map;
  * Row-level reads over the RAW log tables for the Live Explorer (newest first). Free-text filter is a
  * LIKE across the human-searchable columns; minDurationNanos filters slow calls. Methods assume an
  * active session (the resource is {@code @UnitOfWork}).
+ * <p>
+ * Times are selected as text and returned as ISO-8601 UTC ({@link LogSqlTime}); a {@code Timestamp} read would be
+ * shifted by the connection's Los Angeles zone, and would throw on a row inside the spring-forward hour.
  */
 public class LogExplorerDAO extends AbstractDAO<ApplicationRequestLog> {
+
+  private static final String TEXT_REQUEST_TIME = LogSqlTime.asText("requestTime");
+  private static final String TEXT_LOG_TIME = LogSqlTime.asText("logTime");
 
   public LogExplorerDAO(SessionFactory factory) {
     super(factory);
@@ -38,8 +43,8 @@ public class LogExplorerDAO extends AbstractDAO<ApplicationRequestLog> {
   public List<RequestRow> recentRequests(String q, long minDurationNanos, int limit, int offset) {
     Filter filter = requestFilter(q, minDurationNanos);
     NativeQuery<?> query = currentSession().createNativeQuery(
-        "SELECT globalRequestId, requestTime, systemComponentName, httpMethod, path, className, methodName, "
-            + "userId, authSource, apiKeyHash, status, handlerDuration, errorPack FROM log_request"
+        "SELECT globalRequestId, " + TEXT_REQUEST_TIME + ", systemComponentName, httpMethod, path, className, "
+            + "methodName, userId, authSource, apiKeyHash, status, handlerDuration, errorPack FROM log_request"
             + filter.where() + " ORDER BY requestTime DESC, id DESC LIMIT :lim OFFSET :off");
     filter.bind(query);
     query.setParameter("lim", limit);
@@ -74,7 +79,7 @@ public class LogExplorerDAO extends AbstractDAO<ApplicationRequestLog> {
   public List<CypherRow> recentCypher(String q, long minDurationNanos, int limit, int offset) {
     Filter filter = cypherFilter(q, minDurationNanos);
     NativeQuery<?> query = currentSession().createNativeQuery(
-        "SELECT logTime, systemComponentName, operation, runnableHash, duration, runnable, parameters, "
+        "SELECT " + TEXT_LOG_TIME + ", systemComponentName, operation, runnableHash, duration, runnable, parameters, "
             + "className, methodName FROM log_cypher"
             + filter.where() + " ORDER BY logTime DESC, id DESC LIMIT :lim OFFSET :off");
     filter.bind(query);
@@ -104,7 +109,7 @@ public class LogExplorerDAO extends AbstractDAO<ApplicationRequestLog> {
   public List<RequestRow> requestOutliers(String kind, int limit, int offset) {
     Filter filter = outlierFilter(kind);
     NativeQuery<?> q = currentSession().createNativeQuery(
-        "SELECT requestTime, systemComponentName, httpMethod, path, className, methodName, userId, "
+        "SELECT " + TEXT_REQUEST_TIME + ", systemComponentName, httpMethod, path, className, methodName, userId, "
             + "authSource, apiKeyHash, status, durationNanos, errorPack FROM agg_request_outlier"
             + filter.where() + " ORDER BY durationNanos DESC, id DESC LIMIT :lim OFFSET :off");
     filter.bind(q);
@@ -135,8 +140,8 @@ public class LogExplorerDAO extends AbstractDAO<ApplicationRequestLog> {
   /** A page of the retained slowest Cypher instances (kept forever), slowest first. */
   public List<CypherRow> cypherOutliers(int limit, int offset) {
     NativeQuery<?> q = currentSession().createNativeQuery(
-        "SELECT logTime, systemComponentName, operation, runnableHash, durationNanos, runnable, parameters, "
-            + "className, methodName FROM agg_cypher_outlier ORDER BY durationNanos DESC, id DESC "
+        "SELECT " + TEXT_LOG_TIME + ", systemComponentName, operation, runnableHash, durationNanos, runnable, "
+            + "parameters, className, methodName FROM agg_cypher_outlier ORDER BY durationNanos DESC, id DESC "
             + "LIMIT :lim OFFSET :off");
     q.setParameter("lim", limit);
     q.setParameter("off", offset);
@@ -233,12 +238,6 @@ public class LogExplorerDAO extends AbstractDAO<ApplicationRequestLog> {
   }
 
   private static String iso(Object o) {
-    if (o instanceof Timestamp t) {
-      return t.toInstant().toString();
-    }
-    if (o instanceof Instant i) {
-      return i.toString();
-    }
-    return o == null ? null : o.toString();
+    return LogSqlTime.iso(o);
   }
 }
