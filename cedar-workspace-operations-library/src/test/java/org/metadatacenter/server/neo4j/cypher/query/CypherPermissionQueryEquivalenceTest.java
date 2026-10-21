@@ -13,10 +13,8 @@ import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Record;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -232,19 +230,6 @@ class CypherPermissionQueryEquivalenceTest {
   }
 
   @Test
-  void transitiveUserMaterializationPreservesIdentitySetsWithoutCrossProducts() {
-    assertEquals(stringSet(oldTransitiveUsers("CANREAD|VIEWER_ROLE"), RESOURCE_ID),
-        stringSet(CypherQueryBuilderFilesystemResourcePermission
-            .getUserIdsWithTransitiveViewerRoleOnFilesystemResource(), RESOURCE_ID));
-    assertEquals(stringSet(oldTransitiveUsers("EDITOR_ROLE"), RESOURCE_ID),
-        stringSet(CypherQueryBuilderFilesystemResourcePermission
-            .getUserIdsWithTransitiveEditorRoleOnFilesystemResource(), RESOURCE_ID));
-    assertEquals(stringSet(oldTransitiveUsers("CANWRITE|MANAGER_ROLE"), RESOURCE_ID),
-        stringSet(CypherQueryBuilderFilesystemResourcePermission
-            .getUserIdsWithTransitiveManagerRoleOnFilesystemResource(), RESOURCE_ID));
-  }
-
-  @Test
   void combinedMaterializationPreservesStrongestRolesForOwnersUsersAndGroupMembers() {
     try (var session = driver.session()) {
       session.run("""
@@ -287,19 +272,6 @@ class CypherPermissionQueryEquivalenceTest {
       }
       assertEquals(expected, actual, target);
     }
-  }
-
-  @Test
-  void transitiveGroupMaterializationOnlyRemovesDuplicateRows() {
-    List<String> oldRows = strings(oldTransitiveGroups("CANREAD|VIEWER_ROLE"),
-        Map.of("fsResourceId", RESOURCE_ID));
-    List<String> newRows = strings(CypherQueryBuilderFilesystemResourcePermission
-        .getGroupIdsWithTransitiveViewerRoleOnFilesystemResource(),
-        Map.of("fsResourceId", RESOURCE_ID));
-
-    assertEquals(new HashSet<>(oldRows), new HashSet<>(newRows));
-    assertTrue(oldRows.size() > newRows.size(),
-        "the fixture must exercise duplicate group rows removed by DISTINCT");
   }
 
   @Test
@@ -351,10 +323,6 @@ class CypherPermissionQueryEquivalenceTest {
         .userHasEditorRoleOnFilesystemResource(), parameters) > 0, userId + " EDITOR");
     assertEquals(manager, rowCount(CypherQueryBuilderFilesystemResourcePermission
         .userHasManagerRoleOnFilesystemResource(), parameters) > 0, userId + " MANAGER");
-  }
-
-  private static Set<String> stringSet(String query, String resourceId) {
-    return new HashSet<>(strings(query, Map.of("fsResourceId", resourceId)));
   }
 
   private static List<String> nodeIds(String template, Map<String, Object> parameters, String alias) {

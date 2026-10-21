@@ -1,7 +1,9 @@
 package org.metadatacenter.rest.assertion.assertiontarget;
 
+import org.metadatacenter.error.CedarAssertionResult;
 import org.metadatacenter.rest.CedarAssertionNoun;
 import org.metadatacenter.rest.assertion.CedarAssertion;
+import org.metadatacenter.rest.assertion.PermissionChecker;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
 
@@ -33,6 +35,23 @@ public class AssertionNounTargetFutureImpl extends AssertionTargetFutureImpl<Ced
   public AssertionNounTargetFutureImpl have(CedarPermission... permissions) {
     Collections.addAll(this.permissions, permissions);
     return this;
+  }
+
+  @Override
+  protected CedarAssertionResult getFirstAssertionError() {
+    CedarAssertionResult assertionError = super.getFirstAssertionError();
+    if (assertionError != null) {
+      return assertionError;
+    }
+    for (CedarAssertionNoun target : targets) {
+      for (CedarPermission permission : permissions) {
+        assertionError = PermissionChecker.check(target, permission);
+        if (assertionError != null) {
+          return assertionError;
+        }
+      }
+    }
+    return null;
   }
 
 }

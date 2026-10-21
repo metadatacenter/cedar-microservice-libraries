@@ -173,12 +173,6 @@ public class CypherQueryBuilderCategory extends AbstractCypherQueryBuilder {
         " RETURN category.<PROP.ID>";
   }
 
-  public static String categoryExists() {
-    return "" +
-        " MATCH (category:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>}})" +
-        " RETURN COUNT(category) = 1";
-  }
-
   public static String getCategoryPath() {
     return "" +
         " MATCH (directcategory:<LABEL.CATEGORY> {<PROP.ID>:{<PH.ID>} })" +

@@ -376,36 +376,4 @@ public class NodeIndexingService extends AbstractIndexingService {
     }
   }
 
-  public long removeDocumentFromIndex(CedarFilesystemResourceId resourceId, boolean retry) throws CedarProcessingException {
-    if (!retry) {
-      return removeDocumentFromIndex(resourceId);
-    }
-    final int MAX_TRIES = 10;
-    final int WAIT_MS = 300;
-    int currentTry = 1;
-    long removedCount = 0;
-
-    while (currentTry <= MAX_TRIES) {
-      log.debug("Removing resource from index (id = " + resourceId + ")");
-      removedCount = 0;
-      try {
-        removedCount = indexWorker.removeAllFromIndex(resourceId);
-      } catch (CedarProcessingException e) {
-        // DO nothing, we will retry
-      }
-      if (removedCount > 0) {
-        return removedCount;
-      } else {
-        log.debug("Could not remove resource from index (id = " + resourceId + ")");
-        try {
-          Thread.sleep(WAIT_MS);
-        } catch (InterruptedException e) {
-          log.error("Error while waiting before update execution", e);
-        }
-      }
-      currentTry++;
-    }
-    return removedCount;
-  }
-
 }

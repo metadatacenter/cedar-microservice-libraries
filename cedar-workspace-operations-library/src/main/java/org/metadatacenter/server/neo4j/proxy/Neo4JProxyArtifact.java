@@ -102,10 +102,6 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     }, "registering a clone for its unchanged owner");
   }
 
-  FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentId, boolean propagateSharing) {
-    return createDraftAsChildOfId(draft, parentId, propagateSharing, null);
-  }
-
   FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentId,
       boolean propagateSharing, String jobId) {
     initializeVersioning();
@@ -217,28 +213,6 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     }, "moving a versioned artifact");
   }
 
-  private boolean setOwner(CedarArtifactId artifactId, CedarUserId newOwnerId) {
-    String cypher = CypherQueryBuilderArtifact.setArtifactOwner();
-    CypherParameters params = CypherParamBuilderArtifact.matchArtifactIdAndUserId(artifactId, newOwnerId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "setting owner");
-  }
-
-  boolean updateOwner(CedarArtifactId artifactId, CedarUserId newOwnerId) {
-    boolean removed = removeOwner(artifactId);
-    if (removed) {
-      return setOwner(artifactId, newOwnerId);
-    }
-    return false;
-  }
-
-  boolean removeOwner(CedarArtifactId artifactId) {
-    String cypher = CypherQueryBuilderArtifact.removeResourceOwner();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(artifactId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "removing owner");
-  }
-
   private <T extends CedarResource> T findResourceGenericById(CedarResourceId id, Class<T> klazz) {
     String cypher = CypherQueryBuilderResource.getResourceById();
     CypherParameters params = CypherParamBuilderResource.matchId(id);
@@ -277,13 +251,6 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
     CypherParameters params = CypherParamBuilderArtifact.matchId(templateId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetLong(q);
-  }
-
-  public boolean enqueueInstanceReindex(CedarTemplateId templateId) {
-    String cypher = CypherQueryBuilderArtifact.enqueueInstanceReindex();
-    CypherParameters params = CypherParamBuilderArtifact.matchId(templateId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "marking a template's instances for reindexing");
   }
 
   public List<FolderServerArtifactExtract> getVersionHistory(CedarSchemaArtifactId artifactId) {

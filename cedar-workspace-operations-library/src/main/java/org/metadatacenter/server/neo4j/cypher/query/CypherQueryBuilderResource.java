@@ -225,34 +225,6 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
         """;
   }
 
-  public static String setResourceOwner() {
-    return """
-        MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
-        MATCH (resource:<LABEL.RESOURCE> {<PROP.ID>:{<PH.RESOURCE_ID>}})
-        MERGE (user)-[:<REL.OWNS>]->(resource)
-        SET resource.<PROP.OWNED_BY> = {<PH.USER_ID>}
-        RETURN resource
-        """;
-  }
-
-  public static String removeResourceOwner() {
-    return """
-        MATCH (user:<LABEL.USER>)
-        MATCH (resource:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})
-        MATCH (user)-[relation:<REL.OWNS>]->(resource)
-        DELETE (relation)
-        SET resource.<PROP.OWNED_BY> = null
-        RETURN resource
-        """;
-  }
-
-  public static String resourceExists() {
-    return """
-        MATCH (resource:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})
-        RETURN COUNT(resource) = 1
-        """;
-  }
-
   public static String getSpecialFoldersLookupQuery(List<String> sortList, boolean addPermissionConditions) {
     return getSpecialFoldersLookupQuery(sortList, addPermissionConditions, ModifiedDateRange.ALL);
   }

@@ -6,6 +6,7 @@ import org.metadatacenter.server.logging.query.LogQuerySpec.Filter;
 import org.metadatacenter.server.logging.query.LogQuerySpec.Sort;
 
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -179,6 +180,18 @@ class LogQueryBuilderTest {
     assertEquals(List.of("component", "count", "sum:handlerDuration"),
         q.columns().stream().map(c -> c.key()).toList());
     assertEquals(1, countOccurrences(q.sql(), "AS `sum_handlerDuration`"));
+  }
+
+  /** MySQL compares aliases without case, so two spellings of one metric make ORDER BY ambiguous. */
+  @Test
+  void repeatedMetricsCollapseWhateverTheirCase() {
+    BuiltQuery q = LogQueryBuilder.build(spec(List.of("component"),
+        List.of("count", "COUNT", "sum:handlerDuration", "SUM:handlerDuration"), null));
+
+    assertEquals(List.of("component", "count", "sum:handlerDuration"),
+        q.columns().stream().map(c -> c.key()).toList());
+    assertEquals(1, countOccurrences(q.sql(), "AS `count`"));
+    assertEquals(1, countOccurrences(q.sql().toLowerCase(Locale.ROOT), "as `sum_handlerduration`"));
   }
 
   @Test

@@ -257,6 +257,12 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
             .badRequest();
       }
       closePointInTime(walkPointInTimeId);
+      if (!walkStarts && e.status() == RestStatus.BAD_REQUEST) {
+        // A continuation is not signed, so it can name a snapshot or a position the cluster cannot read.
+        // That refusal is the caller's to act on, as an expired one is.
+        throw new CedarProcessingException("The continuation cannot be resumed. Start the walk again!", e)
+            .badRequest();
+      }
       throw e;
     }
   }

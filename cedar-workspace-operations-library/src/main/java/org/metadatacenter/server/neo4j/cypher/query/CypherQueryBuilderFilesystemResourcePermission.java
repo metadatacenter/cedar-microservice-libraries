@@ -1,6 +1,5 @@
 package org.metadatacenter.server.neo4j.cypher.query;
 
-import org.metadatacenter.model.RelationLabel;
 import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 
 public class CypherQueryBuilderFilesystemResourcePermission extends AbstractCypherQueryBuilder {
@@ -98,48 +97,6 @@ public class CypherQueryBuilderFilesystemResourcePermission extends AbstractCyph
         """;
   }
 
-  public static String addRoleToFilesystemResourceForUser(ResourceRole role) {
-    return """
-        MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
-        MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})
-        MERGE (user)-[:%s]->(resource)
-        SET resource._cedarAclRevision = coalesce(resource._cedarAclRevision, 1) + 1
-        RETURN user
-        """.formatted(RelationLabel.forResourceRole(role));
-  }
-
-  public static String addRoleToFilesystemResourceForGroup(ResourceRole role) {
-    return """
-        MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.GROUP_ID>}})
-        MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})
-        MERGE (group)-[:%s]->(resource)
-        SET resource._cedarAclRevision = coalesce(resource._cedarAclRevision, 1) + 1
-        RETURN group
-        """.formatted(RelationLabel.forResourceRole(role));
-  }
-
-  public static String removeRoleForFilesystemResourceFromUser(ResourceRole role) {
-    return """
-        MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})
-        MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})
-        MATCH (user)-[relation:%s]->(resource)
-        DELETE (relation)
-        SET resource._cedarAclRevision = coalesce(resource._cedarAclRevision, 1) + 1
-        RETURN resource
-        """.formatted(roleLabels(role));
-  }
-
-  public static String removeRoleForFilesystemResourceFromGroup(ResourceRole role) {
-    return """
-        MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.GROUP_ID>}})
-        MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})
-        MATCH (group)-[relation:%s]->(resource)
-        DELETE (relation)
-        SET resource._cedarAclRevision = coalesce(resource._cedarAclRevision, 1) + 1
-        RETURN resource
-        """.formatted(roleLabels(role));
-  }
-
   public static String userHasViewerRoleOnFilesystemResource() {
     return userHasRoleOnFilesystemResource(ResourceRole.VIEWER);
   }
@@ -168,83 +125,6 @@ public class CypherQueryBuilderFilesystemResourcePermission extends AbstractCyph
         }
         RETURN user
         """.formatted(grantLabels);
-  }
-
-  public static String getUsersWithDirectPermissionOnFilesystemResource(RelationLabel relationLabel) {
-    return """
-        MATCH (user:<LABEL.USER>)
-        MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})
-        MATCH (user)-[:%s]->(resource)
-        RETURN user
-        """.formatted(relationLabel);
-  }
-
-  public static String getGroupsWithDirectPermissionOnFilesystemResource(RelationLabel relationLabel) {
-    return """
-        MATCH (group:<LABEL.GROUP>)
-        MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})
-        MATCH (group)-[:%s]->(resource)
-        RETURN group
-        """.formatted(relationLabel);
-  }
-
-  public static String getUserIdsWithTransitiveViewerRoleOnFilesystemResource() {
-    return getUserIdsWithTransitiveRoleOnFilesystemResource(ResourceRole.VIEWER);
-  }
-
-  public static String getUserIdsWithTransitiveEditorRoleOnFilesystemResource() {
-    return getUserIdsWithTransitiveRoleOnFilesystemResource(ResourceRole.EDITOR);
-  }
-
-  public static String getUserIdsWithTransitiveManagerRoleOnFilesystemResource() {
-    return getUserIdsWithTransitiveRoleOnFilesystemResource(ResourceRole.MANAGER);
-  }
-
-  private static String getUserIdsWithTransitiveRoleOnFilesystemResource(ResourceRole role) {
-    // Keep the owner and grant traversals in independent UNION branches. Sequential OPTIONAL
-    // MATCHes form the Cartesian product of every owner path and every grant path before the final
-    // DISTINCT; deep trees with overlapping grants can therefore create a large intermediate row
-    // set even though the caller only needs user IDs.
-    return """
-        MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})
-        CALL {
-          WITH resource
-          MATCH (resource)<-[:CONTAINS*0..]-()<-[:OWNS]-(user:User)
-          RETURN user
-          UNION
-          WITH resource
-          MATCH (resource)<-[:CONTAINS*0..]-()<-[:%s]-()<-[:MEMBEROF*0..1]-(user:User)
-          RETURN user
-        }
-        RETURN DISTINCT user.<PROP.ID>
-        """.formatted(roleLabels(role));
-  }
-
-  public static String getGroupIdsWithTransitiveViewerRoleOnFilesystemResource() {
-    return getGroupIdsWithTransitiveRoleOnFilesystemResource(ResourceRole.VIEWER);
-  }
-
-  public static String getGroupIdsWithTransitiveEditorRoleOnFilesystemResource() {
-    return getGroupIdsWithTransitiveRoleOnFilesystemResource(ResourceRole.EDITOR);
-  }
-
-  public static String getGroupIdsWithTransitiveManagerRoleOnFilesystemResource() {
-    return getGroupIdsWithTransitiveRoleOnFilesystemResource(ResourceRole.MANAGER);
-  }
-
-  private static String getGroupIdsWithTransitiveRoleOnFilesystemResource(ResourceRole role) {
-    return """
-        MATCH (group:<LABEL.GROUP>)-[:%s]->()-[:<REL.CONTAINS>*0..]->(resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.FS_RESOURCE_ID>}})
-        RETURN DISTINCT group.<PROP.ID>
-        """.formatted(roleLabels(role));
-  }
-
-  private static String roleLabels(ResourceRole role) {
-    return switch (role) {
-      case VIEWER -> "CANREAD|VIEWER_ROLE";
-      case EDITOR -> "EDITOR_ROLE";
-      case MANAGER -> "CANWRITE|MANAGER_ROLE";
-    };
   }
 
   /** Traverse ancestors once for every named role; avoid six separate materialization reads. */

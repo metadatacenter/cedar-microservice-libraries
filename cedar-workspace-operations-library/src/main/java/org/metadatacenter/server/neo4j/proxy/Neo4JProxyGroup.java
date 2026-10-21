@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarUserId;
-import org.metadatacenter.model.RelationLabel;
 import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.model.folderserver.basic.FolderServerUser;
 import org.metadatacenter.server.neo4j.*;
@@ -14,10 +13,8 @@ import org.metadatacenter.server.VersionedGroupUsers;
 import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.GroupCallerMembership;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
-import org.metadatacenter.server.neo4j.cypher.parameter.AbstractCypherParamBuilder;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderGroup;
 import org.metadatacenter.server.neo4j.cypher.parameter.CypherParamBuilderUser;
-import org.metadatacenter.server.neo4j.cypher.query.AbstractCypherQueryBuilder;
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderGroup;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.metadatacenter.server.security.model.auth.CedarGroupUser;
@@ -125,20 +122,6 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
     }, "deleting a versioned group");
   }
 
-  List<FolderServerUser> findGroupMembers(CedarGroupId groupURL) {
-    String cypher = CypherQueryBuilderGroup.getGroupUsersWithRelation(RelationLabel.MEMBEROF);
-    CypherParameters params = CypherParamBuilderGroup.matchId(groupURL);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeReadGetList(q, FolderServerUser.class);
-  }
-
-  List<FolderServerUser> findGroupAdministrators(CedarGroupId groupId) {
-    String cypher = CypherQueryBuilderGroup.getGroupUsersWithRelation(RelationLabel.ADMINISTERS);
-    CypherParameters params = CypherParamBuilderGroup.matchId(groupId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeReadGetList(q, FolderServerUser.class);
-  }
-
   VersionedGroupUsers findVersionedGroupUsers(CedarGroupId groupId) {
     CypherQueryWithParameters query = new CypherQueryWithParameters(
         CypherQueryBuilderGroup.getVersionedGroupUsers(), CypherParamBuilderGroup.matchId(groupId));
@@ -228,18 +211,6 @@ public class Neo4JProxyGroup extends AbstractNeo4JProxy {
       }
     }
     return revision < 0 ? null : new VersionedGroupUsers(groupUsers, revision);
-  }
-
-  CypherQuery addUserGroupRelationQuery(CedarUserId userId, CedarGroupId groupId, RelationLabel relation) {
-    String cypher = AbstractCypherQueryBuilder.addRelation(NodeLabel.USER, NodeLabel.GROUP, relation);
-    CypherParameters params = AbstractCypherParamBuilder.matchFromNodeToNode(userId.getId(), groupId.getId());
-    return new CypherQueryWithParameters(cypher, params);
-  }
-
-  CypherQuery removeUserGroupRelationQuery(CedarUserId userId, CedarGroupId groupId, RelationLabel relation) {
-    String cypher = AbstractCypherQueryBuilder.removeRelation(NodeLabel.USER, NodeLabel.GROUP, relation);
-    CypherParameters params = AbstractCypherParamBuilder.matchFromNodeToNode(userId.getId(), groupId.getId());
-    return new CypherQueryWithParameters(cypher, params);
   }
 
   FolderServerGroup findGroupBySpecialValue(String specialGroupName) {

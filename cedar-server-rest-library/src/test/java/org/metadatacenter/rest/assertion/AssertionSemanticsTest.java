@@ -12,6 +12,7 @@ import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.error.CedarErrorPack;
 import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.rest.CedarAssertionNoun;
+import org.metadatacenter.rest.assertion.assertiontarget.AssertionNounTargetFutureImpl;
 import org.metadatacenter.rest.assertion.assertiontarget.AssertionNounTargetPresentImpl;
 import org.metadatacenter.rest.assertion.assertiontarget.AssertionPOJOTargetFutureImpl;
 import org.metadatacenter.rest.assertion.assertiontarget.AssertionPOJOTargetPresentImpl;
@@ -329,6 +330,22 @@ class AssertionSemanticsTest {
 
     assertSame(status, refused.getErrorPack().getStatus());
     assertSame(CedarErrorKey.ARTIFACT_NOT_FOUND, refused.getErrorPack().getErrorKey());
+  }
+
+  /** {@code c.should(c.user()).have(...)} refuses with the caller's status when any permission named is missing. */
+  @Test
+  void aDeferredPermissionGateRefusesAUserMissingAnyPermissionNamed() throws Exception {
+    CedarUserNoun reader = new CedarUserNoun(userWith(CedarPermission.TEMPLATE_READ));
+
+    new AssertionNounTargetFutureImpl(context, reader).have(CedarPermission.TEMPLATE_READ)
+        .otherwiseForbidden(new CedarErrorPack());
+    CedarAssertionException refused = assertThrows(CedarAssertionException.class, () ->
+        new AssertionNounTargetFutureImpl(context, reader)
+            .have(CedarPermission.TEMPLATE_READ, CedarPermission.TEMPLATE_UPDATE)
+            .otherwiseForbidden(new CedarErrorPack().errorKey(CedarErrorKey.PERMISSION_MISSING)));
+
+    assertSame(CedarResponseStatus.FORBIDDEN, refused.getErrorPack().getStatus());
+    assertSame(CedarErrorKey.PERMISSION_MISSING, refused.getErrorPack().getErrorKey());
   }
 
   @Test

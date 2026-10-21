@@ -37,8 +37,6 @@ public interface CategoryServiceSession {
 
   FolderServerCategory getRootCategory();
 
-  List<FolderServerCategory> getChildrenOf(CedarCategoryId parentCategoryId, int limit, int offset);
-
   FolderServerCategoryExtractWithChildren getCategoryTree();
 
   boolean attachCategoryToArtifact(CedarCategoryId categoryId, CedarArtifactId artifactId);

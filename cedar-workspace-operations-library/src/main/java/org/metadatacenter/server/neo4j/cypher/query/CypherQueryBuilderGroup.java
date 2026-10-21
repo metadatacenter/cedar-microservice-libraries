@@ -1,6 +1,5 @@
 package org.metadatacenter.server.neo4j.cypher.query;
 
-import org.metadatacenter.model.RelationLabel;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 
 import java.util.Map;
@@ -99,14 +98,6 @@ public class CypherQueryBuilderGroup extends AbstractCypherQueryBuilder {
     return " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})"
         + " SET group._cedarRevision = coalesce(group._cedarRevision, 1)"
         + " RETURN group._cedarRevision AS revision";
-  }
-
-  public static String getGroupUsersWithRelation(RelationLabel relationLabel) {
-    return "" +
-        " MATCH (user:<LABEL.USER>)" +
-        " MATCH (group:<LABEL.GROUP> {<PROP.ID>:{<PH.ID>}})" +
-        " MATCH (user)-[:" + relationLabel + "]->(group)" +
-        " RETURN user";
   }
 
   /**

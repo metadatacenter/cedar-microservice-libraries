@@ -16,13 +16,6 @@ public class CypherQueryBuilderFilesystemResource extends AbstractCypherQueryBui
         " RETURN user";
   }
 
-  public static String setEverybodyPermission() {
-    return "" +
-        " MATCH (resource:<LABEL.FILESYSTEM_RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
-        " SET resource.<PROP.EVERYBODY_PERMISSION> = {<PH.EVERYBODY_PERMISSION>}" +
-        " RETURN resource";
-  }
-
   public static String getAllDescendantResources() {
     return "" +
         " MATCH (parent:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>} })" +

@@ -187,23 +187,6 @@ public abstract class AbstractCypherQueryBuilder {
     return sb.toString();
   }
 
-  public static String addRelation(NodeLabel fromLabel, NodeLabel toLabel, RelationLabel relation) {
-    return "" +
-        " MATCH (fromResource:" + fromLabel + " {<PROP.ID>:$fromId })" +
-        " MATCH (toNode:" + toLabel + " {<PROP.ID>:$toId })" +
-        " MERGE (fromResource)-[:" + relation + "]->(toNode)" +
-        " RETURN fromResource";
-  }
-
-  public static String removeRelation(NodeLabel fromLabel, NodeLabel toLabel, RelationLabel relation) {
-    return "" +
-        " MATCH (fromResource:" + fromLabel + " {<PROP.ID>:$fromId })" +
-        " MATCH (toNode:" + toLabel + " {<PROP.ID>:$toId })" +
-        " MATCH (fromResource)-[relation:" + relation + "]->(toNode)" +
-        " DELETE relation" +
-        " RETURN fromResource";
-  }
-
   protected static String createFSResourceAsChildOfId(FolderServerArtifact newResource) {
     StringBuilder sb = new StringBuilder();
     sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");

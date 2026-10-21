@@ -41,6 +41,7 @@ public class OpenApiSuccessContractTest {
         OpenApiSuccessContract.assertDescribed(document("""
             "/no-success": {"get": {"responses": {"404": {"description": "missing"}}}},
             "/no-payload": {"get": {"responses": {"200": {"description": "ok"}}}},
+            "/no-schema": {"get": {"responses": {"200": {"content": {"application/json": {}}}}}},
             "/bare-string": {"get": {"responses": {
               "200": {"content": {"application/yaml": {"schema": {"type": "string"}}}}}}},
             "/bare-body": {"post": {
@@ -55,6 +56,7 @@ public class OpenApiSuccessContractTest {
     for (String finding : List.of(
         "GET /no-success: declares no 2xx response",
         "GET /no-payload 200: describes no payload",
+        "GET /no-schema 200 (application/json): declares no schema",
         "GET /bare-string 200 (application/yaml): typed as a bare string",
         "POST /bare-body request body (application/json): typed as a bare string",
         "PATCH /no-body: declares no request body and is not listed as bodiless",
@@ -79,6 +81,23 @@ public class OpenApiSuccessContractTest {
     AssertionFailedError empty = Assertions.assertThrows(AssertionFailedError.class, () ->
         OpenApiSuccessContract.assertDescribed(document(paths, ""), "DELETE /things 202"));
     Assertions.assertTrue(empty.getMessage().contains("DELETE /things 202"), empty.getMessage());
+
+    AssertionFailedError described = Assertions.assertThrows(AssertionFailedError.class, () ->
+        OpenApiSuccessContract.assertDescribed(document(paths, ""), "POST /things 201"));
+    Assertions.assertTrue(described.getMessage().contains("POST /things 201"), described.getMessage());
+  }
+
+  /** An empty-response exemption covers only a response that declares no content, so it hides no finding. */
+  @Test
+  public void anEmptyResponseExemptionDoesNotExcuseAPayloadItDescribes() {
+    AssertionFailedError failure = Assertions.assertThrows(AssertionFailedError.class, () ->
+        OpenApiSuccessContract.assertDescribed(document("""
+            "/things": {"get": {"responses": {
+              "200": {"content": {"application/json": {"schema": {"type": "string"}}}}}}}
+            """, ""), "GET /things 200"));
+
+    Assertions.assertTrue(failure.getMessage().contains("GET /things 200 (application/json): typed as a bare string"),
+        failure.getMessage());
   }
 
   private static InputStream document(String paths, String extraSchemas) {

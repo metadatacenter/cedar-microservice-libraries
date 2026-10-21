@@ -1,7 +1,6 @@
 package org.metadatacenter.server.neo4j.cypher.query;
 
 import org.junit.jupiter.api.Test;
-import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
@@ -80,21 +79,6 @@ class CypherResourceQuerySemanticsTest {
   }
 
   @Test
-  void roleRemovalRecognizesCurrentAndFutureRelationshipNames() {
-    for (ResourceRole role : ResourceRole.values()) {
-      String expectedLabels = switch (role) {
-        case VIEWER -> "CANREAD|VIEWER_ROLE";
-        case EDITOR -> "EDITOR_ROLE";
-        case MANAGER -> "CANWRITE|MANAGER_ROLE";
-      };
-      assertTrue(CypherQueryBuilderFilesystemResourcePermission
-          .removeRoleForFilesystemResourceFromUser(role).contains("relation:" + expectedLabels));
-      assertTrue(CypherQueryBuilderFilesystemResourcePermission
-          .removeRoleForFilesystemResourceFromGroup(role).contains("relation:" + expectedLabels));
-    }
-  }
-
-  @Test
   void permissionExistenceChecksDoNotMaterializeAndDeduplicateEveryMatchingPath() {
     String specialFolders = CypherQueryBuilderResource.getSpecialFoldersLookupQuery(List.of("name"), true);
     String unrestrictedSpecialFolders = CypherQueryBuilderResource.getSpecialFoldersLookupQuery(List.of("name"), false);
@@ -113,19 +97,5 @@ class CypherResourceQuerySemanticsTest {
     assertTrue(unrestrictedSpecialFolderCount.contains("RETURN count(resource)"), unrestrictedSpecialFolderCount);
     assertTrue(openCheck.contains("RETURN current"), openCheck);
     assertFalse(openCheck.contains("RETURN path"), openCheck);
-  }
-
-  @Test
-  void transitivePermissionMaterializationKeepsTraversalsIndependentAndDeduplicated() {
-    String users = CypherQueryBuilderFilesystemResourcePermission
-        .getUserIdsWithTransitiveViewerRoleOnFilesystemResource();
-    String groups = CypherQueryBuilderFilesystemResourcePermission
-        .getGroupIdsWithTransitiveViewerRoleOnFilesystemResource();
-
-    assertTrue(users.contains("CALL {"), users);
-    assertTrue(users.contains("UNION"), users);
-    assertFalse(users.contains("OPTIONAL MATCH"), users);
-    assertTrue(users.contains("RETURN DISTINCT user.<PROP.ID>"), users);
-    assertTrue(groups.contains("RETURN DISTINCT group.<PROP.ID>"), groups);
   }
 }

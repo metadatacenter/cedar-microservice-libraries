@@ -16,7 +16,7 @@ public abstract class UserServiceUtil {
     JsonNode userNode = JsonMapper.STRICT_MAPPER.valueToTree(cedarUser);
     for (String k : modificationsMap.keySet()) {
       String pointerS = "/" + k.replace(".", "/");
-      pointerS.replaceAll("//", "/");
+      pointerS = pointerS.replaceAll("//", "/");
       if (!pointerS.startsWith("/uiPreferences/")) {
         return null;
       }
