@@ -9,14 +9,24 @@ import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
+import org.metadatacenter.error.CedarErrorKey;
+import org.metadatacenter.error.CedarErrorType;
 import org.metadatacenter.id.CedarFolderId;
+import org.metadatacenter.id.CedarGroupId;
+import org.metadatacenter.id.CedarTemplateId;
+import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
+import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
+import org.metadatacenter.model.folderserver.basic.FolderServerInstance;
+import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
+import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.FolderServiceSession;
+import org.metadatacenter.server.GroupCallerMembership;
 import org.metadatacenter.server.GroupServiceSession;
 import org.metadatacenter.server.RevisionConflictException;
 import org.metadatacenter.server.RevisionPrecondition;
@@ -25,6 +35,7 @@ import org.metadatacenter.server.VersionedGroupUsers;
 import org.metadatacenter.server.VersionedResourcePermissions;
 import org.metadatacenter.server.VersionedResource;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
+import org.metadatacenter.server.neo4j.cypher.sort.QuerySortOptions;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarGroupUserRequest;
 import org.metadatacenter.server.security.model.auth.CedarGroupUsersRequest;
@@ -37,8 +48,14 @@ import org.metadatacenter.server.security.model.permission.resource.ResourcePerm
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionsRequest;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Direct tests of the workspace graph layer against an in-process Neo4j: the ACL evaluation in
@@ -417,6 +434,222 @@ public class WorkspacePermissionIntegrationTest {
     Assertions.assertEquals(1, after.content().getUserPermissions().size(),
         "The stale replacement must not remove the direct user grant");
     Assertions.assertEquals(user2.getId(), after.content().getUserPermissions().get(0).getUser().getId());
+  }
+
+  /**
+   * Each precondition of an ownership transfer refuses on its own and leaves the owner in place. The
+   * resource must exist, the caller must own it, and the new owner must be another user the graph
+   * holds. A transfer under a stale revision is a conflict.
+   */
+  @Test
+  public void resourceOwnershipTransferRefusesEachPreconditionAndKeepsTheOwner() {
+    FolderServerFolder folder = createFolderUnderUser1Home("Transfer Refusal Folder");
+    CedarFolderId missingFolder = cedarConfig.getLinkedDataUtil().buildNewLinkedDataIdObject(CedarFolderId.class);
+    CedarUserId unknownUser = CedarUserId.build("https://metadatacenter.org/users/" + UUID.randomUUID());
+    ResourcePermissionServiceSession user1Permissions = permissionsOf(user1Context);
+    long revision = user1Permissions.getVersionedResourcePermissions(folder.getResourceId()).revision();
+
+    assertRefused(user1Permissions.transferResourceOwnership(missingFolder, user2.getResourceId(),
+        RevisionPrecondition.any()), CedarErrorType.NOT_FOUND, CedarErrorKey.NODE_NOT_FOUND);
+    assertRefused(permissionsOf(user2Context).transferResourceOwnership(folder.getResourceId(),
+        user2.getResourceId(), RevisionPrecondition.any()), CedarErrorType.PERMISSION, CedarErrorKey.NOT_AUTHORIZED);
+    assertRefused(user1Permissions.transferResourceOwnership(folder.getResourceId(), unknownUser,
+        RevisionPrecondition.any()), CedarErrorType.NOT_FOUND, CedarErrorKey.USER_NOT_FOUND);
+    assertRefused(user1Permissions.transferResourceOwnership(folder.getResourceId(), user1.getResourceId(),
+        RevisionPrecondition.any()), CedarErrorType.INVALID_ARGUMENT, CedarErrorKey.INVALID_INPUT);
+    RevisionConflictException conflict = Assertions.assertThrows(RevisionConflictException.class,
+        () -> user1Permissions.transferResourceOwnership(folder.getResourceId(), user2.getResourceId(),
+            RevisionPrecondition.exact(revision + 1)));
+    Assertions.assertEquals(revision, conflict.getCurrentRevision());
+
+    VersionedResourcePermissions after = user1Permissions.getVersionedResourcePermissions(folder.getResourceId());
+    Assertions.assertEquals(user1.getId(), after.content().getOwner().getId());
+    Assertions.assertEquals(revision, after.revision(), "A refused transfer must not advance the ACL revision");
+    Assertions.assertEquals(user1.getId(), foldersOf(user1Context).findFolderById(folder.getResourceId()).getOwnedBy());
+  }
+
+  /**
+   * A transfer moves the OWNS relation and the ownedBy property together. The new owner's direct
+   * grant becomes redundant and is removed, and every other grant is kept.
+   */
+  @Test
+  public void resourceOwnershipTransferHandsTheResourceToTheNewOwner() {
+    FolderServerFolder folder = createFolderUnderUser1Home("Transfer Folder");
+    FolderServerGroup group = CedarDataServices.getInstance().getGroupServiceSession(user1Context)
+        .createGroup("ownership-transfer-grant-group", "Group whose grant survives the transfer");
+    ResourcePermissionsRequest shared = requestOwnedByUser1();
+    shared.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
+        new ResourcePermissionUser(user2.getId()), ResourceRole.EDITOR));
+    shared.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
+        new ResourcePermissionGroup(group.getId()), ResourceRole.VIEWER));
+    BackendCallResult<VersionedResourcePermissions> granted = permissionsOf(user1Context)
+        .updateResourcePermissions(folder.getResourceId(), shared, RevisionPrecondition.any());
+    Assertions.assertFalse(granted.isError(), () -> granted.getFirstErrorMessage());
+    long revision = granted.getPayload().revision();
+
+    BackendCallResult<VersionedResourcePermissions> transfer = permissionsOf(user1Context)
+        .transferResourceOwnership(folder.getResourceId(), user2.getResourceId(), RevisionPrecondition.exact(revision));
+
+    Assertions.assertFalse(transfer.isError(), () -> transfer.getFirstErrorMessage());
+    Assertions.assertEquals(revision + 1, transfer.getPayload().revision());
+    Assertions.assertEquals(user2.getId(), transfer.getPayload().content().getOwner().getId());
+    Assertions.assertTrue(transfer.getPayload().content().getUserPermissions().isEmpty(),
+        "The new owner's direct grant must be removed");
+    Assertions.assertEquals(List.of(group.getId()), transfer.getPayload().content().getGroupPermissions().stream()
+        .map(permission -> permission.getGroup().getId()).toList(), "The group's grant must survive the transfer");
+    Assertions.assertEquals(user2.getId(), foldersOf(user1Context).findFolderById(folder.getResourceId()).getOwnedBy());
+    Assertions.assertTrue(permissionsOf(user2Context).userIsOwnerOfResource(folder.getResourceId()));
+    Assertions.assertFalse(permissionsOf(user1Context).userIsOwnerOfResource(folder.getResourceId()));
+  }
+
+  /**
+   * The root, the Users folder and every home folder hold the tree together, so nobody may delete,
+   * move, share, publish or give one away. That covers the home folder's owner and the built-in
+   * administrator, whose override reaches every other folder. The session recognizes such a folder
+   * from the flags stored on its node, and everything else the owner may do in it remains.
+   */
+  @Test
+  public void structuralFoldersWithholdDeleteMoveSharingAndTransferFromEveryone() throws Exception {
+    Set<ResourceCapability> structural = EnumSet.of(ResourceCapability.DELETE_RESOURCE,
+        ResourceCapability.MOVE_RESOURCE, ResourceCapability.MANAGE_GRANTS, ResourceCapability.MANAGE_OPENVIEW,
+        ResourceCapability.TRANSFER_OWNERSHIP);
+
+    Set<ResourceCapability> home = permissionsOf(user1Context).getResourceCapabilities(user1HomeId);
+    Assertions.assertTrue(home.containsAll(EnumSet.of(ResourceCapability.READ_RESOURCE,
+        ResourceCapability.LIST_FOLDER_CONTENTS, ResourceCapability.UPDATE_RESOURCE,
+        ResourceCapability.CREATE_IN_FOLDER)), home.toString());
+    Assertions.assertTrue(Collections.disjoint(home, structural), home.toString());
+
+    CedarRequestContext adminContext = CedarRequestContextFactory.fromUser(TestAuthUtil.getAdminUser(cedarConfig));
+    for (String path : List.of(cedarConfig.getFolderStructureConfig().getRootFolder().getPath(),
+        cedarConfig.getFolderStructureConfig().getUsersFolder().getPath())) {
+      FolderServerFolder folder = foldersOf(adminContext).findFolderByPath(path);
+      Assertions.assertNotNull(folder, path);
+      Set<ResourceCapability> capabilities = permissionsOf(adminContext).getResourceCapabilities(folder.getResourceId());
+      Assertions.assertTrue(capabilities.contains(ResourceCapability.CREATE_IN_FOLDER), path + " " + capabilities);
+      Assertions.assertTrue(Collections.disjoint(capabilities, structural), path + " " + capabilities);
+    }
+
+    FolderServerFolder ordinary = createFolderUnderUser1Home("Structural Contrast Folder");
+    Set<ResourceCapability> overridden = permissionsOf(adminContext).getResourceCapabilities(ordinary.getResourceId());
+    Assertions.assertTrue(overridden.containsAll(EnumSet.of(ResourceCapability.DELETE_RESOURCE,
+        ResourceCapability.MOVE_RESOURCE)), overridden.toString());
+
+    CedarFolderId missingFolder = cedarConfig.getLinkedDataUtil().buildNewLinkedDataIdObject(CedarFolderId.class);
+    Assertions.assertEquals(Set.of(), permissionsOf(user1Context).getResourceCapabilities(missingFolder));
+  }
+
+  /**
+   * Only a group's administrators edit, delete or restaff it. The session refuses a member who is not
+   * one even when no HTTP check stands in front of it, and the group is left as it was. The caller's
+   * membership flags are read from the graph, so the built-in administrator, who neither belongs to nor
+   * administers the group, sees two false flags while their override still lets them edit it.
+   */
+  @Test
+  public void onlyAGroupsAdministratorsMayChangeIt() throws Exception {
+    GroupServiceSession user1Groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
+    GroupServiceSession user2Groups = CedarDataServices.getInstance().getGroupServiceSession(user2Context);
+    GroupServiceSession adminGroups = CedarDataServices.getInstance().getGroupServiceSession(
+        CedarRequestContextFactory.fromUser(TestAuthUtil.getAdminUser(cedarConfig)));
+    FolderServerGroup group = user1Groups.createGroup("administrators-only-group", "before");
+    CedarGroupUsersRequest membership = new CedarGroupUsersRequest();
+    membership.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user1.getId()), true, true));
+    membership.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user2.getId()), false, true));
+    Assertions.assertFalse(user1Groups.updateGroupUsers(group.getResourceId(), membership).isError());
+
+    Assertions.assertEquals(new GroupCallerMembership(true, true), user1Groups.findCallerMembership(group.getResourceId()));
+    Assertions.assertEquals(new GroupCallerMembership(true, false), user2Groups.findCallerMembership(group.getResourceId()));
+    Assertions.assertEquals(new GroupCallerMembership(false, false), adminGroups.findCallerMembership(group.getResourceId()));
+    Assertions.assertNull(user1Groups.findCallerMembership(CedarGroupId.build(
+        cedarConfig.getLinkedDataUtil().buildNewLinkedDataId(CedarResourceType.GROUP))), "a missing group has no membership");
+
+    Assertions.assertNull(user2Groups.updateGroupById(group.getResourceId(), Map.of(NodeProperty.DESCRIPTION, "by a member")));
+    Assertions.assertNull(user2Groups.updateGroupById(group.getResourceId(), Map.of(NodeProperty.DESCRIPTION, "by a member"),
+        RevisionPrecondition.any()));
+    Assertions.assertFalse(user2Groups.deleteGroupById(group.getResourceId()));
+    Assertions.assertFalse(user2Groups.deleteGroupById(group.getResourceId(), RevisionPrecondition.any()));
+    CedarGroupUsersRequest takeover = new CedarGroupUsersRequest();
+    takeover.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user2.getId()), true, true));
+    BackendCallResult<VersionedGroupUsers> refused = user2Groups.updateGroupUsers(group.getResourceId(), takeover);
+    assertRefused(refused, CedarErrorType.PERMISSION, CedarErrorKey.GROUP_CAN_BY_MODIFIED_ONLY_BY_GROUP_ADMIN);
+
+    Assertions.assertEquals("before", user1Groups.findGroupById(group.getResourceId()).getDescription());
+    Assertions.assertEquals(new GroupCallerMembership(true, true), user1Groups.findCallerMembership(group.getResourceId()),
+        "the refused takeover must leave the administrator in place");
+    Assertions.assertEquals(2, user1Groups.findGroupUsers(group.getResourceId()).getUsers().size());
+
+    Assertions.assertNotNull(adminGroups.updateGroupById(group.getResourceId(),
+        Map.of(NodeProperty.DESCRIPTION, "by the built-in administrator")));
+    Assertions.assertEquals("by the built-in administrator",
+        user1Groups.findGroupById(group.getResourceId()).getDescription());
+  }
+
+  private static FolderServerArtifact createInstanceOf(CedarTemplateId templateId, String name) {
+    FolderServerInstance instance = new FolderServerInstance();
+    instance.setId(cedarConfig.getLinkedDataUtil().buildNewLinkedDataId(CedarResourceType.INSTANCE));
+    instance.setName(name);
+    instance.setDescription("Created by WorkspacePermissionIntegrationTest");
+    instance.setIsBasedOn(templateId);
+    FolderServerArtifact created = foldersOf(user1Context).createResourceAsChildOfId(instance, user1HomeId);
+    Assertions.assertNotNull(created, "The instance '" + name + "' should be created");
+    return created;
+  }
+
+  private static Set<String> instancesOf(CedarRequestContext context, CedarTemplateId templateId, int limit, int offset) {
+    return foldersOf(context).searchIsBasedOn(List.of(CedarResourceType.INSTANCE), templateId, limit, offset,
+            List.of(QuerySortOptions.DEFAULT_SORT_FIELD.getName())).stream()
+        .map(FolderServerResourceExtract::getId)
+        .collect(Collectors.toSet());
+  }
+
+  /**
+   * The listing of a template's instances shows each caller the instances they may read, and the
+   * built-in administrator all of them. Copying instances to a new template version runs as that
+   * administrator and pages through this listing, so a listing that hid instances from it would
+   * leave them behind without a word.
+   */
+  @Test
+  public void aTemplatesInstancesAreListedForTheirReadersAndAllForTheAdministrator() throws Exception {
+    FolderServerTemplate template = new FolderServerTemplate();
+    template.setId(cedarConfig.getLinkedDataUtil().buildNewLinkedDataId(CedarResourceType.TEMPLATE));
+    template.setName("Instance Listing Template");
+    template.setVersion("0.0.1");
+    template.setPublicationStatus("bibo:draft");
+    CedarTemplateId templateId = CedarTemplateId.build(
+        foldersOf(user1Context).createResourceAsChildOfId(template, user1HomeId).getId());
+    FolderServerArtifact first = createInstanceOf(templateId, "Listed Instance One");
+    FolderServerArtifact second = createInstanceOf(templateId, "Listed Instance Two");
+    createInstanceOf(CedarTemplateId.build(cedarConfig.getLinkedDataUtil().buildNewLinkedDataId(CedarResourceType.TEMPLATE)),
+        "Instance Of Another Template");
+    CedarRequestContext adminContext = CedarRequestContextFactory.fromUser(TestAuthUtil.getAdminUser(cedarConfig));
+    List<CedarResourceType> instances = List.of(CedarResourceType.INSTANCE);
+
+    Assertions.assertEquals(Set.of(first.getId(), second.getId()), instancesOf(user1Context, templateId, 10, 0));
+    Assertions.assertEquals(2, foldersOf(user1Context).searchIsBasedOnCount(instances, templateId));
+    Assertions.assertEquals(Set.of(), instancesOf(user2Context, templateId, 10, 0));
+    Assertions.assertEquals(0, foldersOf(user2Context).searchIsBasedOnCount(instances, templateId));
+    Assertions.assertEquals(Set.of(first.getId(), second.getId()), instancesOf(adminContext, templateId, 10, 0),
+        "the built-in administrator reads every instance without a grant");
+    Assertions.assertEquals(2, foldersOf(adminContext).searchIsBasedOnCount(instances, templateId));
+
+    Set<String> firstPage = instancesOf(user1Context, templateId, 1, 0);
+    Set<String> secondPage = instancesOf(user1Context, templateId, 1, 1);
+    Assertions.assertEquals(1, firstPage.size());
+    Assertions.assertEquals(1, secondPage.size());
+    Assertions.assertNotEquals(firstPage, secondPage, "consecutive pages must not repeat an instance");
+
+    ResourcePermissionsRequest request = requestOwnedByUser1();
+    request.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
+        new ResourcePermissionUser(user2.getId()), ResourceRole.VIEWER));
+    Assertions.assertFalse(permissionsOf(user1Context).updateResourcePermissions(first.getResourceId(), request).isError());
+    Assertions.assertEquals(Set.of(first.getId()), instancesOf(user2Context, templateId, 10, 0));
+    Assertions.assertEquals(1, foldersOf(user2Context).searchIsBasedOnCount(instances, templateId));
+  }
+
+  private static void assertRefused(BackendCallResult<?> result, CedarErrorType type, CedarErrorKey key) {
+    Assertions.assertTrue(result.isError(), "The call should be refused with " + key);
+    Assertions.assertEquals(type, result.getFirstError().getErrorPack().getErrorType(), key.toString());
+    Assertions.assertEquals(key, result.getFirstError().getErrorPack().getErrorKey());
   }
 
 }

@@ -267,6 +267,51 @@ class SearchIndexLifecycleTest {
   }
 
   /**
+   * One resource's permission change takes the same care as a batch. The search permission executor
+   * sends single changes this way, and a resource the index lacks would otherwise stay unsearchable
+   * after the change that should have made it visible.
+   */
+  @Test
+  void aSinglePermissionChangeDuringARebuildReachesBothIndices() throws Exception {
+    String live = alias + "-2026-01-01t000000";
+    String rebuilding = alias + "-2026-02-01t000000";
+    management.createSearchIndex(live);
+    management.addAlias(live, alias);
+    management.createSearchIndex(rebuilding);
+    new ElasticsearchIndexingWorker(live, client).addToIndex(withContent(T1), T1);
+    NodeIndexingService indexing = spy(ElasticsearchServiceFactory.getInstance(config).nodeIndexingService());
+    doAnswer(call -> whole(call.getArgument(0), call.getArgument(1)))
+        .when(indexing).createIndexDocument(any(), any(), any(), any(), anyBoolean());
+
+    CedarDataServices services = dataServices(List.of());
+
+    try (var data = mockStatic(CedarDataServices.class)) {
+      data.when(CedarDataServices::getInstance).thenReturn(services);
+      IndexRebuildRegistry.begin(rebuilding);
+      for (String id : List.of(T1, T2)) {
+        FolderServerTemplate template = new FolderServerTemplate();
+        template.setId(id);
+        indexing.updatePermissionProjection(template, grants(id), null, null);
+      }
+      assertEquals(Set.of(T1, T2), IndexRebuildRegistry.liveTouched(), "the rebuild must write neither back");
+      IndexRebuildRegistry.end(rebuilding);
+    }
+
+    for (String index : List.of(live, rebuilding)) {
+      Map<String, ObjectNode> documents = openSearch.index(index).documents;
+      assertEquals(Set.of(T1, T2), documents.keySet(), index);
+      for (String id : List.of(T1, T2)) {
+        assertEquals(VIEWER_GRANT, documents.get(id).path("groups").get(0).asText(), index + " " + id);
+      }
+    }
+    assertTrue(openSearch.index(live).documents.get(T1).has("infoFields"), "a patch keeps the indexed content");
+    assertEquals("whole", openSearch.index(live).documents.get(T2).path("summaryText").asText(),
+        "a resource the index lacks is indexed whole");
+    assertEquals("whole", openSearch.index(rebuilding).documents.get(T1).path("summaryText").asText(),
+        "an index being filled without the resource gets all of it, not a bare patch");
+  }
+
+  /**
    * Without force, a rebuild compares the identifiers the graph holds with those the index holds, and
    * replaces the index only when they differ.
    */

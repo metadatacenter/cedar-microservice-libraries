@@ -11,6 +11,7 @@ import org.metadatacenter.id.CedarCategoryId;
 import org.metadatacenter.id.CedarFolderId;
 import org.metadatacenter.id.CedarTemplateId;
 import org.metadatacenter.id.CedarUntypedSchemaArtifactId;
+import org.metadatacenter.model.BiboStatus;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
@@ -20,6 +21,7 @@ import org.metadatacenter.model.folderserver.basic.FolderServerSchemaArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
 import org.metadatacenter.model.folderserver.extract.FolderServerArtifactExtract;
 import org.metadatacenter.model.folderserver.extract.FolderServerCategoryExtract;
+import org.metadatacenter.model.folderserver.extract.FolderServerCategoryExtractWithChildren;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.CategoryPermissionServiceSession;
@@ -27,10 +29,13 @@ import org.metadatacenter.server.CategoryNotEmptyException;
 import org.metadatacenter.server.CategoryServiceSession;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.GroupServiceSession;
+import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.RevisionConflictException;
 import org.metadatacenter.server.RevisionPrecondition;
+import org.metadatacenter.server.VersionTransitionConflictException;
 import org.metadatacenter.server.VersionedCategoryPermissions;
 import org.metadatacenter.server.VersionedResource;
+import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.permission.category.CategoryCapability;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionGroup;
@@ -39,20 +44,26 @@ import org.metadatacenter.server.security.model.permission.category.CategoryPerm
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUser;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUserPermissionPair;
 import org.metadatacenter.server.security.model.permission.category.CategoryRole;
+import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUser;
+import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUserPermissionPair;
+import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionsRequest;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Direct tests of the category graph and of artifact version chains, against an in-process
  * Neo4j. Category roles inherit down CONTAINSCATEGORY, while ownership remains separately
  * reported and supplies Manager authority to descendants.
  *
- * Version chains are plain graph state: a new version carries a previousVersion property and a
- * PREVIOUSVERSION relation to its predecessor, and the latest* flags are maintained explicitly
- * by the caller (the resource server flips them after creating a version); nothing recomputes
- * them.
+ * Version chains are graph state. A new version carries a previousVersion property and a
+ * PREVIOUSVERSION relation to its predecessor. A plain create keeps the latest* flags the caller
+ * set. Creating a draft, publishing and deleting recompute them for the whole series in the same
+ * transaction.
  */
 @Tag("integration")
 public class WorkspaceCategoryAndVersionIntegrationTest {
@@ -425,6 +436,150 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
         foldersOf(user2Context).getVersionHistoryWithPermission(version1Id);
     Assertions.assertTrue(historyForStranger.isEmpty(),
         "A stranger should see an empty permission-filtered version history");
+  }
+
+  private static Map<NodeProperty, String> publication(String version) {
+    return Map.of(NodeProperty.VERSION, version, NodeProperty.PUBLICATION_STATUS, BiboStatus.PUBLISHED.getValue());
+  }
+
+  private static FolderServerTemplate draftOf(FolderServerArtifact source, String version) {
+    FolderServerTemplate draft = newTemplate(source.getName(), version);
+    draft.setPreviousVersion(CedarUntypedSchemaArtifactId.build(source.getId()));
+    return draft;
+  }
+
+  private static void assertFlags(CedarTemplateId id, boolean latest, boolean latestDraft, boolean latestPublished) {
+    FolderServerSchemaArtifact artifact = foldersOf(user1Context).findSchemaArtifactById(id);
+    Assertions.assertEquals(latest, artifact.isLatestVersion(), artifact.getVersion().getValue() + " latest");
+    Assertions.assertEquals(latestDraft, artifact.isLatestDraftVersion(), artifact.getVersion().getValue() + " latest draft");
+    Assertions.assertEquals(latestPublished, artifact.isLatestPublishedVersion(),
+        artifact.getVersion().getValue() + " latest published");
+  }
+
+  private static ResourcePermissionServiceSession resourcePermissionsOf(CedarRequestContext context) {
+    return CedarDataServices.getInstance().getResourcePermissionServiceSession(context);
+  }
+
+  /**
+   * Publication recomputes the series' flags in the transaction that publishes, so the published
+   * version is both the latest and the latest published one. A published version cannot be published
+   * again.
+   */
+  @Test
+  public void publishingADraftMakesItTheLatestPublishedVersionOnce() {
+    FolderServiceSession folders = foldersOf(user1Context);
+    CedarTemplateId id = CedarTemplateId.build(createTemplateUnderUser1Home(newTemplate("Publication Template", "1.0.0")).getId());
+
+    Assertions.assertNotNull(folders.updateArtifactById(id, CedarResourceType.TEMPLATE, publication("1.0.0")));
+    Assertions.assertEquals(BiboStatus.PUBLISHED, folders.findSchemaArtifactById(id).getPublicationStatus());
+    assertFlags(id, true, false, true);
+
+    Assertions.assertThrows(VersionTransitionConflictException.class,
+        () -> folders.updateArtifactById(id, CedarResourceType.TEMPLATE, publication("1.0.1")));
+    Assertions.assertEquals("1.0.0", folders.findSchemaArtifactById(id).getVersion().getValue(),
+        "a refused publication must leave the version as it was");
+  }
+
+  /**
+   * A draft of the latest published version becomes the series' only draft and its latest version,
+   * and the source keeps only its latest-published flag. When asked to, the draft starts with the
+   * source's grants. The source accepts one successor, a draft cannot itself be drafted from, and
+   * deleting the draft hands the latest flag back to the source.
+   */
+  @Test
+  public void aDraftOfThePublishedVersionIsItsSoleSuccessorAndMayCarryItsSharing() {
+    FolderServiceSession folders = foldersOf(user1Context);
+    FolderServerArtifact source = createTemplateUnderUser1Home(newTemplate("Draft Source Template", "1.0.0"));
+    CedarTemplateId sourceId = CedarTemplateId.build(source.getId());
+    Assertions.assertNotNull(folders.updateArtifactById(sourceId, CedarResourceType.TEMPLATE, publication("1.0.0")));
+    ResourcePermissionsRequest share = new ResourcePermissionsRequest();
+    share.setOwner(new ResourcePermissionUser(user1.getId()));
+    share.getUserPermissions().add(new ResourcePermissionUserPermissionPair(
+        new ResourcePermissionUser(user2.getId()), ResourceRole.VIEWER));
+    Assertions.assertFalse(resourcePermissionsOf(user1Context).updateResourcePermissions(sourceId, share).isError());
+
+    FolderServerArtifact draft = folders.createDraftWithCleanup(draftOf(source, "2.0.0"), user1HomeId, true, null);
+    Assertions.assertNotNull(draft);
+    CedarTemplateId draftId = CedarTemplateId.build(draft.getId());
+    assertFlags(draftId, true, true, false);
+    assertFlags(sourceId, false, false, true);
+    Assertions.assertTrue(resourcePermissionsOf(user2Context).userHasRole(draftId, ResourceRole.VIEWER),
+        "the draft should carry the source's grant");
+    Assertions.assertEquals(List.of(draft.getId(), source.getId()),
+        folders.getVersionHistory(draftId).stream().map(FolderServerArtifactExtract::getId).toList());
+
+    FolderServerTemplate rival = draftOf(source, "2.0.1");
+    Assertions.assertThrows(VersionTransitionConflictException.class,
+        () -> folders.createDraftWithCleanup(rival, user1HomeId, false, null));
+    Assertions.assertNull(folders.findSchemaArtifactById(CedarTemplateId.build(rival.getId())),
+        "a refused draft must leave no node behind");
+    FolderServerTemplate draftOfDraft = draftOf(draft, "3.0.0");
+    Assertions.assertThrows(VersionTransitionConflictException.class,
+        () -> folders.createDraftWithCleanup(draftOfDraft, user1HomeId, false, null));
+
+    Assertions.assertTrue(folders.deleteResourceById(draftId));
+    assertFlags(sourceId, true, false, true);
+
+    FolderServerArtifact unshared = folders.createDraftWithCleanup(draftOf(source, "2.0.0"), user1HomeId, false, null);
+    Assertions.assertNotNull(unshared, "once the draft is gone the source accepts a successor again");
+    Assertions.assertFalse(resourcePermissionsOf(user2Context).userHasRole(
+        CedarTemplateId.build(unshared.getId()), ResourceRole.VIEWER), "a draft made without sharing starts unshared");
+  }
+
+  private static FolderServerCategoryExtractWithChildren childOf(FolderServerCategoryExtractWithChildren parent,
+                                                                  FolderServerCategory child) {
+    return parent.getChildren().stream()
+        .filter(extract -> extract.getId().equals(child.getId()))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError(child.getName() + " should sit under " + parent.getId()));
+  }
+
+  /** The tree hangs every category under its own parent, at any depth. */
+  @Test
+  public void categoryTreeNestsEachCategoryUnderItsParent() {
+    FolderServerCategory a = createCategoryAsUser1(rootCategoryId, "Nesting A");
+    FolderServerCategory b = createCategoryAsUser1(a.getResourceId(), "Nesting B");
+    FolderServerCategory c = createCategoryAsUser1(b.getResourceId(), "Nesting C");
+    FolderServerCategory d = createCategoryAsUser1(rootCategoryId, "Nesting D");
+
+    FolderServerCategoryExtractWithChildren root = categoriesOf(user1Context).getCategoryTree();
+
+    Assertions.assertEquals(rootCategoryId.getId(), root.getId());
+    Assertions.assertTrue(childOf(root, d).getChildren().isEmpty());
+    FolderServerCategoryExtractWithChildren treeA = childOf(root, a);
+    Assertions.assertEquals(List.of(b.getId()), treeA.getChildren().stream().map(FolderServerCategoryExtract::getId).toList());
+    FolderServerCategoryExtractWithChildren treeB = childOf(treeA, b);
+    Assertions.assertEquals(List.of(c.getId()), treeB.getChildren().stream().map(FolderServerCategoryExtract::getId).toList());
+    Assertions.assertTrue(childOf(treeB, c).getChildren().isEmpty());
+  }
+
+  /**
+   * An artifact's category paths run from the root to each category attached to it, one path per
+   * attachment. Its materialized categories, which the search index filters by, are every category on
+   * those paths, so a search by an ancestor finds the artifact.
+   */
+  @Test
+  public void attachedCategoryPathsRunFromTheRootToEachAttachedCategory() {
+    FolderServerCategory a = createCategoryAsUser1(rootCategoryId, "Paths A");
+    FolderServerCategory b = createCategoryAsUser1(a.getResourceId(), "Paths B");
+    FolderServerCategory c = createCategoryAsUser1(rootCategoryId, "Paths C");
+    CedarTemplateId templateId = CedarTemplateId.build(
+        createTemplateUnderUser1Home(newTemplate("Category Paths Template", "0.0.1")).getId());
+    CategoryServiceSession categories = categoriesOf(user1Context);
+    Assertions.assertTrue(categories.attachCategoriesToArtifact(List.of(b.getResourceId(), c.getResourceId()), templateId));
+
+    Set<List<String>> paths = categories.getAttachedCategoryPaths(templateId).stream()
+        .map(path -> path.stream().map(FolderServerCategoryExtract::getId).toList())
+        .collect(Collectors.toSet());
+
+    Assertions.assertEquals(Set.of(List.of(rootCategoryId.getId(), a.getId(), b.getId()),
+        List.of(rootCategoryId.getId(), c.getId())), paths);
+    Assertions.assertEquals(Set.of(rootCategoryId.getId(), a.getId(), b.getId(), c.getId()),
+        categories.getArtifactMaterializedCategories(templateId).getCategoryIds());
+
+    CedarTemplateId missing = CedarTemplateId.build(cedarConfig.getLinkedDataUtil().buildNewLinkedDataId(CedarResourceType.TEMPLATE));
+    Assertions.assertEquals(List.of(), categories.getAttachedCategoryPaths(missing));
+    Assertions.assertNull(categories.getArtifactMaterializedCategories(missing));
   }
 
 }

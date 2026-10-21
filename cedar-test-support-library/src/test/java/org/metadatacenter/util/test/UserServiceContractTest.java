@@ -1,5 +1,6 @@
 package org.metadatacenter.util.test;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -7,14 +8,21 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.metadatacenter.bridge.CedarDataServices;
+import org.metadatacenter.error.CedarErrorType;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.SystemComponent;
+import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.CedarUserApiKey;
 import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
+import org.metadatacenter.server.security.model.user.SortDirection;
+import org.metadatacenter.server.security.model.user.ViewMode;
 import org.metadatacenter.server.service.UserService;
+import org.metadatacenter.util.json.JsonMapper;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -32,8 +40,10 @@ import static org.junit.jupiter.api.Named.named;
  * that reach the stored service are the handful that skip the double.
  *
  * <p>The rules below are about credentials and the keys that carry them, which is where the two had
- * drifted. Each runs twice, once against each implementation, from a user registered the way that
- * implementation registers one.
+ * drifted. The last three are about the profile patch. Both services judge a patch with
+ * UserServiceUtil, and the stored one applies it inside a graph transaction. Each rule runs twice,
+ * once against each implementation, from a user registered the way that implementation registers
+ * one.
  */
 @Tag("integration")
 public class UserServiceContractTest {
@@ -181,6 +191,104 @@ public class UserServiceContractTest {
         "unused", OffsetDateTime.now()).isError());
 
     Assertions.assertNotNull(service.findUserByApiKey(valueOf(user, "live")));
+  }
+
+  @ParameterizedTest
+  @MethodSource("implementations")
+  public void aProfilePatchChangesTheNamedPreferencesAndNothingElse(Registrar registrar) {
+    CedarUser user = withProvisionedPreferences(userWith(key("live", true)));
+    UserService service = registrar.register(user);
+
+    BackendCallResult<CedarUser> patched = service.patchUser(user.getResourceId(), patch(Map.of(
+        "uiPreferences.stylesheet", "high-contrast",
+        "uiPreferences.folderView.sortBy", "createdOnTS")));
+
+    Assertions.assertFalse(patched.isError(), patched::getFirstErrorMessage);
+    CedarUserUIPreferences stored = service.findUser(user.getResourceId()).getUiPreferences();
+    Assertions.assertEquals("high-contrast", stored.getStylesheet());
+    Assertions.assertEquals("createdOnTS", stored.getFolderView().getSortBy());
+    Assertions.assertEquals(ViewMode.GRID, stored.getFolderView().getViewMode(),
+        "a preference the patch does not name keeps its value");
+    Assertions.assertEquals(user.getEmail(), service.findUser(user.getResourceId()).getEmail());
+    Assertions.assertNotNull(service.findUserByApiKey(valueOf(user, "live")), "a patch leaves the keys alone");
+  }
+
+  /**
+   * A patch reaches the preferences and nothing else, so it can neither change the account's address
+   * nor grant the account anything. A refused patch writes none of its entries, the permitted ones
+   * included.
+   */
+  @ParameterizedTest
+  @MethodSource("implementations")
+  public void aProfilePatchOutsideThePreferencesIsRefusedWhole(Registrar registrar) {
+    CedarUser user = withProvisionedPreferences(userWith(key("live", true)));
+    UserService service = registrar.register(user);
+
+    for (Map<String, Object> refused : List.of(
+        Map.<String, Object>of("email", "someone-else@test.com"),
+        Map.<String, Object>of("permissions", List.of("anything")),
+        Map.<String, Object>of("uiPreferences.stylesheet", "high-contrast", "apiKeys", List.of()))) {
+      assertRefused(service.patchUser(user.getResourceId(), patch(refused)), CedarErrorType.INVALID_ARGUMENT,
+          refused.keySet().toString());
+    }
+
+    CedarUser stored = service.findUser(user.getResourceId());
+    Assertions.assertEquals(user.getEmail(), stored.getEmail());
+    Assertions.assertEquals(List.of(), stored.getPermissions());
+    Assertions.assertEquals("default", stored.getUiPreferences().getStylesheet(),
+        "the permitted entry of a refused patch must not be written");
+    Assertions.assertNotNull(service.findUserByApiKey(valueOf(user, "live")));
+  }
+
+  /**
+   * A patch may change a preference the profile already holds. It may not add one, empty one the
+   * profile requires, or give one a value its type does not allow, and a user that does not exist is
+   * reported as missing rather than as an invalid patch.
+   */
+  @ParameterizedTest
+  @MethodSource("implementations")
+  public void aProfilePatchThatWouldLeaveThePreferencesInvalidIsRefused(Registrar registrar) {
+    CedarUser user = withProvisionedPreferences(userWith(key("live", true)));
+    UserService service = registrar.register(user);
+    Map<String, Object> emptied = new HashMap<>();
+    emptied.put("uiPreferences.stylesheet", null);
+
+    for (Map<String, Object> refused : List.of(
+        Map.<String, Object>of("uiPreferences.noSuchPreference", "anything"),
+        emptied,
+        Map.<String, Object>of("uiPreferences.folderView.sortDirection", "sideways"))) {
+      assertRefused(service.patchUser(user.getResourceId(), patch(refused)), CedarErrorType.INVALID_ARGUMENT,
+          refused.keySet().toString());
+    }
+    CedarUserUIPreferences stored = service.findUser(user.getResourceId()).getUiPreferences();
+    Assertions.assertEquals("default", stored.getStylesheet());
+    Assertions.assertEquals(SortDirection.ASC, stored.getFolderView().getSortDirection());
+
+    CedarUserId nobody = CedarUserId.build("https://metadatacenter.org/users/" + UUID.randomUUID());
+    assertRefused(service.patchUser(nobody, patch(Map.of("uiPreferences.stylesheet", "high-contrast"))),
+        CedarErrorType.NOT_FOUND, "a user that does not exist");
+  }
+
+  private static void assertRefused(BackendCallResult<CedarUser> result, CedarErrorType expected, String what) {
+    Assertions.assertTrue(result.isError(), "the patch should be refused: " + what);
+    Assertions.assertEquals(expected, result.getFirstError().getErrorPack().getErrorType(), what);
+  }
+
+  private static JsonNode patch(Map<String, Object> modifications) {
+    return JsonMapper.STRICT_MAPPER.valueToTree(modifications);
+  }
+
+  /**
+   * Provisioning fills every preference from the blueprint profile, and a patch is judged against the
+   * whole of them, so a test user needs them filled the same way.
+   */
+  private static CedarUser withProvisionedPreferences(CedarUser user) {
+    CedarUserUIPreferences preferences = user.getUiPreferences();
+    preferences.setStylesheet("default");
+    preferences.getFolderView().setSortBy("name");
+    preferences.getFolderView().setSortDirection(SortDirection.ASC);
+    preferences.getFolderView().setViewMode(ViewMode.GRID);
+    return user;
   }
 
   /** A user each test owns outright, so nothing it does to its keys reaches another test. */
