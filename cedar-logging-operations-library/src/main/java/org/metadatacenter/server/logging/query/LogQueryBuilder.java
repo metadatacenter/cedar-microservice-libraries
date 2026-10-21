@@ -1,5 +1,6 @@
 package org.metadatacenter.server.logging.query;
 
+import org.metadatacenter.server.logging.dao.LogSqlTime;
 import org.metadatacenter.server.logging.query.LogQueryColumns.ColumnDef;
 import org.metadatacenter.server.logging.query.LogQueryColumns.Kind;
 import org.metadatacenter.server.logging.query.LogQueryColumns.MeasureDef;
@@ -8,7 +9,6 @@ import org.metadatacenter.server.logging.query.LogQueryColumns.ValType;
 import org.metadatacenter.server.logging.query.LogQueryResults.ColumnMeta;
 import org.metadatacenter.server.logging.query.LogQueryResults.ColumnType;
 
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -118,8 +118,8 @@ public final class LogQueryBuilder {
 
     List<String> notes = new ArrayList<>();
     Map<String, Object> params = new LinkedHashMap<>();
-    params.put("from", Timestamp.from(from));
-    params.put("to", Timestamp.from(to));
+    params.put("from", LogSqlTime.bind(from));
+    params.put("to", LogSqlTime.bind(to));
 
     StringBuilder where = new StringBuilder(table.timeColumn() + " >= :from AND " + table.timeColumn() + " < :to");
     appendFilters(spec, table, where, params, notes);
@@ -157,7 +157,7 @@ public final class LogQueryBuilder {
       Cursor cursor = parseCursor(spec.cursor());
       where.append(" AND (").append(table.timeColumn()).append(" < :curTs OR (")
           .append(table.timeColumn()).append(" = :curTs AND ").append(table.idColumn()).append(" < :curId))");
-      params.put("curTs", Timestamp.from(cursor.ts()));
+      params.put("curTs", LogSqlTime.bind(cursor.ts()));
       params.put("curId", cursor.id());
     }
 
@@ -166,7 +166,7 @@ public final class LogQueryBuilder {
     columns.add(new ColumnMeta("_id", "Row id", ColumnType.NUMBER, "internal, used for paging"));
     for (String key : table.rowColumns()) {
       ColumnDef def = table.column(key);
-      select.append(", ").append(def.sql()).append(" AS ").append(quote(key));
+      select.append(", ").append(def.selectSql()).append(" AS ").append(quote(key));
       columns.add(meta(key, def));
     }
 
@@ -285,7 +285,7 @@ public final class LogQueryBuilder {
                                     String where, int limit, boolean withHistogram) {
     StringBuilder select = new StringBuilder("SELECT ");
     for (String key : dims) {
-      select.append(table.column(key).sql()).append(" AS ").append(quote(key)).append(", ");
+      select.append(table.column(key).selectSql()).append(" AS ").append(quote(key)).append(", ");
     }
     appendMetricExprs(select, metrics, table, null);
     if (withHistogram) {
@@ -300,7 +300,7 @@ public final class LogQueryBuilder {
     if (!dims.isEmpty()) {
       sql.append(" GROUP BY ");
       for (int i = 0; i < dims.size(); i++) {
-        sql.append(i == 0 ? "" : ", ").append(table.column(dims.get(i)).sql());
+        sql.append(i == 0 ? "" : ", ").append(table.column(dims.get(i)).selectSql());
       }
     }
     return sql.append("/*HAVING*/ ORDER BY /*ORDER*/ LIMIT :lim").toString();
@@ -316,7 +316,7 @@ public final class LogQueryBuilder {
 
     StringBuilder inner = new StringBuilder("SELECT ");
     for (String key : dims) {
-      inner.append(table.column(key).sql()).append(" AS ").append(quote(key)).append(", ");
+      inner.append(table.column(key).selectSql()).append(" AS ").append(quote(key)).append(", ");
     }
     // every column any metric touches must survive into the derived table
     Set<String> carried = new LinkedHashSet<>();
@@ -682,7 +682,7 @@ public final class LogQueryBuilder {
     return switch (def.type()) {
       case STRING -> value;
       case LONG -> parseLong(value, def.key());
-      case TIMESTAMP -> Timestamp.from(parseInstant(value, def.key()));
+      case TIMESTAMP -> LogSqlTime.bind(parseInstant(value, def.key()));
     };
   }
 

@@ -3,6 +3,7 @@ package org.metadatacenter.server.logging.dao.query;
 import io.dropwizard.hibernate.AbstractDAO;
 import org.hibernate.SessionFactory;
 import org.hibernate.query.NativeQuery;
+import org.metadatacenter.server.logging.dao.LogSqlTime;
 import org.metadatacenter.server.logging.dbmodel.ApplicationRequestLog;
 import org.metadatacenter.server.logging.agg.LatencyHistogram;
 import org.metadatacenter.server.logging.query.LogQueryBuilder;
@@ -25,7 +26,6 @@ import org.metadatacenter.server.logging.query.LogQuerySpec;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -43,6 +43,11 @@ import java.util.Set;
  * Deliberately thin: all SQL generation and validation lives in the builder, which is why this class
  * has no query text of its own beyond the facet/coverage helpers. Methods assume an active session
  * (the resource is {@code @UnitOfWork}).
+ * <p>
+ * Times cross every query here as text ({@link LogSqlTime}): bound as UTC strings, selected with
+ * {@code DATE_FORMAT}, returned as ISO-8601 instants. The columns hold UTC wall-clock and the connection
+ * runs America/Los_Angeles, so a {@code java.sql.Timestamp} either way is shifted by the offset, and a
+ * stored time inside the spring-forward hour cannot be read as one at all.
  */
 public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
 
@@ -68,6 +73,11 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
 
     List<ColumnMeta> columns = built.columns();
     int sqlValues = built.sqlValueCount();
+    boolean[] datetime = new boolean[sqlValues];
+    for (int i = 0; i < sqlValues; i++) {
+      ColumnDef def = built.table().columns().get(columns.get(i).key());
+      datetime[i] = def != null && def.datetime();
+    }
     List<Double> fractions = built.percentileFractions();
 
     List<Map<String, Object>> rows = new ArrayList<>(raw.size());
@@ -75,7 +85,7 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
       Object[] cells = (r instanceof Object[] arr) ? arr : new Object[]{r};
       Map<String, Object> row = new LinkedHashMap<>();
       for (int i = 0; i < sqlValues && i < cells.length; i++) {
-        row.put(columns.get(i).key(), normalize(cells[i]));
+        row.put(columns.get(i).key(), datetime[i] ? LogSqlTime.iso(cells[i]) : normalize(cells[i]));
       }
       // Rollup percentiles have no SQL column: the query trails 15 merged histogram buckets, and the
       // ceilings are interpolated here — the same merge-then-percentile contract the rollups were
@@ -127,13 +137,13 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
       throw new IllegalArgumentException("Column '" + columnKey + "' is " + def.kind()
           + " and has no facet values. Only dimensions do.");
     }
-    String sql = "SELECT " + def.sql() + " AS v, COUNT(*) AS n FROM " + table.sqlTable()
+    String sql = "SELECT " + def.selectSql() + " AS v, COUNT(*) AS n FROM " + table.sqlTable()
         + " WHERE " + table.timeColumn() + " >= :from AND " + table.timeColumn() + " < :to"
-        + " GROUP BY " + def.sql() + " ORDER BY n DESC LIMIT :lim";
+        + " GROUP BY " + def.selectSql() + " ORDER BY n DESC LIMIT :lim";
 
     NativeQuery<?> query = currentSession().createNativeQuery(sql);
-    query.setParameter("from", Timestamp.from(from));
-    query.setParameter("to", Timestamp.from(to));
+    query.setParameter("from", LogSqlTime.bind(from));
+    query.setParameter("to", LogSqlTime.bind(to));
     query.setParameter("lim", MAX_FACET_VALUES + 1);
 
     long started = System.nanoTime();
@@ -145,7 +155,8 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
     int n = Math.min(raw.size(), MAX_FACET_VALUES);
     for (int i = 0; i < n; i++) {
       Object[] c = (Object[]) raw.get(i);
-      values.add(new FacetValue(c[0] == null ? null : String.valueOf(normalize(c[0])), num(c[1])));
+      Object value = def.datetime() ? LogSqlTime.iso(c[0]) : normalize(c[0]);
+      values.add(new FacetValue(value == null ? null : String.valueOf(value), num(c[1])));
     }
     String note = truncated
         ? "More than " + MAX_FACET_VALUES + " distinct values in this range — use a text filter instead."
@@ -163,8 +174,8 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
     List<TableCoverage> tables = new ArrayList<>();
     for (String key : LogQueryColumns.tableKeys()) {
       TableDef table = LogQueryColumns.table(key);
-      String sql = "SELECT COUNT(*), MIN(" + table.timeColumn() + "), MAX(" + table.timeColumn() + ") FROM "
-          + table.sqlTable();
+      String sql = "SELECT COUNT(*), " + LogSqlTime.asText("MIN(" + table.timeColumn() + ")") + ", "
+          + LogSqlTime.asText("MAX(" + table.timeColumn() + ")") + " FROM " + table.sqlTable();
       Object[] c = (Object[]) currentSession().createNativeQuery(sql).getSingleResult();
 
       List<ColumnInfo> columns = new ArrayList<>();
@@ -172,7 +183,8 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
         columns.add(new ColumnInfo(def.key(), def.label(), def.kind().name(), def.groupable(),
             def.aggregatable(), def.note()));
       }
-      tables.add(new TableCoverage(key, table.sqlTable(), num(c[0]), iso(c[1]), iso(c[2]), columns));
+      tables.add(new TableCoverage(key, table.sqlTable(), num(c[0]), LogSqlTime.iso(c[1]), LogSqlTime.iso(c[2]),
+          columns));
     }
     List<String> notes = List.of(
         "status and apiKeyHash are populated only for rows written from 2026-07-30 onward; older rows are NULL.",
@@ -205,9 +217,9 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
       //
       // This is not caution for its own sake. These columns hold UTC wall-clock, the connection runs
       // with serverTimezone=America/Los_Angeles (cedar-main.yml documents why that is deliberate), and
-      // a native query returns java.sql.Timestamp, whose toInstant() resolves against the *JVM's* zone
-      // rather than the connection's. Reading MAX(time) into Java and subtracting it from Instant.now()
-      // therefore lands the offset between those two zones — seven hours here — in the answer, which
+      // a native query returns java.sql.Timestamp converted through that connection zone. Reading
+      // MAX(time) into Java and subtracting it from Instant.now() therefore lands the zone's offset —
+      // seven hours in summer — in the answer, which
       // for a lag reading means the page reports zero until the worker has been down longer than the
       // offset. Comparing inside the database compares two values that were never converted.
       String sql = "SELECT DATE_FORMAT(MAX(" + table.timeColumn() + "), '%Y-%m-%dT%H:%i:%SZ'),"
@@ -258,13 +270,13 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
 
     List<Object[]> reqRows = traceRows(
         "SELECT systemComponentName, className, methodName, httpMethod, path, status, "
-            + "COALESCE(startTime, requestTime), handlerDuration, localRequestId "
+            + LogSqlTime.asText("COALESCE(startTime, requestTime)") + ", handlerDuration, localRequestId "
             + "FROM log_request WHERE globalRequestId = :grid ORDER BY COALESCE(startTime, requestTime)",
         globalRequestId, maxSpans + 1);
 
     List<Object[]> cypherRows = traceRows(
         "SELECT systemComponentName, operation, runnableHash, runnable, "
-            + "COALESCE(startTime, logTime), duration, localRequestId "
+            + LogSqlTime.asText("COALESCE(startTime, logTime)") + ", duration, localRequestId "
             + "FROM log_cypher WHERE globalRequestId = :grid ORDER BY COALESCE(startTime, logTime)",
         globalRequestId, maxSpans + 1);
 
@@ -289,7 +301,7 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
           handler(str(r[1]), str(r[2])),
           (str(r[3]) == null ? "" : str(r[3]) + " ") + (str(r[4]) == null ? "" : str(r[4])),
           r[5] == null ? null : ((Number) r[5]).intValue(),
-          iso(r[6]), 0L, num(r[7]) / 1_000_000.0, str(r[8])));
+          LogSqlTime.iso(r[6]), 0L, num(r[7]) / 1_000_000.0, str(r[8])));
     }
     for (Object[] r : cypherRows) {
       components.add(str(r[0]));
@@ -297,7 +309,7 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
       spans.add(new TraceSpan("cypher", str(r[0]),
           str(r[1]) + " " + shortHash(str(r[2])),
           str(r[3]),
-          null, iso(r[4]), 0L, num(r[5]) / 1_000_000.0, str(r[6])));
+          null, LogSqlTime.iso(r[4]), 0L, num(r[5]) / 1_000_000.0, str(r[6])));
     }
 
     spans.sort(Comparator.comparing(s -> s.startedAt() == null ? "" : s.startedAt()));
@@ -388,8 +400,8 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
             + "GROUP BY h, c ORDER BY hd DESC LIMIT :lim";
 
     NativeQuery<?> query = currentSession().createNativeQuery(sql);
-    query.setParameter("from", Timestamp.from(from));
-    query.setParameter("to", Timestamp.from(to));
+    query.setParameter("from", LogSqlTime.bind(from));
+    query.setParameter("to", LogSqlTime.bind(to));
     query.setParameter("lim", limit);
 
     long started = System.nanoTime();
@@ -447,29 +459,14 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
   // ---- value normalization -----------------------------------------------------------------------
 
   /**
-   * JDBC hands back vendor types (BigInteger/BigDecimal counts, Timestamp, byte[] for LOB-ish reads).
-   * Normalize to what Jackson should emit: numbers as long/double, timestamps as ISO-8601 strings so
-   * the UI never has to guess a timezone.
+   * JDBC hands back vendor types (BigInteger/BigDecimal counts, byte[] for LOB-ish reads). Normalize to
+   * what Jackson should emit: numbers as long/double. DATETIME values never reach here as a
+   * {@code Timestamp}: every query selects them as text and returns them through
+   * {@link LogSqlTime#iso}. A {@code DATE} (the tsDay bucket) has no time of day to shift.
    */
   private static Object normalize(Object o) {
     if (o == null) {
       return null;
-    }
-    if (o instanceof Timestamp t) {
-      // NOT FIXED, deliberately. toInstant() resolves against the JVM's zone, which is wrong for a
-      // column holding UTC wall-clock and puts every time this method returns ahead by the local
-      // offset — coverage() reports the newest row seven hours in the future today, and the Explorer
-      // renders the same shift on every row.
-      //
-      // The correct conversion depends on what the column actually holds, and that is not settled.
-      // Live writes are UTC: MAX(requestTime) matches UTC_TIMESTAMP() and not NOW(), measured against
-      // traffic being written at the time. But cedar-main.yml records that these tables hold years of
-      // LA-stored rows and calls assuming otherwise a prod landmine. If both are true the table is
-      // mixed and no single conversion is right for all of it: this one is correct for recent rows and
-      // wrong for old ones, and toInstant() is correct for old rows and wrong for recent ones.
-      //
-      // Changing it is a data question, not a code question. See the 2026-09-03 worklog.
-      return t.toInstant().toString();
     }
     if (o instanceof java.sql.Date d) {
       return d.toString();
@@ -491,11 +488,6 @@ public class LogQueryDAO extends AbstractDAO<ApplicationRequestLog> {
   }
 
   private static String str(Object o) {
-    Object v = normalize(o);
-    return v == null ? null : String.valueOf(v);
-  }
-
-  private static String iso(Object o) {
     Object v = normalize(o);
     return v == null ? null : String.valueOf(v);
   }
