@@ -27,7 +27,9 @@ import java.util.Map;
         @Index(columnList = "operation", name = "IDX_log_cypher_operation"),
         @Index(columnList = "runnableHash", name = "IDX_log_cypher_runnableHash"),
         @Index(columnList = "parametersHash", name = "IDX_log_cypher_parametersHash"),
-        @Index(columnList = "aggregatedAt", name = "IDX_log_cypher_aggregatedAt")
+        @Index(columnList = "aggregatedAt", name = "IDX_log_cypher_aggregatedAt"),
+        // The Cypher counterpart of IDX_log_request_aggregatedAt_requestTime, built by hand on prod the same day.
+        @Index(columnList = "aggregatedAt, logTime", name = "IDX_log_cypher_aggregatedAt_logTime")
     })
 public class ApplicationCypherLog {
 

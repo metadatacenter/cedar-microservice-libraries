@@ -40,8 +40,9 @@ public class Neo4JProxyGraph extends AbstractNeo4JProxy {
   }
 
   public FolderServerUser createUser(JsonNode node) {
-    String cypher = CypherQueryBuilderUser.createUser();
+    String cypher = CypherQueryBuilderUser.importUser();
     CypherParameters params = CypherParamBuilderUser.mapAllProperties(node);
+    CypherParamBuilderUser.tweakUserProperties(node, params);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeWriteGetOne(q, FolderServerUser.class);
   }

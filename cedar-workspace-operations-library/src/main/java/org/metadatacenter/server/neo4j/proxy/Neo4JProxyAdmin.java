@@ -1,6 +1,7 @@
 package org.metadatacenter.server.neo4j.proxy;
 
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.server.neo4j.ArtifactCreateCleanupOutbox;
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryLiteral;
 import org.metadatacenter.server.neo4j.NodeLabel;
@@ -54,5 +55,9 @@ public class Neo4JProxyAdmin extends AbstractNeo4JProxy {
     String cypher = CypherQueryBuilderAdmin.removeAllConstraintsAndIndices();
     CypherQuery q = new CypherQueryLiteral(cypher);
     return executeWrite(q, "removing all constraints and indices");
+  }
+
+  void ensureServerSchema() {
+    ArtifactCreateCleanupOutbox.initializeSchema(driver);
   }
 }

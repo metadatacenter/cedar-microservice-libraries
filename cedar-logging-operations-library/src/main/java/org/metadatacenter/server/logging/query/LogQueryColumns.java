@@ -1,5 +1,7 @@
 package org.metadatacenter.server.logging.query;
 
+import org.metadatacenter.server.logging.dao.LogSqlTime;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,7 +45,22 @@ public final class LogQueryColumns {
   /** How a caller-supplied value is bound for this column. */
   public enum ValType {STRING, LONG, TIMESTAMP}
 
-  public record ColumnDef(String key, String sql, Kind kind, ValType type, String label, String note) {
+  /**
+   * @param datetime true when the column's values are DATETIMEs (the timestamps, and the minute and hour buckets).
+   *                 Those are selected as text ({@link #selectSql()}) so that the connection's time zone never touches
+   *                 them; filters and sorts keep using {@link #sql()}, which keeps them on the index.
+   */
+  public record ColumnDef(String key, String sql, Kind kind, ValType type, String label, String note,
+                          boolean datetime) {
+
+    public ColumnDef(String key, String sql, Kind kind, ValType type, String label, String note) {
+      this(key, sql, kind, type, label, note, kind == Kind.TIME);
+    }
+
+    /** The expression a SELECT list (and a GROUP BY over it) uses: {@link #sql()}, or its stored text. */
+    public String selectSql() {
+      return datetime ? LogSqlTime.asText(sql) : sql;
+    }
 
     public boolean groupable() {
       return kind == Kind.DIM;
@@ -228,7 +245,7 @@ public final class LogQueryColumns {
 
   /** Rollup grain is hourly, so there is no tsMinute — asking for one is rejected by name. */
   private static void rollupTimeBuckets(Map<String, ColumnDef> c) {
-    dim(c, "tsHour", "hourUtc", "Hour", "rollup grain");
+    timeDim(c, "tsHour", "hourUtc", "Hour", "rollup grain");
     dim(c, "tsDay", "DATE(hourUtc)", "Day", "derived bucket");
     dim(c, "hourOfDay", "HOUR(hourUtc)", "Hour of day", "derived: 0-23, for off-hours patterns");
     dim(c, "dayOfWeek", "DAYOFWEEK(hourUtc)", "Day of week", "derived: 1=Sunday");
@@ -321,9 +338,9 @@ public final class LogQueryColumns {
    */
   private static void timeBuckets(Map<String, ColumnDef> c, String timeCol) {
     String hourTrunc = "DATE_ADD(DATE(" + timeCol + "), INTERVAL HOUR(" + timeCol + ") HOUR)";
-    dim(c, "tsMinute", "DATE_ADD(" + hourTrunc + ", INTERVAL MINUTE(" + timeCol + ") MINUTE)", "Minute",
+    timeDim(c, "tsMinute", "DATE_ADD(" + hourTrunc + ", INTERVAL MINUTE(" + timeCol + ") MINUTE)", "Minute",
         "derived bucket");
-    dim(c, "tsHour", hourTrunc, "Hour", "derived bucket");
+    timeDim(c, "tsHour", hourTrunc, "Hour", "derived bucket");
     dim(c, "tsDay", "DATE(" + timeCol + ")", "Day", "derived bucket");
     dim(c, "hourOfDay", "HOUR(" + timeCol + ")", "Hour of day", "derived: 0-23, for off-hours patterns");
     dim(c, "dayOfWeek", "DAYOFWEEK(" + timeCol + ")", "Day of week", "derived: 1=Sunday");
@@ -331,6 +348,11 @@ public final class LogQueryColumns {
 
   private static void dim(Map<String, ColumnDef> c, String key, String sql, String label, String note) {
     c.put(key, new ColumnDef(key, sql, Kind.DIM, ValType.STRING, label, note));
+  }
+
+  /** A bucket whose values are DATETIMEs: grouped like any dimension, but selected as text. */
+  private static void timeDim(Map<String, ColumnDef> c, String key, String sql, String label, String note) {
+    c.put(key, new ColumnDef(key, sql, Kind.DIM, ValType.STRING, label, note, true));
   }
 
   /** A dimension whose values bind as numbers (status), so index use isn't lost to string coercion. */

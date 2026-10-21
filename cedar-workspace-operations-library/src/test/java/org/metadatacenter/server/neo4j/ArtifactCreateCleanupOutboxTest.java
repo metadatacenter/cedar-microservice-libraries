@@ -46,6 +46,22 @@ class ArtifactCreateCleanupOutboxTest {
     box.created(job,"artifact","\"7\"");
     return job;
   }
+  /**
+   * The admin tool's schema rebuild removes every constraint, these included, and a running server
+   * creates them only once. initializeSchema restores them, and repeating it changes nothing.
+   */
+  @Test void initializingTheSchemaRestoresTheLifecycleAndCleanupConstraints() {
+    ScratchNeo4j.blank();
+    ArtifactCreateCleanupOutbox.initializeSchema(database);
+    ArtifactCreateCleanupOutbox.initializeSchema(database);
+    try(var session=database.session()) {
+      var names=session.run("SHOW CONSTRAINTS YIELD name").list(r -> r.get("name").asString());
+      assertTrue(names.containsAll(List.of("cedar_version_lock","cedar_version_projection",
+          "cedar_create_cleanup_job")), names.toString());
+      assertEquals(1, session.run("MATCH (n:CedarVersionLock {id:'lifecycle'}) RETURN count(n) AS n")
+          .single().get("n").asLong(), "the lifecycle lock should exist once");
+    }
+  }
   /** A create at the identity its caller chose, whose outcome is not yet known. */
   static String atIdentity(ArtifactCreateCleanupOutbox box) {
     return box.prepare(CedarResourceType.TEMPLATE,"copy","artifact");

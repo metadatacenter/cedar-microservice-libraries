@@ -8,7 +8,6 @@ import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarFolderId;
 import org.metadatacenter.id.CedarTemplateId;
-import org.metadatacenter.id.CedarTemplateInstanceId;
 import org.metadatacenter.id.CedarUntypedArtifactId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.BiboStatus;
@@ -23,10 +22,6 @@ import org.metadatacenter.model.folderserver.basic.FolderServerSchemaArtifact;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.search.elasticsearch.service.NodeIndexingService;
-import org.metadatacenter.server.valuerecommender.ValuerecommenderReindexQueueService;
-import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexMessage;
-import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexMessageActionType;
-import org.metadatacenter.server.valuerecommender.model.ValuerecommenderReindexMessageResourceType;
 import org.metadatacenter.util.CedarResourceTypeUtil;
 import org.metadatacenter.util.ModelUtil;
 
@@ -136,39 +131,6 @@ public final class ArtifactCopyOperations {
                                           FolderServerArtifact artifact,
                                           CedarRequestContext context) throws CedarProcessingException {
     indexingService.indexDocument(artifact, context);
-  }
-
-  public static void enqueueValuerecommenderUpdate(ValuerecommenderReindexQueueService queueService,
-                                                   FolderServerArtifact artifact,
-                                                   ValuerecommenderReindexMessageActionType actionType) {
-    ValuerecommenderReindexMessage event = buildValuerecommenderEvent(artifact, actionType);
-    if (event != null) {
-      queueService.enqueueEvent(event);
-    }
-  }
-
-  /** Returns false only when an applicable event could not be persisted to the Redis queue. */
-  public static boolean enqueueValuerecommenderUpdateWithResult(
-      ValuerecommenderReindexQueueService queueService,
-      FolderServerArtifact artifact,
-      ValuerecommenderReindexMessageActionType actionType) {
-    ValuerecommenderReindexMessage event = buildValuerecommenderEvent(artifact, actionType);
-    return event == null || queueService.enqueueEventWithResult(event);
-  }
-
-  private static ValuerecommenderReindexMessage buildValuerecommenderEvent(
-      FolderServerArtifact artifact, ValuerecommenderReindexMessageActionType actionType) {
-    if (artifact.getType() == CedarResourceType.TEMPLATE) {
-      return new ValuerecommenderReindexMessage(CedarTemplateId.build(artifact.getId()), null,
-          ValuerecommenderReindexMessageResourceType.TEMPLATE, actionType);
-    }
-    if (artifact.getType() == CedarResourceType.INSTANCE) {
-      FolderServerInstance instance = (FolderServerInstance) artifact;
-      return new ValuerecommenderReindexMessage(instance.getIsBasedOn(),
-          CedarTemplateInstanceId.build(instance.getId()),
-          ValuerecommenderReindexMessageResourceType.INSTANCE, actionType);
-    }
-    return null;
   }
 
   private ArtifactCopyOperations() {

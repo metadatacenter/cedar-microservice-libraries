@@ -5,12 +5,12 @@
   <parent>
     <groupId>org.metadatacenter</groupId>
     <artifactId>cedar-parent</artifactId>
-    <version>2.9.26</version>
+    <version>2.9.27</version>
   </parent>
 
   <groupId>org.metadatacenter</groupId>
   <artifactId>cedar-microservice-libraries</artifactId>
-  <version>2.9.26</version>
+  <version>2.9.27</version>
   <packaging>pom</packaging>
 
   <name>CEDAR Microservice Libraries</name>
@@ -38,7 +38,6 @@
     <module>cedar-template-operations-library</module>
     <module>cedar-test-support-library</module>
     <module>cedar-user-operations-library</module>
-    <module>cedar-valuerecommender-operations-library</module>
     <module>cedar-workspace-operations-library</module>
   </modules>
 

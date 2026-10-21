@@ -23,6 +23,13 @@ public class CypherParamBuilderGraph extends AbstractCypherParamBuilder {
     params.put(NodeProperty.NAME_LOWER, node.at(SCHEMA_NAME).textValue().toLowerCase(Locale.ROOT));
     params.put(NodeProperty.DESCRIPTION, node.at(SCHEMA_DESCRIPTION).textValue());
     params.put(NodeProperty.ID, node.at(AT_ID).textValue());
+    // A folder's query sets the parent's identifier, which an export does not hold. Absent, it stays unset until
+    // the importer derives it from the CONTAINS arcs.
+    params.put(NodeProperty.PARENT_FOLDER_ID, node.at("/" + NodeProperty.PARENT_FOLDER_ID.getValue()).textValue());
+    // The query takes these two under parameter names of their own rather than the properties' names.
+    params.put(ParameterPlaceholder.PUBLICATION_STATUS,
+        node.at("/" + NodeProperty.PUBLICATION_STATUS.getValue()).textValue());
+    params.put(ParameterPlaceholder.PREVIOUS_VERSION, node.at("/" + NodeProperty.PREVIOUS_VERSION.getValue()).textValue());
   }
 
   public static CypherParameters matchIdAndResourceType(CedarResourceId id, ResourceType resourceType) {

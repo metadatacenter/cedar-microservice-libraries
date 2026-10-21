@@ -23,6 +23,7 @@ class LinkHeaderUtilTest {
 
   static Stream<Arguments> pagePositions() {
     return Stream.of(
+        Arguments.of(0L, 1, 0, null, null),
         Arguments.of(0L, 10, 0, null, null),
         Arguments.of(1L, 10, 0, null, null),
         Arguments.of(100L, 10, 0, null, 10L),

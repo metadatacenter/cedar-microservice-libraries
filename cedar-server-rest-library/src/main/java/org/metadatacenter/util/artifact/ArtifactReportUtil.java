@@ -1,7 +1,6 @@
 package org.metadatacenter.util.artifact;
 
 import org.metadatacenter.bridge.GraphDbPermissionReader;
-import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarTemplateId;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
@@ -29,15 +28,15 @@ public final class ArtifactReportUtil {
   private ArtifactReportUtil() {
   }
 
-  public static FolderServerArtifactReport getArtifactReport(CedarRequestContext c, CedarConfig cedarConfig, FolderServerArtifact artifact,
+  public static FolderServerArtifactReport getArtifactReport(CedarRequestContext c, FolderServerArtifact artifact,
                                                              FolderServiceSession folderSession,
                                                              ResourcePermissionServiceSession permissionSession,
                                                              CategoryServiceSession categorySession) {
-    return getArtifactReport(c, cedarConfig, artifact, folderSession, permissionSession, categorySession,
+    return getArtifactReport(c, artifact, folderSession, permissionSession, categorySession,
         GraphDbPermissionReader::decorateResourceWithCurrentUserPermissions);
   }
 
-  static FolderServerArtifactReport getArtifactReport(CedarRequestContext c, CedarConfig cedarConfig, FolderServerArtifact artifact,
+  static FolderServerArtifactReport getArtifactReport(CedarRequestContext c, FolderServerArtifact artifact,
                                                        FolderServiceSession folderSession,
                                                        ResourcePermissionServiceSession permissionSession,
                                                        CategoryServiceSession categorySession,
@@ -59,7 +58,7 @@ public final class ArtifactReportUtil {
     }
 
     decorateResourceWithDerivedFrom(folderSession, permissionSession, resourceReport);
-    permissionDecorator.decorate(c, permissionSession, cedarConfig, resourceReport);
+    permissionDecorator.decorate(c, permissionSession, resourceReport);
 
     decorateResourceWithCategories(categorySession, resourceReport);
 
@@ -69,7 +68,7 @@ public final class ArtifactReportUtil {
   @FunctionalInterface
   interface PermissionDecorator {
     void decorate(CedarRequestContext context, ResourcePermissionServiceSession permissionSession,
-                  CedarConfig cedarConfig, FolderServerArtifactReport resourceReport);
+                  FolderServerArtifactReport resourceReport);
   }
 
   private static void decorateResourceWithNumberOfInstances(FolderServiceSession folderSession, FolderServerTemplateReport templateReport) {

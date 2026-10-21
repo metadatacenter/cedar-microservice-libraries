@@ -16,17 +16,15 @@ import java.util.Map;
  * cedar-main.yml, so a test enqueues against the keys production uses.
  * <p>
  * Published in this library's test-jar, alongside {@link EmbeddedRedis}, because the queue services
- * are spread across several libraries and the submission server: each needs the same fixture, and
- * only one of them should own it.
+ * are spread across several libraries and the worker server: each needs the same fixture, and only
+ * one of them should own it.
  */
 public final class QueueTestConfig {
 
   /** Matches cedar-main.yml, so the tests exercise the real keys rather than invented ones. */
   private static final Map<String, String> QUEUE_NAMES = Map.of(
       QueueService.SEARCH_PERMISSION_QUEUE_ID, "CEDAR-QUEUE-search-permission",
-      QueueService.NCBI_SUBMISSION_QUEUE_ID, "CEDAR-QUEUE-ncbi-submission",
       QueueService.APP_LOG_QUEUE_ID, "CEDAR-QUEUE-app-log",
-      QueueService.VALUERECOMMENDER_QUEUE_ID, "CEDAR-QUEUE-valuerecommender",
       QueueService.CLONE_INSTANCES_QUEUE_ID, "CEDAR-QUEUE-cloneInstances");
 
   private static final int TIMEOUT_MILLIS = 2000;

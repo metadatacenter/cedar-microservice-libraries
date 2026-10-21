@@ -1,6 +1,5 @@
 package org.metadatacenter.bridge;
 
-import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.error.CedarErrorKey;
 import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.exception.CedarObjectNotFoundException;
@@ -31,7 +30,7 @@ public class GraphDbPermissionReader {
 
   public static FolderServerArtifactCurrentUserReport getArtifactCurrentUserReport(CedarRequestContext context, FolderServiceSession folderSession,
                                                                                    ResourcePermissionServiceSession permissionSession,
-                                                                                   CedarConfig cedarConfig, CedarArtifactId artifactId) throws CedarException {
+                                                                                   CedarArtifactId artifactId) throws CedarException {
     if (artifactId != null) {
       FolderServerArtifact artifact = folderSession.findArtifactById(artifactId);
       if (artifact == null) {
@@ -47,7 +46,7 @@ public class GraphDbPermissionReader {
       FolderServerArtifactCurrentUserReport artifactReport =
           (FolderServerArtifactCurrentUserReport) FolderServerResourceCurrentUserReport.fromResource(artifact);
 
-      decorateResourceWithCurrentUserPermissions(context, permissionSession, cedarConfig, artifactReport);
+      decorateResourceWithCurrentUserPermissions(context, permissionSession, artifactReport);
 
       return artifactReport;
     }
@@ -55,9 +54,9 @@ public class GraphDbPermissionReader {
   }
 
   public static void decorateResourceWithCurrentUserPermissions(CedarRequestContext context, ResourcePermissionServiceSession permissionSession,
-                                                                CedarConfig cedarConfig, FilesystemResourceWithCurrentUserPermissions resource) {
+                                                                FilesystemResourceWithCurrentUserPermissions resource) {
     VersionServiceSession versionSession = CedarDataServices.getInstance().getVersionServiceSession(context);
-    CurrentUserPermissionUpdater cupu = CurrentUserPermissionUpdaterForGraphDbResource.get(permissionSession, versionSession, cedarConfig, resource);
+    CurrentUserPermissionUpdater cupu = CurrentUserPermissionUpdaterForGraphDbResource.get(permissionSession, versionSession, resource);
     cupu.update(resource.getCurrentUserPermissions());
   }
 

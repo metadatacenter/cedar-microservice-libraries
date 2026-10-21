@@ -384,23 +384,4 @@ public class NodeSearchingService extends AbstractSearchingService {
     }
   }
 
-  public long getTotalRecommenderCount() throws CedarProcessingException {
-    try {
-      // Create the search request
-      SearchRequest searchRequest = new SearchRequest(config.getIndexes().getRulesIndex().getName());
-      SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-      searchSourceBuilder.query(QueryBuilders.matchAllQuery());
-      searchSourceBuilder.size(0); // We only need the count, no hits
-      searchRequest.source(searchSourceBuilder);
-
-      // Execute the search request
-      SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
-
-      // Process the search hits
-      return searchResponse.getHits().getTotalHits().value;
-    } catch (IOException e) {
-      throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
-    }
-  }
-
 }

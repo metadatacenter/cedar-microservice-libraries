@@ -46,12 +46,12 @@ public final class LinkHeaderUtil {
     }
 
     Map<String, String> ret = new HashMap<>();
-    if (offset + limit < total) {
-      URI next = createOnePagingLink(baseUrl, offset + limit, limit);
+    if ((long) offset + limit < total) {
+      URI next = createOnePagingLink(baseUrl, (long) offset + limit, limit);
       ret.put(HttpConstants.HEADER_LINK_TYPE_NEXT, next.toString());
     }
 
-    URI last = createOnePagingLink(baseUrl, ((total - 1) / limit) * limit, limit);
+    URI last = createOnePagingLink(baseUrl, (Math.max(0L, total - 1) / limit) * limit, limit);
     ret.put(HttpConstants.HEADER_LINK_TYPE_LAST, last.toString());
 
     URI first = createOnePagingLink(baseUrl, 0, limit);

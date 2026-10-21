@@ -28,11 +28,10 @@ class QueueRecoveryMatrixTest {
   }
   private Jedis connection() { return new Jedis("127.0.0.1", redis.port()); }
 
-  private QueueService service(String kind) {
+  private QueueServiceWithBlockingQueue service(String kind) {
     return switch (kind) {
       case "blocking" -> new PermissionQueueService(config);
       case "clone" -> new CloneInstancesQueueService(config);
-      case "batch" -> new QueueServiceWithNonBlockingQueue(config, QueueService.VALUERECOMMENDER_QUEUE_ID) {};
       default -> throw new IllegalArgumentException(kind);
     };
   }
@@ -40,31 +39,23 @@ class QueueRecoveryMatrixTest {
     return QueueTestConfig.queueName(switch (kind) {
       case "blocking" -> QueueService.SEARCH_PERMISSION_QUEUE_ID;
       case "clone" -> QueueService.CLONE_INSTANCES_QUEUE_ID;
-      default -> QueueService.VALUERECOMMENDER_QUEUE_ID;
+      default -> throw new IllegalArgumentException(kind);
     });
   }
-  private void initialize(QueueService service) {
-    if (service instanceof QueueServiceWithBlockingQueue blocking) blocking.initializeBlockingQueue();
-  }
-  private List<String> claim(QueueService service) {
-    if (service instanceof QueueServiceWithBlockingQueue blocking) return blocking.claimAvailableMessages(1);
-    return ((QueueServiceWithNonBlockingQueue) service).claimMessages(1);
-  }
-  private boolean park(QueueService service, String payload) {
-    if (service instanceof QueueServiceWithBlockingQueue blocking) return blocking.deadLetter(payload);
-    return ((QueueServiceWithNonBlockingQueue) service).deadLetter(payload);
+  private List<String> claim(QueueServiceWithBlockingQueue service) {
+    return service.claimAvailableMessages(1);
   }
 
   @ParameterizedTest(name = "{0}: {1} transfer failure retains source")
-  @CsvSource({"blocking,claim", "clone,claim", "batch,claim",
-      "blocking,recover", "clone,recover", "batch,recover",
-      "blocking,deadLetter", "clone,deadLetter", "batch,deadLetter"})
+  @CsvSource({"blocking,claim", "clone,claim",
+      "blocking,recover", "clone,recover",
+      "blocking,deadLetter", "clone,deadLetter"})
   void aRejectedTransferMustNotConsumeItsSource(String kind, String operation) {
     var service = service(kind);
     String pending = pending(kind), processing = pending + QueueService.PROCESSING_SUFFIX;
     String deadLetter = pending + QueueService.DEAD_LETTER_SUFFIX;
     try (var jedis = connection()) {
-      initialize(service);
+      service.initializeBlockingQueue();
       jedis.rpush(pending, "message");
       String source;
       if (operation.equals("claim")) {
@@ -76,14 +67,11 @@ class QueueRecoveryMatrixTest {
         source = processing;
         if (operation.equals("recover")) {
           jedis.set(pending, "injected non-list destination");
-          assertThrows(JedisDataException.class, () -> {
-            if (service instanceof QueueServiceWithBlockingQueue) initialize(service);
-            else claim(service);
-          });
+          assertThrows(JedisDataException.class, service::initializeBlockingQueue);
         } else {
           if (service instanceof CloneInstancesQueueService clone) assertTrue(clone.beginExecution("message"));
           jedis.set(deadLetter, "injected non-list destination");
-          assertFalse(park(service, "message"));
+          assertFalse(service.deadLetter("message"));
         }
       }
       assertEquals(List.of("message"), jedis.lrange(source, 0, -1),
@@ -91,10 +79,10 @@ class QueueRecoveryMatrixTest {
       // Repair only the injected bad destination, then prove the original message still moves.
       jedis.del(operation.equals("claim") ? processing : operation.equals("recover") ? pending : deadLetter);
       if (operation.equals("deadLetter")) {
-        assertTrue(park(service, "message"));
+        assertTrue(service.deadLetter("message"));
         assertEquals(List.of("message"), jedis.lrange(deadLetter, 0, -1));
       } else {
-        if (operation.equals("recover")) initialize(service);
+        if (operation.equals("recover")) service.initializeBlockingQueue();
         assertEquals(List.of("message"), claim(service));
       }
 

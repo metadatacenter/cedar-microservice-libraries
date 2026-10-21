@@ -209,8 +209,7 @@ class CedarUserRolePermissionUtilTest {
     expected.put(CedarUserRole.ARTIFACT_PRIVILEGED_ADMINISTRATOR, EnumSet.of(
         CedarPermission.WRITE_ARTIFACT_VERBATIM));
     expected.put(CedarUserRole.SEARCH_REINDEXER, EnumSet.of(
-        CedarPermission.SEARCH_INDEX_REINDEX, CedarPermission.RULES_INDEX_REINDEX,
-        CedarPermission.INCLUSION_SUBGRAPH_RECREATE));
+        CedarPermission.SEARCH_INDEX_REINDEX, CedarPermission.INCLUSION_SUBGRAPH_RECREATE));
     expected.put(CedarUserRole.PROCESS_MESSAGE_SENDER, EnumSet.of(
         CedarPermission.SEND_PROCESS_MESSAGE));
     expected.put(CedarUserRole.MONITOR_MANAGER, EnumSet.of(CedarPermission.MONITOR_READ));

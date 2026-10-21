@@ -5,7 +5,6 @@ import org.metadatacenter.server.logging.query.LogQueryBuilder.BuiltQuery;
 import org.metadatacenter.server.logging.query.LogQuerySpec.Filter;
 import org.metadatacenter.server.logging.query.LogQuerySpec.Sort;
 
-import java.sql.Timestamp;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -55,7 +54,7 @@ class LogQueryBuilderTest {
 
     assertTrue(q.sql().contains("requestTime < :curTs OR (requestTime = :curTs AND id < :curId)"));
     assertEquals(4242L, q.params().get("curId"));
-    assertEquals(Timestamp.from(java.time.Instant.parse("2026-07-30T12:00:00Z")), q.params().get("curTs"));
+    assertEquals("2026-07-30 12:00:00.000000", q.params().get("curTs"), "bound as UTC text, never a Timestamp");
     assertEquals(500, q.limit());
   }
 

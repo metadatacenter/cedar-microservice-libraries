@@ -222,4 +222,9 @@ public class Neo4JUserSessionAdminService extends AbstractNeo4JUserSession imple
   public boolean removeAllConstraintsAndIndices() {
     return proxies.admin().removeAllConstraintsAndIndices();
   }
+
+  @Override
+  public void ensureServerSchema() {
+    proxies.admin().ensureServerSchema();
+  }
 }

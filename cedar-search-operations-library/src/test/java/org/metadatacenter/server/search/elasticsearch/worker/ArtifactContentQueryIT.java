@@ -98,6 +98,8 @@ class ArtifactContentQueryIT {
     index("slash", List.of(field("Units", "Units", "Moles/volume")), false,
         "Moles/volume in Dried blood spot", "corpus Moles/volume in Dried blood spot");
     index("hyphen", List.of(), false, "2-Dimensional Electrophoresis", "corpus 2-Dimensional Electrophoresis");
+    index("tie-z", List.of(), false, "Paging tie", "Paging tie");
+    index("tie-a", List.of(), false, "Paging tie", "Paging tie");
     index("pv-word", List.of(), false);
     index("pv-substring", List.of(), false);
     client.update(new org.opensearch.action.update.UpdateRequest(INDEX, "pv-word").doc(Map.of(
@@ -276,5 +278,22 @@ class ArtifactContentQueryIT {
     if (client == null) return;
     try { client.indices().delete(new DeleteIndexRequest(INDEX), RequestOptions.DEFAULT); }
     finally { client.close(); }
+  }
+
+  @org.junit.jupiter.api.Test
+  void equalNamesUseTheSameIdentifierOrderAcrossOrdinaryAndDeepPages() throws Exception {
+    for (boolean deep : List.of(false, true)) {
+      List<String> ids = new ArrayList<>();
+      for (int offset = 0; offset < 2; offset++) {
+        var result = deep
+            ? worker.searchDeep(context("reader"), "\"Paging tie\"", List.of("instance"), ResourceVersionFilter.ALL,
+                ResourcePublicationStatusFilter.ALL, null, List.of("name"), 1, offset)
+            : worker.search(context("reader"), "\"Paging tie\"", List.of("instance"), ResourceVersionFilter.ALL,
+                ResourcePublicationStatusFilter.ALL, null, List.of("name"), 1, offset);
+        assertEquals(2, result.getTotalCount());
+        ids.addAll(result.getHits().stream().map(SearchHit::getId).toList());
+      }
+      assertEquals(List.of("tie-a", "tie-z"), ids);
+    }
   }
 }

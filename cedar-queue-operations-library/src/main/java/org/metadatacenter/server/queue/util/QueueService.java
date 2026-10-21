@@ -14,9 +14,7 @@ import java.util.Optional;
 public abstract class QueueService {
 
   public static final String SEARCH_PERMISSION_QUEUE_ID = "searchPermission";
-  public static final String NCBI_SUBMISSION_QUEUE_ID = "ncbiSubmission";
   public static final String APP_LOG_QUEUE_ID = "appLog";
-  public static final String VALUERECOMMENDER_QUEUE_ID = "valuerecommender";
   public static final String CLONE_INSTANCES_QUEUE_ID = "cloneInstances";
 
   // Public because the Monitor reports these depths beside the pending one, and a reader that spelled

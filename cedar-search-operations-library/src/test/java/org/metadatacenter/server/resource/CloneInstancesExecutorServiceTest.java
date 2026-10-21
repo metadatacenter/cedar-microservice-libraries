@@ -18,7 +18,6 @@ import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.jsonld.LinkedDataUtil;
 import org.metadatacenter.server.search.elasticsearch.service.NodeIndexingService;
-import org.metadatacenter.server.valuerecommender.ValuerecommenderReindexQueueService;
 import org.metadatacenter.server.url.MicroserviceUrlUtil;
 
 import jakarta.ws.rs.core.Response;
@@ -49,12 +48,12 @@ class CloneInstancesExecutorServiceTest {
     indexing = mock(NodeIndexingService.class);
     cleanup = mock(ArtifactCreateCleanupService.class);
     when(cleanup.prepare(any(), any())).thenReturn("cleanup-job");
-    CloneInstancesExecutorService.injectServices(indexing, mock(ValuerecommenderReindexQueueService.class));
+    CloneInstancesExecutorService.injectServices(indexing);
   }
 
   @AfterEach
   void clearIndexing() {
-    CloneInstancesExecutorService.injectServices(null, null);
+    CloneInstancesExecutorService.injectServices(null);
   }
 
   /** Every other folder is indexed when it is created, and so is the one holding an owner's clones. */

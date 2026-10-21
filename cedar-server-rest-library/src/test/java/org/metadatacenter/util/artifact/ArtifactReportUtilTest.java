@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarArtifactId;
 import org.metadatacenter.id.CedarTemplateId;
 import org.metadatacenter.id.CedarUntypedArtifactId;
@@ -34,7 +33,6 @@ class ArtifactReportUtilTest {
   private ResourcePermissionServiceSession permissionSession;
   private CategoryServiceSession categorySession;
   private CedarRequestContext context;
-  private CedarConfig cedarConfig;
 
   @BeforeEach
   void setUp() {
@@ -42,7 +40,6 @@ class ArtifactReportUtilTest {
     permissionSession = mock(ResourcePermissionServiceSession.class);
     categorySession = mock(CategoryServiceSession.class);
     context = mock(CedarRequestContext.class);
-    cedarConfig = mock(CedarConfig.class);
   }
 
   static Stream<Arguments> artifactTypes() {
@@ -277,17 +274,16 @@ class ArtifactReportUtilTest {
   }
 
   @Test
-  void delegatesPermissionProjectionWithTheExactContextConfigSessionAndNewReport() {
+  void delegatesPermissionProjectionWithTheExactContextSessionAndNewReport() {
     FolderServerInstance instance = instance("instance-1");
     when(categorySession.getAttachedCategoryPaths(any())).thenReturn(List.of());
     AtomicReference<FolderServerArtifactReport> decorated = new AtomicReference<>();
 
     FolderServerArtifactReport report = ArtifactReportUtil.getArtifactReport(
-        context, cedarConfig, instance, folderSession, permissionSession, categorySession,
-        (actualContext, actualSession, actualConfig, actualReport) -> {
+        context, instance, folderSession, permissionSession, categorySession,
+        (actualContext, actualSession, actualReport) -> {
           assertSame(context, actualContext);
           assertSame(permissionSession, actualSession);
-          assertSame(cedarConfig, actualConfig);
           decorated.set(actualReport);
         });
 
@@ -295,8 +291,8 @@ class ArtifactReportUtilTest {
   }
 
   private FolderServerArtifactReport report(FolderServerArtifact artifact) {
-    return ArtifactReportUtil.getArtifactReport(context, cedarConfig, artifact, folderSession, permissionSession,
-        categorySession, (ignoredContext, ignoredSession, ignoredConfig, ignoredReport) -> { });
+    return ArtifactReportUtil.getArtifactReport(context, artifact, folderSession, permissionSession,
+        categorySession, (ignoredContext, ignoredSession, ignoredReport) -> { });
   }
 
   private void stubEmptyDecorations() {

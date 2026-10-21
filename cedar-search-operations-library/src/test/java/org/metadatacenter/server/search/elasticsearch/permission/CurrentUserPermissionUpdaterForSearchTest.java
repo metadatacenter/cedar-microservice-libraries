@@ -6,9 +6,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.config.SubmissionConfig;
 import org.metadatacenter.error.CedarErrorKey;
-import org.metadatacenter.id.CedarTemplateId;
 import org.metadatacenter.model.BiboStatus;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.info.FolderServerNodeInfo;
@@ -38,7 +36,6 @@ import static org.mockito.Mockito.when;
 class CurrentUserPermissionUpdaterForSearchTest {
 
   private CedarConfig config;
-  private SubmissionConfig submissionConfig;
   private IndexedDocumentDocument document;
   private FolderServerNodeInfo info;
   private CedarUser user;
@@ -46,12 +43,10 @@ class CurrentUserPermissionUpdaterForSearchTest {
   @BeforeEach
   void setUp() {
     config = mock(CedarConfig.class);
-    submissionConfig = mock(SubmissionConfig.class);
     document = mock(IndexedDocumentDocument.class);
     info = mock(FolderServerNodeInfo.class);
     user = new CedarUser();
     user.setId("user-1");
-    when(config.getSubmissionConfig()).thenReturn(submissionConfig);
     when(document.getInfo()).thenReturn(info);
     when(document.getUsers()).thenReturn(List.of());
     when(info.getType()).thenReturn(CedarResourceType.TEMPLATE);
@@ -277,31 +272,6 @@ class CurrentUserPermissionUpdaterForSearchTest {
 
     assertEquals(canMakeOpen, output.isCanMakeOpen());
     assertEquals(canMakeNotOpen, output.isCanMakeNotOpen());
-  }
-
-  static Stream<Arguments> submissionStates() {
-    return Stream.of(
-        Arguments.of(CedarResourceType.TEMPLATE, "template-1", List.of("template-1"), true, false),
-        Arguments.of(CedarResourceType.INSTANCE, null, List.of("template-1"), true, false),
-        Arguments.of(CedarResourceType.INSTANCE, "template-1", List.of("template-1"), true, true),
-        Arguments.of(CedarResourceType.INSTANCE, "template-1", List.of("template-2"), true, false),
-        Arguments.of(CedarResourceType.INSTANCE, "template-1", null, true, false),
-        Arguments.of(CedarResourceType.INSTANCE, "template-1", List.of("template-1"), false, false));
-  }
-
-  @ParameterizedTest
-  @MethodSource("submissionStates")
-  void submitRequiresInstanceBasedOnConfiguredTemplate(CedarResourceType type, String basedOn,
-                                                       List<String> submittableIds, boolean hasSubmissionConfig,
-                                                       boolean expected) {
-    when(info.getType()).thenReturn(type);
-    when(info.getIsBasedOnId()).thenReturn(basedOn == null ? null : CedarTemplateId.build(basedOn));
-    when(submissionConfig.getSubmittableTemplateIds()).thenReturn(submittableIds);
-    if (!hasSubmissionConfig) {
-      when(config.getSubmissionConfig()).thenReturn(null);
-    }
-
-    assertEquals(expected, updateResource().isCanSubmit());
   }
 
   static Stream<Arguments> folderSharingStates() {

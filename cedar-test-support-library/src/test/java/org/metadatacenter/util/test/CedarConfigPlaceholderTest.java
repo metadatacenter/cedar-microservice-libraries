@@ -44,7 +44,7 @@ import java.util.stream.Stream;
  */
 public class CedarConfigPlaceholderTest {
 
-  private static final List<String> CONFIG_FILES = List.of("cedar-main.yml", "cedar-search.json", "cedar-rules.json");
+  private static final List<String> CONFIG_FILES = List.of("cedar-main.yml", "cedar-search.json");
 
   private static final Pattern PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z0-9_]+)}");
 
