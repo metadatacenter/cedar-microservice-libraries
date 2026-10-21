@@ -162,6 +162,36 @@ class LogQueryBuilderTest {
     assertTrue(e.getMessage().contains("Cannot sort by 'handler'"));
   }
 
+  @Test
+  void groupedModeSortsByAGroupedDimensionAndDefaultsEachKeyToDescending() {
+    LogQuerySpec s = new LogQuerySpec("request", FROM, TO, null, List.of("component", "handler"), List.of("count"),
+        List.of(new Sort("component", "ASC"), new Sort("count", null)), null, null);
+    BuiltQuery q = LogQueryBuilder.build(s);
+
+    assertTrue(q.sql().contains("ORDER BY `component` ASC, `count` DESC"), q.sql());
+  }
+
+  @Test
+  void repeatedMetricsCollapseToOneColumn() {
+    BuiltQuery q = LogQueryBuilder.build(spec(List.of("component"),
+        List.of("count", " count ", "sum:handlerDuration", "sum:handlerDuration"), null));
+
+    assertEquals(List.of("component", "count", "sum:handlerDuration"),
+        q.columns().stream().map(c -> c.key()).toList());
+    assertEquals(1, countOccurrences(q.sql(), "AS `sum_handlerDuration`"));
+  }
+
+  @Test
+  void malformedMetricsAreRejectedByName() {
+    assertRejected(spec(List.of("component"), List.of(" "), null), "Empty metric");
+    assertRejected(spec(List.of("component"), List.of("p95handlerDuration"), null),
+        "Malformed metric 'p95handlerDuration'");
+    assertRejected(spec(List.of("component"), List.of("median:handlerDuration"), null),
+        "Unknown metric function 'median'");
+    assertRejected(spec(List.of("component"), List.of("distinct:errorPack"), null),
+        "distinct on 'errorPack' is not allowed");
+  }
+
   // ---- having -----------------------------------------------------------------------------------
 
   @Test
@@ -205,6 +235,34 @@ class LogQueryBuilderTest {
         List.of(new LogQuerySpec.Having("count", "gt", "1")));
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> LogQueryBuilder.build(s));
     assertTrue(e.getMessage().contains("Having needs metrics"));
+  }
+
+  @Test
+  void havingOpsMapOntoTheirComparisonsAndCombineWithAnd() {
+    LogQuerySpec s = new LogQuerySpec("request", FROM, TO, null, List.of("handler"),
+        List.of("count", "avg:handlerDuration"), null, null, null,
+        List.of(new LogQuerySpec.Having("count", null, "10"),
+            new LogQuerySpec.Having("avg:handlerDuration", "LT", "2.5"),
+            new LogQuerySpec.Having("count", "ne", "99")));
+    BuiltQuery q = LogQueryBuilder.build(s);
+
+    assertTrue(q.sql().contains("HAVING `count` > :h0 AND `avg_handlerDuration` < :h1 AND `count` <> :h2"), q.sql());
+    assertEquals(10L, q.params().get("h0"), "an omitted op means greater-than");
+    assertEquals(2.5, q.params().get("h1"), "a fractional threshold is not truncated");
+    assertEquals(99L, q.params().get("h2"));
+  }
+
+  @Test
+  void havingWithoutAUsableThresholdIsRejected() {
+    assertRejected(havingOnCount(new LogQuerySpec.Having(null, "gt", "1")), "missing 'key'");
+    assertRejected(havingOnCount(new LogQuerySpec.Having("count", "gt", null)), "Having on 'count' needs 'val'");
+    assertRejected(havingOnCount(new LogQuerySpec.Having("count", "between", "1")), "Unknown having op 'between'");
+    assertRejected(havingOnCount(new LogQuerySpec.Having("count", "gt", "many")), "'many' for 'count' is not a number");
+  }
+
+  private static LogQuerySpec havingOnCount(LogQuerySpec.Having having) {
+    return new LogQuerySpec("request", FROM, TO, null, List.of("handler"), List.of("count"), null, null, null,
+        List.of(having));
   }
 
   @Test
@@ -289,6 +347,36 @@ class LogQueryBuilderTest {
     assertEquals("/folders%", q.params().get("f0"));
   }
 
+  /** An op that lost its negation or its direction returns the rows the operator asked to exclude. */
+  @Test
+  void negatedAndUpperBoundOpsKeepTheirDirection() {
+    BuiltQuery q = LogQueryBuilder.build(spec(null, null, List.of(
+        new Filter("component", "ne", "cedar-resource-server", null),
+        new Filter("httpMethod", "NotIn", null, List.of("GET", "HEAD")),
+        new Filter("path", "notlike", "/health", null),
+        new Filter("handlerDuration", "lte", "1000", null),
+        new Filter("authSource", null, "apiKey", null))));
+
+    assertTrue(q.sql().contains("systemComponentName <> :f0"), q.sql());
+    assertTrue(q.sql().contains("httpMethod NOT IN (:f1_0, :f1_1)"), "op names are case-insensitive");
+    assertTrue(q.sql().contains("path NOT LIKE :f2"));
+    assertTrue(q.sql().contains("handlerDuration <= :f3"));
+    assertTrue(q.sql().contains("authSource = :f4"), "an omitted op means equality");
+    assertEquals("%/health%", q.params().get("f2"));
+    assertEquals(1000L, q.params().get("f3"));
+  }
+
+  @Test
+  void aFilterMissingWhatItsOpNeedsIsRejectedByName() {
+    assertRejected(spec(null, null, List.of(new Filter(null, "eq", "x", null))), "missing 'col'");
+    assertRejected(spec(null, null, List.of(new Filter("component", "eq", null, null))),
+        "Op 'eq' on 'component' needs 'val'");
+    assertRejected(spec(null, null, List.of(new Filter("component", "notin", null, List.of()))),
+        "Op 'notin' on 'component' needs a non-empty 'vals'");
+    assertRejected(spec(null, null, List.of(new Filter("status", "in", null, java.util.Arrays.asList("500", null)))),
+        "Null value for column 'status'");
+  }
+
   // ---- range and limits -------------------------------------------------------------------------
 
   @Test
@@ -297,6 +385,17 @@ class LogQueryBuilderTest {
 
     assertTrue(q.sql().contains("requestTime >= :from AND requestTime < :to"));
     assertEquals(24 * 60 * 60, java.time.Duration.between(q.from(), q.to()).toSeconds());
+  }
+
+  /** A cursor or bound that does not parse is the caller's mistake, and must reach them as one. */
+  @Test
+  void anUnparseableCursorOrBoundIsRejectedAsInput() {
+    for (String cursor : List.of("4242", ",4242", "yesterday,4242", "2026-07-30T12:00:00Z,last")) {
+      assertRejected(new LogQuerySpec("request", FROM, TO, null, null, null, null, null, cursor),
+          "Malformed cursor '" + cursor + "'");
+    }
+    assertRejected(new LogQuerySpec("request", "2026-07-30", TO, null, null, null, null, null, null),
+        "'2026-07-30' for 'from' is not an ISO-8601 instant");
   }
 
   @Test
@@ -506,6 +605,11 @@ class LogQueryBuilderTest {
                 + "native query. Params: " + q.params().keySet() + "\nSQL: " + sql);
       }
     }
+  }
+
+  private static void assertRejected(LogQuerySpec s, String fragment) {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> LogQueryBuilder.build(s));
+    assertTrue(e.getMessage().contains(fragment), e.getMessage());
   }
 
   private static int countOccurrences(String haystack, String needle) {
