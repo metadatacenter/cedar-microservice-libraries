@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.metadatacenter.config.PaginationConfig;
 import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.model.CedarResourceType;
+import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.rest.exception.CedarAssertionException;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
@@ -300,6 +301,74 @@ class PagedQueryValidationTest {
     CedarAssertionException error = assertThrows(CedarAssertionException.class, query::validate);
     assertBadRequest(error);
     assertEquals("instance", error.getErrorPack().getParameters().get("resource_types"));
+  }
+
+  static Stream<Arguments> selectorsASearchByTemplateCannotHonour() {
+    return Stream.of(
+        Arguments.of("id", "https://repo.example/template-instances/1",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.id(Optional.of("https://repo.example/template-instances/1"))),
+        Arguments.of("sharing", "shared-with-me",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.sharing(Optional.of("shared-with-me"))),
+        Arguments.of("sharing", "shared-with-everybody",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.sharing(Optional.of("shared-with-everybody"))),
+        Arguments.of("mode", "special-folders",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.mode(Optional.of("special-folders"))),
+        Arguments.of("category_id", "https://repo.example/categories/1",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.categoryId(Optional.of("https://repo.example/categories/1"))),
+        Arguments.of("version", "latest",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.version(Optional.of("latest"))),
+        Arguments.of("version", "latest-by-status",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.version(Optional.of("latest-by-status"))),
+        Arguments.of("publication_status", "bibo:draft",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.publicationStatus(Optional.of("bibo:draft"))),
+        Arguments.of("publication_status", "bibo:published",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.publicationStatus(Optional.of("bibo:published"))));
+  }
+
+  /**
+   * A search by template lists the template's instances from the graph and applies no other selector or filter,
+   * so a request naming one is refused rather than answered as though it had not.
+   */
+  @ParameterizedTest(name = "{0}={1}")
+  @MethodSource("selectorsASearchByTemplateCannotHonour")
+  void refusesASelectorOrFilterTheSearchByTemplateCannotHonour(String parameter, String value,
+                                                                Consumer<PagedSortedTypedSearchQuery> configure) {
+    PagedSortedTypedSearchQuery query = searchQuery().isBasedOn(Optional.of("https://repo.example/templates/1"));
+    configure.accept(query);
+    CedarAssertionException error = assertThrows(CedarAssertionException.class, query::validate);
+    assertBadRequest(error);
+    assertEquals(value, error.getErrorPack().getParameters().get(parameter));
+    assertEquals("https://repo.example/templates/1", error.getErrorPack().getParameters().get("is_based_on"));
+  }
+
+  static Stream<Arguments> requestsASearchByTemplateHonours() {
+    return Stream.of(
+        // The Workspace's instance list
+        Arguments.of("limit and offset",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.limit(Optional.of(50)).offset(Optional.of(0))),
+        // The legacy Template Editor's instance count
+        Arguments.of("sort, limit and offset",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.sort(Optional.of("name")).limit(Optional.of(100))
+                .offset(Optional.of(0))),
+        // A filter that filters nothing, as the template-impact tool asks for
+        Arguments.of("every version and publication status",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.version(Optional.of("all"))
+                .publicationStatus(Optional.of("all")).sort(Optional.of("createdOnTS,name"))),
+        Arguments.of("a last-modified window",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.setModified(new ModifiedDateRange(1L, 2L))),
+        Arguments.of("an empty sharing view, which means every artifact",
+            (Consumer<PagedSortedTypedSearchQuery>) q -> q.sharing(Optional.of(""))));
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("requestsASearchByTemplateHonours")
+  void acceptsWhatTheSearchByTemplateHonours(String request, Consumer<PagedSortedTypedSearchQuery> configure)
+      throws Exception {
+    PagedSortedTypedSearchQuery query = searchQuery().isBasedOn(Optional.of("https://repo.example/templates/1"));
+    configure.accept(query);
+    query.validate();
+    assertEquals("https://repo.example/templates/1", query.getIsBasedOn());
+    assertEquals(List.of(CedarResourceType.INSTANCE), query.getResourceTypeList());
   }
 
   static Stream<Arguments> filterStringProjections() {

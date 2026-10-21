@@ -7,6 +7,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.config.OpensearchConfig;
+import org.metadatacenter.model.request.ModifiedDateRange;
+import org.metadatacenter.model.request.SearchSharingFilter;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
@@ -124,7 +126,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerIT {
     do {
       DeepSearchPage page = worker.searchDeepPage(context, "walkprobe", List.of("template"),
           ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, null, List.of(), 2,
-          pointInTimeId, searchAfter);
+          pointInTimeId, searchAfter, ModifiedDateRange.ALL, SearchSharingFilter.ALL);
       walked.addAll(page.result().getHits().stream().map(SearchHit::getId).toList());
       pointInTimeId = page.pointInTimeId();
       searchAfter = page.nextSearchAfter();
@@ -148,7 +150,8 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerIT {
           : List.of("sort-d", "sort-b", "sort-c", "sort-a");
       for (int offset = 0; offset < 4; offset += 2) {
         var result = worker.search(context(READER_ID, false), "sortprobe", List.of("folder", "template", "field"),
-            ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, null, sort, 2, offset);
+            ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, null, sort, 2, offset, ModifiedDateRange.ALL,
+            SearchSharingFilter.ALL);
         assertEquals(4, result.getTotalCount());
         assertEquals(expected.subList(offset, offset + 2), result.getHits().stream().map(SearchHit::getId).toList());
       }
@@ -157,7 +160,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerIT {
 
   private static SearchResponseResult search(CedarRequestContext context, String query) throws Exception {
     return worker.search(context, query, List.of("template"), ResourceVersionFilter.ALL,
-        ResourcePublicationStatusFilter.ALL, null, List.of(), 20, 0);
+        ResourcePublicationStatusFilter.ALL, null, List.of(), 20, 0, ModifiedDateRange.ALL, SearchSharingFilter.ALL);
   }
 
   private static Set<String> ids(SearchResponseResult result) {

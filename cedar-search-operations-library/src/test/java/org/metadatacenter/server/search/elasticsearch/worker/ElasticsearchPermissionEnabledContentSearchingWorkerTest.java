@@ -9,6 +9,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
+import org.metadatacenter.model.request.ModifiedDateRange;
+import org.metadatacenter.model.request.SearchSharingFilter;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
@@ -89,7 +91,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
   void modifiedBoundsAreFiltersOnTheIndexQueryBeforePaging() throws Exception {
     worker.search(requestContext, "heart", List.of("template", "field"), ResourceVersionFilter.ALL,
         ResourcePublicationStatusFilter.ALL, null, List.of("name"), 2, 1,
-        new org.metadatacenter.model.request.ModifiedDateRange(100L, 400L));
+        new ModifiedDateRange(100L, 400L), SearchSharingFilter.ALL);
     var source = capturedRequest.get().source();
     var json = new ObjectMapper().readTree(source.toString());
     var range = json.at("/query/bool/filter/0/range").elements().next();
@@ -282,7 +284,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
         response(7, hit(5), hit(6)));
 
     SearchResponseResult result = worker.searchDeep(requestContext, "kidney", null, ResourceVersionFilter.ALL,
-        ResourcePublicationStatusFilter.ALL, null, null, 2, 5);
+        ResourcePublicationStatusFilter.ALL, null, null, 2, 5, ModifiedDateRange.ALL, SearchSharingFilter.ALL);
 
     assertEquals(7, result.getTotalCount());
     assertEquals(List.of(5, 6), result.getHits().stream().map(SearchHit::docId).toList());
@@ -302,7 +304,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
     List<Page> pages = deepPages(response(7, hit(0), hit(1)));
 
     SearchResponseResult result = worker.searchDeep(requestContext, "kidney", null, ResourceVersionFilter.ALL,
-        ResourcePublicationStatusFilter.ALL, null, null, 2, 0);
+        ResourcePublicationStatusFilter.ALL, null, null, 2, 0, ModifiedDateRange.ALL, SearchSharingFilter.ALL);
 
     assertEquals(List.of(0, 1), result.getHits().stream().map(SearchHit::docId).toList());
     assertEquals(1, pages.size());
@@ -315,7 +317,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
     List<Page> pages = deepPages(response(2, hit(0), hit(1)));
 
     SearchResponseResult result = worker.searchDeep(requestContext, "kidney", null, ResourceVersionFilter.ALL,
-        ResourcePublicationStatusFilter.ALL, null, null, 2, 100);
+        ResourcePublicationStatusFilter.ALL, null, null, 2, 100, ModifiedDateRange.ALL, SearchSharingFilter.ALL);
 
     assertEquals(2, result.getTotalCount());
     assertTrue(result.getHits().isEmpty());
@@ -337,7 +339,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
     List<Page> pages = deepPages(response(1, hit(0)));
 
     worker.searchDeep(requestContext, "kidney", null, ResourceVersionFilter.ALL,
-        ResourcePublicationStatusFilter.ALL, null, sortList, 2, 0);
+        ResourcePublicationStatusFilter.ALL, null, sortList, 2, 0, ModifiedDateRange.ALL, SearchSharingFilter.ALL);
 
     String source = pages.get(0).source();
     int previous = -1;
@@ -355,7 +357,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
 
     assertThrows(CedarDependencyUnavailableException.class,
         () -> worker.searchDeep(requestContext, "kidney", null, ResourceVersionFilter.ALL,
-            ResourcePublicationStatusFilter.ALL, null, null, 2, 5));
+            ResourcePublicationStatusFilter.ALL, null, null, 2, 5, ModifiedDateRange.ALL, SearchSharingFilter.ALL));
 
     verifyPointInTimeDeleted();
   }
@@ -365,7 +367,7 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
     List<Page> pages = deepPages(response(40, hit(0), hit(1)));
 
     DeepSearchPage page = worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
-        ResourcePublicationStatusFilter.ALL, null, null, 2, null, null);
+        ResourcePublicationStatusFilter.ALL, null, null, 2, null, null, ModifiedDateRange.ALL, SearchSharingFilter.ALL);
 
     assertEquals(40, page.result().getTotalCount());
     assertEquals(List.of(0, 1), page.result().getHits().stream().map(SearchHit::docId).toList());
@@ -385,7 +387,8 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
     Object[] resumeAt = {1.0f, "cid-1"};
 
     DeepSearchPage page = worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
-        ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-carried", resumeAt);
+        ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-carried", resumeAt, ModifiedDateRange.ALL,
+        SearchSharingFilter.ALL);
 
     assertEquals(List.of(2, 3), page.result().getHits().stream().map(SearchHit::docId).toList());
     assertEquals("pit-carried", page.pointInTimeId());
@@ -402,7 +405,8 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
     deepPages(response(0, hit(9)));
 
     DeepSearchPage page = worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
-        ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-carried", new Object[]{1.0f, "cid-8"});
+        ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-carried", new Object[]{1.0f, "cid-8"},
+        ModifiedDateRange.ALL, SearchSharingFilter.ALL);
 
     assertEquals(List.of(9), page.result().getHits().stream().map(SearchHit::docId).toList());
     assertEquals(null, page.pointInTimeId());
@@ -420,7 +424,8 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
 
     CedarException error = assertThrows(CedarException.class,
         () -> worker.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
-            ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-gone", new Object[]{1.0f, "cid-1"}));
+            ResourcePublicationStatusFilter.ALL, null, null, 2, "pit-gone", new Object[]{1.0f, "cid-1"},
+            ModifiedDateRange.ALL, SearchSharingFilter.ALL));
 
     assertEquals(CedarResponseStatus.BAD_REQUEST, error.getErrorPack().getStatus());
     assertEquals(CedarErrorReasonKey.CONTINUATION_EXPIRED, error.getErrorPack().getErrorReasonKey());
@@ -461,7 +466,8 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
   private SearchResponseResult executeSearch(String query, List<String> resourceTypes, ResourceVersionFilter version,
                                              ResourcePublicationStatusFilter publicationStatus, String categoryId,
                                              List<String> sort, int limit, int offset) throws Exception {
-    return worker.search(requestContext, query, resourceTypes, version, publicationStatus, categoryId, sort, limit, offset);
+    return worker.search(requestContext, query, resourceTypes, version, publicationStatus, categoryId, sort, limit, offset,
+        ModifiedDateRange.ALL, SearchSharingFilter.ALL);
   }
 
   private String capturedQuery() {

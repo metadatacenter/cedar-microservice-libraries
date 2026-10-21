@@ -78,18 +78,6 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
   public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
                                      ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
-                                     int offset) throws CedarProcessingException {
-    return search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, ModifiedDateRange.ALL);
-  }
-
-  public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
-                                     ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
-                                     int offset, ModifiedDateRange modified) throws CedarProcessingException {
-    return search(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, modified, SearchSharingFilter.ALL);
-  }
-
-  public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
-                                     ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                      int offset, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarProcessingException {
 
     try {
@@ -123,18 +111,6 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   // skipped on the way are read as sort values with no document body. The scroll API cannot serve this
   // call at all. A scroll batch is capped by index.max_result_window exactly as from+size is, so asking
   // for offset+limit rows failed for every offset past 10,000 that this endpoint exists to reach.
-  public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
-                                         ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
-                                         int offset) throws CedarProcessingException {
-    return searchDeep(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, ModifiedDateRange.ALL);
-  }
-
-  public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
-                                         ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
-                                         int offset, ModifiedDateRange modified) throws CedarProcessingException {
-    return searchDeep(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, modified, SearchSharingFilter.ALL);
-  }
-
   public SearchResponseResult searchDeep(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
                                          ResourcePublicationStatusFilter publicationStatus, String categoryId, List<String> sortList, int limit,
                                          int offset, ModifiedDateRange modified, SearchSharingFilter sharing) throws CedarProcessingException {
@@ -195,21 +171,6 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
    * a short page is the last one. Nothing is skipped: the page resumes where the previous one stopped,
    * so a page costs the same wherever in the result set it falls.
    */
-  public DeepSearchPage searchDeepPage(CedarRequestContext rctx, String query, List<String> resourceTypes,
-                                       ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
-                                       String categoryId, List<String> sortList, int limit, String pointInTimeId,
-                                       Object[] searchAfter) throws CedarException {
-    return searchDeepPage(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit, pointInTimeId, searchAfter, ModifiedDateRange.ALL);
-  }
-
-  public DeepSearchPage searchDeepPage(CedarRequestContext rctx, String query, List<String> resourceTypes,
-                                       ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
-                                       String categoryId, List<String> sortList, int limit, String pointInTimeId,
-                                       Object[] searchAfter, ModifiedDateRange modified) throws CedarException {
-    return searchDeepPage(rctx, query, resourceTypes, version, publicationStatus, categoryId, sortList, limit,
-        pointInTimeId, searchAfter, modified, SearchSharingFilter.ALL);
-  }
-
   public DeepSearchPage searchDeepPage(CedarRequestContext rctx, String query, List<String> resourceTypes,
                                        ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
                                        String categoryId, List<String> sortList, int limit, String pointInTimeId,

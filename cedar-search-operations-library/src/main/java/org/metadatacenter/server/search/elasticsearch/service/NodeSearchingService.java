@@ -128,19 +128,6 @@ public class NodeSearchingService extends AbstractSearchingService {
 
   public FolderServerNodeListResponse search(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
                                              ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
-                                             List<String> sortList, int limit, int offset, String absoluteUrl) throws CedarProcessingException {
-    return search(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, absoluteUrl, ModifiedDateRange.ALL);
-  }
-
-  public FolderServerNodeListResponse search(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
-                                             ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
-                                             List<String> sortList, int limit, int offset, String absoluteUrl, ModifiedDateRange modified) throws CedarProcessingException {
-    return search(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
-        absoluteUrl, modified, SearchSharingFilter.ALL);
-  }
-
-  public FolderServerNodeListResponse search(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
-                                             ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus, String categoryId,
                                              List<String> sortList, int limit, int offset, String absoluteUrl, ModifiedDateRange modified,
                                              SearchSharingFilter sharing) throws CedarProcessingException {
     try {
@@ -155,19 +142,6 @@ public class NodeSearchingService extends AbstractSearchingService {
     } catch (Exception e) {
       throw new CedarProcessingException(e);
     }
-  }
-
-  public FolderServerNodeListResponse searchDeep(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
-                                                 ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
-                                                 String categoryId, List<String> sortList, int limit, int offset, String absoluteUrl) throws CedarProcessingException {
-    return searchDeep(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset, absoluteUrl, ModifiedDateRange.ALL);
-  }
-
-  public FolderServerNodeListResponse searchDeep(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
-                                                 ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
-                                                 String categoryId, List<String> sortList, int limit, int offset, String absoluteUrl, ModifiedDateRange modified) throws CedarProcessingException {
-    return searchDeep(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, offset,
-        absoluteUrl, modified, SearchSharingFilter.ALL);
   }
 
   public FolderServerNodeListResponse searchDeep(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
@@ -193,23 +167,6 @@ public class NodeSearchingService extends AbstractSearchingService {
    * counted when the walk starts and carried from page to page after that, so every page of one walk
    * reports the same one.
    */
-  public DeepSearchPageResponse searchDeepPage(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
-                                               ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
-                                               String categoryId, List<String> sortList, int limit, long rowsSeen,
-                                               long knownTotalCount, String pointInTimeId, Object[] searchAfter,
-                                               String absoluteUrl) throws CedarException {
-    return searchDeepPage(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit, rowsSeen, knownTotalCount, pointInTimeId, searchAfter, absoluteUrl, ModifiedDateRange.ALL);
-  }
-
-  public DeepSearchPageResponse searchDeepPage(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
-                                               ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
-                                               String categoryId, List<String> sortList, int limit, long rowsSeen,
-                                               long knownTotalCount, String pointInTimeId, Object[] searchAfter,
-                                               String absoluteUrl, ModifiedDateRange modified) throws CedarException {
-    return searchDeepPage(rctx, query, id, resourceTypes, version, publicationStatus, categoryId, sortList, limit,
-        rowsSeen, knownTotalCount, pointInTimeId, searchAfter, absoluteUrl, modified, SearchSharingFilter.ALL);
-  }
-
   public DeepSearchPageResponse searchDeepPage(CedarRequestContext rctx, String query, String id, List<String> resourceTypes,
                                                ResourceVersionFilter version, ResourcePublicationStatusFilter publicationStatus,
                                                String categoryId, List<String> sortList, int limit, long rowsSeen,

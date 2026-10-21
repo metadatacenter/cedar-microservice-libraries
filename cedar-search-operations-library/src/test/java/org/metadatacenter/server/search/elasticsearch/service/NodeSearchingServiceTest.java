@@ -15,6 +15,8 @@ import org.metadatacenter.config.OpensearchConfig;
 import org.metadatacenter.error.CedarErrorReasonKey;
 import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.http.CedarResponseStatus;
+import org.metadatacenter.model.request.ModifiedDateRange;
+import org.metadatacenter.model.request.SearchSharingFilter;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.model.response.FolderServerNodeListResponse;
 import org.metadatacenter.rest.context.CedarRequestContext;
@@ -215,7 +217,8 @@ class NodeSearchingServiceTest {
     }
 
     FolderServerNodeListResponse listing = clusterService.searchDeep(context, "kidney", null, List.of("template"),
-        ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, null, List.of("name"), 2, 4, URL);
+        ResourceVersionFilter.ALL, ResourcePublicationStatusFilter.ALL, null, List.of("name"), 2, 4, URL, ModifiedDateRange.ALL,
+        SearchSharingFilter.ALL);
 
     assertEquals(List.of("Kidney E", "Kidney F"), names(listing));
     assertEquals(7, listing.getTotalCount());
@@ -232,9 +235,9 @@ class NodeSearchingServiceTest {
 
     List<FolderServerNodeListResponse> listings = List.of(
         clusterService.search(context, "kidney", null, List.of("template"), ResourceVersionFilter.ALL,
-            ResourcePublicationStatusFilter.ALL, null, null, 10, 0, URL),
+            ResourcePublicationStatusFilter.ALL, null, null, 10, 0, URL, ModifiedDateRange.ALL, SearchSharingFilter.ALL),
         clusterService.searchDeep(context, "kidney", null, List.of("template"), ResourceVersionFilter.ALL,
-            ResourcePublicationStatusFilter.ALL, null, null, 10, 0, URL),
+            ResourcePublicationStatusFilter.ALL, null, null, 10, 0, URL, ModifiedDateRange.ALL, SearchSharingFilter.ALL),
         clusterPage(null, 0, 0, null).response());
 
     for (FolderServerNodeListResponse listing : listings) {
@@ -332,12 +335,12 @@ class NodeSearchingServiceTest {
       throws CedarException {
     return clusterService.searchDeepPage(context, "kidney", null, List.of("template"), ResourceVersionFilter.ALL,
         ResourcePublicationStatusFilter.ALL, null, List.of("name"), 3, rowsSeen, knownTotal, pointInTimeId,
-        searchAfter, URL);
+        searchAfter, URL, ModifiedDateRange.ALL, SearchSharingFilter.ALL);
   }
 
   private Set<String> searchNames(String query) throws CedarException {
     return Set.copyOf(names(clusterService.search(context, query, null, List.of("template"), ResourceVersionFilter.ALL,
-        ResourcePublicationStatusFilter.ALL, null, null, 10, 0, URL)));
+        ResourcePublicationStatusFilter.ALL, null, null, 10, 0, URL, ModifiedDateRange.ALL, SearchSharingFilter.ALL)));
   }
 
   private static List<String> names(FolderServerNodeListResponse listing) {
@@ -348,7 +351,7 @@ class NodeSearchingServiceTest {
       throws CedarException {
     return service.searchDeepPage(context, "kidney", null, List.of("template"), ResourceVersionFilter.ALL,
         ResourcePublicationStatusFilter.ALL, null, null, 2, rowsSeen, knownTotal, pointInTimeId, searchAfter,
-        "https://resource.metadatacenter.orgx/search-deep");
+        "https://resource.metadatacenter.orgx/search-deep", ModifiedDateRange.ALL, SearchSharingFilter.ALL);
   }
 
   private static SearchHit hit(int docId, String grant) {
