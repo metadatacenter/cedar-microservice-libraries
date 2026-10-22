@@ -2,8 +2,11 @@ package org.metadatacenter.server.neo4j.proxy;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.metadatacenter.error.CedarErrorKey;
+import org.metadatacenter.error.CedarErrorType;
 import org.metadatacenter.id.CedarCategoryId;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarUserId;
@@ -16,6 +19,7 @@ import org.metadatacenter.server.security.model.permission.category.*;
 import org.metadatacenter.server.security.model.user.CedarUserExtract;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -162,6 +166,140 @@ class CategoryPermissionRequestValidatorTest {
         new CategoryPermissionGroup(EVERYONE_ID), role));
 
     assertError(f.validate(request), CedarErrorKey.INVALID_DATA);
+  }
+
+  @Test
+  void aCategoryWithoutAStoredOwnerIsInvalidData() {
+    Fixture f = new Fixture();
+    when(f.permissions.getCategoryPermissions(CATEGORY_ID)).thenReturn(new CategoryPermissions());
+
+    CategoryPermissionRequestValidator validator = f.validate(f.validRequest());
+
+    assertError(validator, CedarErrorKey.INVALID_DATA);
+    assertEquals(CedarErrorType.SERVER_ERROR, validator.getCallResult().getFirstError().getErrorPack().getErrorType());
+  }
+
+  @ParameterizedTest
+  @MethodSource("malformedUserEntries")
+  void aMalformedUserEntryIsRejectedByTheMissingPart(CategoryPermissionUserPermissionPair entry, String missing) {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.getUserPermissions().add(entry);
+
+    CategoryPermissionRequestValidator validator = f.validate(request);
+
+    assertMissingParameter(validator, missing);
+    assertTrue(validator.getPermissions().getUserPermissions().isEmpty());
+  }
+
+  static Stream<Arguments> malformedUserEntries() {
+    return Stream.of(
+        Arguments.of(null, "userPermission"),
+        Arguments.of(new CategoryPermissionUserPermissionPair(null, CategoryRole.VIEWER), "user"),
+        Arguments.of(new CategoryPermissionUserPermissionPair(new CategoryPermissionUser(null), CategoryRole.VIEWER),
+            "userId"),
+        Arguments.of(new CategoryPermissionUserPermissionPair(new CategoryPermissionUser(" "), CategoryRole.VIEWER),
+            "userId"),
+        Arguments.of(new CategoryPermissionUserPermissionPair(new CategoryPermissionUser(USER_ID), null), "role"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("malformedGroupEntries")
+  void aMalformedGroupEntryIsRejectedByTheMissingPart(CategoryPermissionGroupPermissionPair entry, String missing) {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.getGroupPermissions().add(entry);
+
+    CategoryPermissionRequestValidator validator = f.validate(request);
+
+    assertMissingParameter(validator, missing);
+    assertTrue(validator.getPermissions().getGroupPermissions().isEmpty());
+  }
+
+  static Stream<Arguments> malformedGroupEntries() {
+    return Stream.of(
+        Arguments.of(null, "groupPermission"),
+        Arguments.of(new CategoryPermissionGroupPermissionPair(null, CategoryRole.VIEWER), "group"),
+        Arguments.of(new CategoryPermissionGroupPermissionPair(new CategoryPermissionGroup(null), CategoryRole.VIEWER),
+            "groupId"),
+        Arguments.of(new CategoryPermissionGroupPermissionPair(new CategoryPermissionGroup(""), CategoryRole.VIEWER),
+            "groupId"),
+        Arguments.of(new CategoryPermissionGroupPermissionPair(new CategoryPermissionGroup(GROUP_ID), null), "role"));
+  }
+
+  @Test
+  void aGrantToAnUnknownUserIsNotFound() {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
+        new CategoryPermissionUser("https://repo.example/users/missing"), CategoryRole.EDITOR));
+
+    CategoryPermissionRequestValidator validator = f.validate(request);
+
+    assertError(validator, CedarErrorKey.USER_NOT_FOUND);
+    assertEquals(CedarErrorType.NOT_FOUND, validator.getCallResult().getFirstError().getErrorPack().getErrorType());
+    assertTrue(validator.getPermissions().getUserPermissions().isEmpty());
+  }
+
+  @Test
+  void aGrantToAnUnknownGroupIsNotFound() {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
+        new CategoryPermissionGroup("https://repo.example/groups/missing"), CategoryRole.EDITOR));
+
+    CategoryPermissionRequestValidator validator = f.validate(request);
+
+    assertError(validator, CedarErrorKey.GROUP_NOT_FOUND);
+    assertEquals(CedarErrorType.NOT_FOUND, validator.getCallResult().getFirstError().getErrorPack().getErrorType());
+    assertTrue(validator.getPermissions().getGroupPermissions().isEmpty());
+  }
+
+  @Test
+  void duplicateGroupRolesAreRejected() {
+    Fixture f = new Fixture();
+    CategoryPermissionRequest request = f.validRequest();
+    request.setGroupPermissions(List.of(
+        new CategoryPermissionGroupPermissionPair(new CategoryPermissionGroup(GROUP_ID), CategoryRole.VIEWER),
+        new CategoryPermissionGroupPermissionPair(new CategoryPermissionGroup(GROUP_ID), CategoryRole.MANAGER)));
+
+    assertError(f.validate(request), CedarErrorKey.UNIQUE_CONSTRAINT_COLLISION);
+  }
+
+  @Test
+  void rootAclReplacementKeepsAnExplicitEveryoneViewerOnce() {
+    Fixture f = new Fixture();
+    f.asRoot();
+    f.addGroup(EVERYONE_ID);
+    when(f.groups.getEverybodyGroup()).thenReturn(f.group(EVERYONE_ID));
+    CategoryPermissionRequest request = f.validRequest();
+    request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
+        new CategoryPermissionGroup(EVERYONE_ID), CategoryRole.VIEWER));
+
+    CategoryPermissionRequestValidator validator = f.validate(request);
+
+    assertTrue(validator.getCallResult().isOk());
+    assertEquals(1, validator.getPermissions().getGroupPermissions().size());
+    assertEquals(EVERYONE_ID, validator.getPermissions().getGroupPermissions().get(0).getGroup().getId());
+  }
+
+  @Test
+  void rootGrantsCannotChangeWithoutTheEveryoneGroup() {
+    Fixture f = new Fixture();
+    f.asRoot();
+    when(f.groups.getEverybodyGroup()).thenReturn(null);
+
+    CategoryPermissionRequestValidator validator = f.validate(f.validRequest());
+
+    assertError(validator, CedarErrorKey.INVALID_DATA);
+    assertEquals(CedarErrorType.SERVER_ERROR, validator.getCallResult().getFirstError().getErrorPack().getErrorType());
+  }
+
+  private static void assertMissingParameter(CategoryPermissionRequestValidator validator, String paramName) {
+    assertError(validator, CedarErrorKey.MISSING_PARAMETER);
+    assertEquals(CedarErrorType.INVALID_ARGUMENT,
+        validator.getCallResult().getFirstError().getErrorPack().getErrorType());
+    assertEquals(paramName, validator.getCallResult().getFirstError().getErrorPack().getParameters().get("paramName"));
   }
 
   private static void assertError(CategoryPermissionRequestValidator validator, CedarErrorKey expected) {

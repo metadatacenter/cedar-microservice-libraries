@@ -63,25 +63,6 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
         """;
   }
 
-  public static String setArtifactOwner() {
-    return "" +
-        " MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})" +
-        " MATCH (artifact:<LABEL.ARTIFACT> {<PROP.ID>:{<PH.ARTIFACT_ID>}})" +
-        " MERGE (user)-[:<REL.OWNS>]->(artifact)" +
-        " SET artifact.<PROP.OWNED_BY> = {<PH.USER_ID>}" +
-        " RETURN artifact";
-  }
-
-  public static String removeResourceOwner() {
-    return "" +
-        " MATCH (user:<LABEL.USER>)" +
-        " MATCH (artifact:<LABEL.RESOURCE> {<PROP.ID>:{<PH.ID>}})" +
-        " MATCH (user)-[relation:<REL.OWNS>]->(artifact)" +
-        " DELETE relation" +
-        " SET artifact.<PROP.OWNED_BY> = null" +
-        " RETURN artifact";
-  }
-
   public static String getResourceLookupQueryById() {
     return "" +
         " MATCH (root:<LABEL.FOLDER> {<PROP.NAME>:{<PH.NAME>}})," +
@@ -109,19 +90,6 @@ public class CypherQueryBuilderArtifact extends AbstractCypherQueryBuilder {
     return "" +
         " MATCH (instance:<LABEL.INSTANCE> {<PROP.IS_BASED_ON>:{<PH.ID>}}) " +
         " RETURN COUNT(instance)";
-  }
-
-  /**
-   * Marks every instance of a template for a full reindex by the version projection relay. An
-   * instance's indexed field names and labels are read from its template, so they go stale when the
-   * template changes although the instance itself does not.
-   */
-  public static String enqueueInstanceReindex() {
-    return "" +
-        " MATCH (instance:<LABEL.INSTANCE> {<PROP.IS_BASED_ON>:{<PH.ID>}})" +
-        " MERGE (projection:CedarVersionProjection {resourceId:instance.<PROP.ID>})" +
-        " SET projection.syncPrevious = coalesce(projection.syncPrevious, false)," +
-        " projection.updatedAt = timestamp()";
   }
 
   public static String getVersionHistory() {

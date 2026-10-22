@@ -131,13 +131,6 @@ public abstract class AbstractCypherParamBuilder {
     return params;
   }
 
-  public static CypherParameters matchFromNodeToNode(String fromURL, String toURL) {
-    CypherParameters params = new CypherParameters();
-    params.put(ParameterPlaceholder.FROM_ID, fromURL);
-    params.put(ParameterPlaceholder.TO_ID, toURL);
-    return params;
-  }
-
   public static CypherParameters matchUserAndGroup(CedarUserId userId, CedarGroupId groupId) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.USER_ID, userId);
@@ -191,13 +184,6 @@ public abstract class AbstractCypherParamBuilder {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.GROUP_ID, groupId);
     params.put(ParameterPlaceholder.CATEGORY_ID, categoryId);
-    return params;
-  }
-
-  public static CypherParameters matchResourceAndUser(CedarResourceId resourceId, CedarUserId userId) {
-    CypherParameters params = new CypherParameters();
-    params.put(ParameterPlaceholder.RESOURCE_ID, resourceId);
-    params.put(ParameterPlaceholder.USER_ID, userId);
     return params;
   }
 

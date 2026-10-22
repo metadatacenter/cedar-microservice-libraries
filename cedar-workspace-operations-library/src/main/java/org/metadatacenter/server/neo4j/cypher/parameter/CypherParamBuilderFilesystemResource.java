@@ -141,13 +141,6 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     return params;
   }
 
-  public static CypherParameters matchResourceIdAndEverybodyPermission(CedarFilesystemResourceId resourceId, NodeSharePermission everybodyPermission) {
-    CypherParameters params = new CypherParameters();
-    params.put(ParameterPlaceholder.ID, resourceId);
-    params.put(ParameterPlaceholder.EVERYBODY_PERMISSION, everybodyPermission.getValue());
-    return params;
-  }
-
   public static CypherParameters matchFilesystemResource(CedarFilesystemResourceId resourceId) {
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.FS_RESOURCE_ID, resourceId);
@@ -158,13 +151,6 @@ public class CypherParamBuilderFilesystemResource extends AbstractCypherParamBui
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.FS_RESOURCE_ID, resourceId);
     params.put(ParameterPlaceholder.USER_ID, userId);
-    return params;
-  }
-
-  public static CypherParameters matchFilesystemResourceAndGroup(CedarFilesystemResourceId resourceId, CedarGroupId groupId) {
-    CypherParameters params = new CypherParameters();
-    params.put(ParameterPlaceholder.FS_RESOURCE_ID, resourceId);
-    params.put(ParameterPlaceholder.GROUP_ID, groupId);
     return params;
   }
 

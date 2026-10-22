@@ -141,17 +141,6 @@ public class CypherQueryBuilderFolder extends AbstractCypherQueryBuilder {
         " RETURN folder";
   }
 
-  public static String removeFolderOwner() {
-    return "" +
-        " MATCH (user:<LABEL.USER>)" +
-        " MATCH (folder:<LABEL.FOLDER> {<PROP.ID>:{<PH.ID>}})" +
-        " MATCH (user)-[relation:<REL.OWNS>]->(folder)" +
-        " DELETE (relation)" +
-        " SET folder.<PROP.OWNED_BY> = null" +
-        " SET folder._cedarRevision = coalesce(folder._cedarRevision, 1) + 1" +
-        " RETURN folder";
-  }
-
   public static String getFolderLookupQueryByDepth(int cnt) {
     StringBuilder sb = new StringBuilder();
     if (cnt >= 1) {

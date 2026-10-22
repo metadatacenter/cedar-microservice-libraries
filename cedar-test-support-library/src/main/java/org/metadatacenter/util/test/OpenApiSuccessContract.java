@@ -104,15 +104,19 @@ public final class OpenApiSuccessContract {
         continue;
       }
       declaresSuccess = true;
-      if ("204".equals(status) || emptyResponses.remove(coordinate + " " + status)) {
+      if ("204".equals(status)) {
         continue;
       }
       JsonNode described = resolve(spec, response.getValue());
-      if (!described.has("content")) {
-        findings.add(coordinate + " " + status + ": describes no payload, so a client has no type "
-            + "to return. A response that carries no body belongs on the empty-response list.");
+      // An exemption holds only while the response declares no content, so it cannot hide a payload.
+      if (described.path("content").isEmpty()) {
+        if (!emptyResponses.remove(coordinate + " " + status)) {
+          findings.add(coordinate + " " + status + ": describes no payload, so a client has no type "
+              + "to return. A response that carries no body belongs on the empty-response list.");
+        }
         continue;
       }
+      findMissingSchemas(coordinate + " " + status, described, findings);
       findBareStrings(coordinate + " " + status, described, findings);
     }
     if (!declaresSuccess) {
@@ -129,6 +133,16 @@ public final class OpenApiSuccessContract {
       return;
     }
     findBareStrings(coordinate + " request body", resolve(spec, operation.path("requestBody")), findings);
+  }
+
+  private static void findMissingSchemas(String where, JsonNode payload, List<String> findings) {
+    Iterator<Map.Entry<String, JsonNode>> media = payload.path("content").fields();
+    while (media.hasNext()) {
+      Map.Entry<String, JsonNode> entry = media.next();
+      if (!entry.getValue().has("schema")) {
+        findings.add(where + " (" + entry.getKey() + "): declares no schema");
+      }
+    }
   }
 
   private static void findBareStrings(String where, JsonNode payload, List<String> findings) {

@@ -55,8 +55,6 @@ public interface FolderServiceSession {
   FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
                                                       CedarFolderId parentId, CedarUserId expectedOwner);
 
-  FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentFolderId, boolean propagateSharing);
-
   FolderServerArtifact createResourceWithCleanup(FolderServerArtifact artifact, CedarFolderId parentId, String jobId);
 
   FolderServerArtifact createDraftWithCleanup(FolderServerArtifact draft, CedarFolderId parentId,
@@ -204,9 +202,6 @@ public interface FolderServiceSession {
   VersionedResource<FolderServerFolder> setNotOpen(CedarFolderId id, RevisionPrecondition precondition);
 
   long getNumberOfInstances(CedarTemplateId templateId);
-
-  /** Marks every instance of the template for a full reindex; see the version projection relay. */
-  boolean enqueueInstanceReindex(CedarTemplateId templateId);
 
   FolderServerArtifactExtract findResourceExtractById(CedarArtifactId id);
 

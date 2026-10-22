@@ -6,19 +6,30 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.metadatacenter.bridge.CedarDataServices;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarTemplateId;
 import org.metadatacenter.model.SystemComponent;
+import org.metadatacenter.model.folderserver.basic.FileSystemResource;
+import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
+import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
+import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.search.IndexingDocumentDocument;
+import org.metadatacenter.server.CategoryServiceSession;
+import org.metadatacenter.server.FolderServiceSession;
+import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.search.elasticsearch.FakeOpenSearch;
 import org.metadatacenter.server.search.elasticsearch.service.ElasticsearchManagementService;
 import org.metadatacenter.server.search.elasticsearch.service.ElasticsearchServiceFactory;
 import org.metadatacenter.server.search.elasticsearch.service.NodeIndexingService;
 import org.metadatacenter.server.search.elasticsearch.service.NodeSearchingService;
 import org.metadatacenter.server.search.elasticsearch.worker.ElasticsearchIndexingWorker;
+import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
+import org.metadatacenter.server.security.model.auth.NodeSharePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourceRole;
 import org.metadatacenter.util.json.JsonMapper;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.RestHighLevelClient;
@@ -30,9 +41,18 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 /**
  * The search index lives under an alias. A rebuild fills a new concrete index, verifies it holds what it should, moves
@@ -47,6 +67,10 @@ class SearchIndexLifecycleTest {
   private static final String T1 = "https://repo.metadatacenter.orgx/templates/t-1";
   private static final String T2 = "https://repo.metadatacenter.orgx/templates/t-2";
   private static final String T3 = "https://repo.metadatacenter.orgx/templates/t-3";
+  private static final String F1 = "https://repo.metadatacenter.orgx/folders/f-1";
+  private static final String F2 = "https://repo.metadatacenter.orgx/folders/f-2";
+  private static final String GROUP = "https://metadatacenter.org/groups/g-1";
+  private static final String VIEWER_GRANT = CedarNodeMaterializedPermissions.getKey(GROUP, ResourceRole.VIEWER);
 
   private FakeOpenSearch openSearch;
   private CedarConfig config;
@@ -201,6 +225,161 @@ class SearchIndexLifecycleTest {
     assertEquals(Map.of(), openSearch.index(rebuilding).documents);
   }
 
+  /**
+   * A permission change made while a rebuild runs has to reach the index being filled too, or the
+   * promoted index carries the grants from before the change. Each index is patched where it holds the
+   * resource and given the whole document where it does not, and the rebuild is told to leave all of
+   * them alone.
+   */
+  @Test
+  void aPermissionBatchDuringARebuildReachesTheIndexBeingFilled() throws Exception {
+    String live = alias + "-2026-01-01t000000";
+    String rebuilding = alias + "-2026-02-01t000000";
+    management.createSearchIndex(live);
+    management.addAlias(live, alias);
+    management.createSearchIndex(rebuilding);
+    ElasticsearchIndexingWorker liveWorker = new ElasticsearchIndexingWorker(live, client);
+    liveWorker.addToIndex(withContent(T1), T1);
+    liveWorker.addToIndex(withContent(T2), T2);
+    new ElasticsearchIndexingWorker(rebuilding, client).addToIndex(withContent(T1), T1);
+    NodeIndexingService indexing = spy(ElasticsearchServiceFactory.getInstance(config).nodeIndexingService());
+    doAnswer(call -> whole(call.getArgument(0), call.getArgument(1)))
+        .when(indexing).createIndexDocument(any(), any(), any(), any(), anyBoolean());
+
+    IndexRebuildRegistry.begin(rebuilding);
+    indexing.updatePermissionProjections(List.of(granted(T1), granted(T2), granted(T3)));
+    assertEquals(Set.of(T1, T2, T3), IndexRebuildRegistry.liveTouched(), "the rebuild must write none of them back");
+    IndexRebuildRegistry.end(rebuilding);
+
+    for (String index : List.of(live, rebuilding)) {
+      Map<String, ObjectNode> documents = openSearch.index(index).documents;
+      assertEquals(Set.of(T1, T2, T3), documents.keySet(), index);
+      for (String id : List.of(T1, T2, T3)) {
+        assertEquals(VIEWER_GRANT, documents.get(id).path("groups").get(0).asText(), index + " " + id);
+      }
+    }
+    assertTrue(openSearch.index(live).documents.get(T2).has("infoFields"), "a patch keeps the indexed content");
+    assertTrue(openSearch.index(rebuilding).documents.get(T1).has("infoFields"), "a patch keeps the indexed content");
+    assertEquals("whole", openSearch.index(live).documents.get(T3).path("summaryText").asText());
+    assertEquals("whole", openSearch.index(rebuilding).documents.get(T2).path("summaryText").asText(),
+        "an index without the resource gets all of it, not a bare patch");
+    assertEquals("whole", openSearch.index(rebuilding).documents.get(T3).path("summaryText").asText());
+  }
+
+  /**
+   * One resource's permission change takes the same care as a batch. The search permission executor
+   * sends single changes this way, and a resource the index lacks would otherwise stay unsearchable
+   * after the change that should have made it visible.
+   */
+  @Test
+  void aSinglePermissionChangeDuringARebuildReachesBothIndices() throws Exception {
+    String live = alias + "-2026-01-01t000000";
+    String rebuilding = alias + "-2026-02-01t000000";
+    management.createSearchIndex(live);
+    management.addAlias(live, alias);
+    management.createSearchIndex(rebuilding);
+    new ElasticsearchIndexingWorker(live, client).addToIndex(withContent(T1), T1);
+    NodeIndexingService indexing = spy(ElasticsearchServiceFactory.getInstance(config).nodeIndexingService());
+    doAnswer(call -> whole(call.getArgument(0), call.getArgument(1)))
+        .when(indexing).createIndexDocument(any(), any(), any(), any(), anyBoolean());
+
+    CedarDataServices services = dataServices(List.of());
+
+    try (var data = mockStatic(CedarDataServices.class)) {
+      data.when(CedarDataServices::getInstance).thenReturn(services);
+      IndexRebuildRegistry.begin(rebuilding);
+      for (String id : List.of(T1, T2)) {
+        FolderServerTemplate template = new FolderServerTemplate();
+        template.setId(id);
+        indexing.updatePermissionProjection(template, grants(id), null, null);
+      }
+      assertEquals(Set.of(T1, T2), IndexRebuildRegistry.liveTouched(), "the rebuild must write neither back");
+      IndexRebuildRegistry.end(rebuilding);
+    }
+
+    for (String index : List.of(live, rebuilding)) {
+      Map<String, ObjectNode> documents = openSearch.index(index).documents;
+      assertEquals(Set.of(T1, T2), documents.keySet(), index);
+      for (String id : List.of(T1, T2)) {
+        assertEquals(VIEWER_GRANT, documents.get(id).path("groups").get(0).asText(), index + " " + id);
+      }
+    }
+    assertTrue(openSearch.index(live).documents.get(T1).has("infoFields"), "a patch keeps the indexed content");
+    assertEquals("whole", openSearch.index(live).documents.get(T2).path("summaryText").asText(),
+        "a resource the index lacks is indexed whole");
+    assertEquals("whole", openSearch.index(rebuilding).documents.get(T1).path("summaryText").asText(),
+        "an index being filled without the resource gets all of it, not a bare patch");
+  }
+
+  /**
+   * Without force, a rebuild compares the identifiers the graph holds with those the index holds, and
+   * replaces the index only when they differ.
+   */
+  @Test
+  void anUnforcedRebuildReplacesTheIndexOnlyWhenItDiffersFromTheGraph() throws Exception {
+    String current = alias + "-2026-01-01t000000";
+    management.createSearchIndex(current);
+    management.addAlias(current, alias);
+    ElasticsearchIndexingWorker worker = new ElasticsearchIndexingWorker(current, client);
+    worker.addToIndex(document(F1), F1);
+    worker.addToIndex(document(F2), F2);
+    CedarDataServices services = dataServices(List.of(folder(F1, "First"), folder(F2, "Second")));
+
+    try (var data = mockStatic(CedarDataServices.class)) {
+      data.when(CedarDataServices::getInstance).thenReturn(services);
+      new RegenerateSearchIndexTask(config).regenerateSearchIndex(false, null);
+      assertEquals(Set.of(current), openSearch.indexNames(), "an index that matches the graph is kept");
+
+      openSearch.index(current).documents.remove(F2);
+      new RegenerateSearchIndexTask(config).regenerateSearchIndex(false, null);
+    }
+
+    Set<String> names = openSearch.indexNames();
+    assertEquals(1, names.size());
+    String promoted = names.iterator().next();
+    assertNotEquals(current, promoted, "an index missing a resource is replaced");
+    assertEquals(Set.of(alias), openSearch.index(promoted).aliases);
+    assertEquals(Set.of(F1, F2), openSearch.index(promoted).documents.keySet());
+  }
+
+  /**
+   * A rebuild reads its work list before it writes, so a resource saved after that has a newer document
+   * than the rebuild's copy. The save is mirrored into the new index, and the rebuild leaves that
+   * resource alone rather than overwriting it with the version it started with.
+   */
+  @Test
+  void aRebuildPromotesEveryResourceAndKeepsASaveMadeWhileItRan() throws Exception {
+    String old = alias + "-2026-01-01t000000";
+    management.createSearchIndex(old);
+    management.addAlias(old, alias);
+    CedarDataServices services = dataServices(List.of(folder(F1, "First"), folder(F2, "Second")));
+    IndexingProgress progress = spy(new IndexingProgress());
+    // The save lands after the rebuild has created its index and before it writes anything there.
+    doAnswer(call -> {
+      ElasticsearchServiceFactory.getInstance(config).nodeIndexingService()
+          .indexDocument(folder(F2, "Second, renamed"), grants(F2), null, null);
+      return call.callRealMethod();
+    }).when(progress).setTotalByType(any());
+
+    try (var data = mockStatic(CedarDataServices.class)) {
+      data.when(CedarDataServices::getInstance).thenReturn(services);
+      new RegenerateSearchIndexTask(config).regenerateSearchIndex(true, null, progress);
+    }
+
+    Set<String> names = openSearch.indexNames();
+    assertEquals(1, names.size(), "the old index is deleted once the new one is promoted");
+    String promoted = names.iterator().next();
+    assertNotEquals(old, promoted);
+    assertEquals(Set.of(alias), openSearch.index(promoted).aliases);
+    Map<String, ObjectNode> documents = openSearch.index(promoted).documents;
+    assertEquals(Set.of(F1, F2), documents.keySet());
+    assertEquals("First", documents.get(F1).path("summaryText").asText());
+    assertEquals("Second, renamed", documents.get(F2).path("summaryText").asText(),
+        "the rebuild's older copy must not replace the save");
+    assertEquals(IndexingPhase.DONE, progress.getPhase());
+    assertTrue(IndexRebuildRegistry.inProgressIndex().isEmpty(), "mirroring stops when the rebuild ends");
+  }
+
   @Test
   void refusalsAndAnUnreachableClusterAreReported() throws Exception {
     management.createSearchIndex("cedar-search-a");
@@ -231,5 +410,60 @@ class SearchIndexLifecycleTest {
     ObjectNode document = JsonMapper.STRICT_MAPPER.createObjectNode().put("cid", cid);
     document.putObject("info").put("name", cid.substring(cid.lastIndexOf('/') + 1));
     return document;
+  }
+
+  /** A document as a full indexing left it, with extracted content that no permission change may touch. */
+  private static ObjectNode withContent(String cid) {
+    ObjectNode document = document(cid);
+    document.putArray("infoFields").addObject().put("fieldName", "Study title");
+    document.putArray("groups");
+    return document;
+  }
+
+  /** The whole document a stubbed extraction builds, carrying the permissions it was given. */
+  private static IndexingDocumentDocument whole(FileSystemResource resource,
+                                                CedarNodeMaterializedPermissions permissions) {
+    IndexingDocumentDocument document = new IndexingDocumentDocument(resource.getId());
+    document.setSummaryText("whole");
+    document.setMaterializedPermissions(permissions);
+    return document;
+  }
+
+  private static NodeIndexingService.PermissionProjection granted(String id) {
+    FolderServerTemplate template = new FolderServerTemplate();
+    template.setId(id);
+    ObjectNode patch = JsonMapper.STRICT_MAPPER.createObjectNode();
+    patch.putArray("groups").add(VIEWER_GRANT);
+    return new NodeIndexingService.PermissionProjection(template, grants(id), null, null, patch);
+  }
+
+  private static CedarNodeMaterializedPermissions grants(String id) {
+    CedarNodeMaterializedPermissions permissions =
+        new CedarNodeMaterializedPermissions(CedarTemplateId.build(id), NodeSharePermission.NONE);
+    permissions.setGroupRole(GROUP, ResourceRole.VIEWER);
+    return permissions;
+  }
+
+  private static FolderServerFolder folder(String id, String name) {
+    FolderServerFolder folder = new FolderServerFolder();
+    folder.setId(id);
+    folder.setName(name);
+    return folder;
+  }
+
+  /** The graph a rebuild reads: these resources on one page, each shared with the test group. */
+  private static CedarDataServices dataServices(List<FileSystemResource> graph) {
+    FolderServiceSession folders = mock(FolderServiceSession.class);
+    List<FolderServerResourceExtract> page = graph.stream().map(FolderServerResourceExtract::fromNode).toList();
+    when(folders.findAllNodes(anyInt(), anyInt(), any())).thenReturn(page);
+    when(folders.findAllNodesCount()).thenReturn((long) page.size());
+    ResourcePermissionServiceSession permissions = mock(ResourcePermissionServiceSession.class);
+    when(permissions.getResourceMaterializedPermission(any(FileSystemResource.class)))
+        .thenAnswer(call -> grants(call.<FileSystemResource>getArgument(0).getId()));
+    CedarDataServices services = mock(CedarDataServices.class);
+    when(services.getFolderServiceSession(any())).thenReturn(folders);
+    when(services.getResourcePermissionServiceSession(any())).thenReturn(permissions);
+    when(services.getCategoryServiceSession(any())).thenReturn(mock(CategoryServiceSession.class));
+    return services;
   }
 }

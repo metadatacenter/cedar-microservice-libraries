@@ -204,21 +204,6 @@ public class Neo4JProxyFolder extends AbstractNeo4JProxy {
     return executeWrite(q, "setting owner");
   }
 
-  private boolean removeOwner(CedarFolderId folderId) {
-    String cypher = CypherQueryBuilderFolder.removeFolderOwner();
-    CypherParameters params = CypherParamBuilderFolder.matchId(folderId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "removing owner");
-  }
-
-  boolean updateOwner(CedarFolderId folderId, CedarUserId userId) {
-    boolean removed = removeOwner(folderId);
-    if (removed) {
-      return setOwner(folderId, userId);
-    }
-    return false;
-  }
-
   FolderServerFolder createRootFolder(CedarUserId creatorId, CedarFolderId rootFolderId) {
     FolderServerFolder newRoot = new FolderServerFolder();
     newRoot.setName(proxies.config.getRootFolderPath());

@@ -4,6 +4,8 @@ import org.metadatacenter.config.PaginationConfig;
 import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.rest.exception.CedarAssertionException;
+import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
+import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -17,6 +19,7 @@ public class PagedSortedTypedSearchQuery extends PagedSortedTypedQuery {
   private Optional<String> idInput;
   private Optional<String> categoryIdInput;
   private Optional<String> modeInput;
+  private Optional<String> sharingInput;
   private String q;
   private String isBasedOn;
   private String categoryId;
@@ -30,6 +33,7 @@ public class PagedSortedTypedSearchQuery extends PagedSortedTypedQuery {
     this.idInput = Optional.empty();
     this.categoryIdInput = Optional.empty();
     this.modeInput = Optional.empty();
+    this.sharingInput = Optional.empty();
   }
 
   public PagedSortedTypedSearchQuery isBasedOn(Optional<String> isBasedOnInput) {
@@ -54,6 +58,12 @@ public class PagedSortedTypedSearchQuery extends PagedSortedTypedQuery {
 
   public PagedSortedTypedSearchQuery mode(Optional<String> modeInput) {
     this.modeInput = modeInput;
+    return this;
+  }
+
+  /** The sharing view. The caller parses its value; it is held here to be refused where it cannot apply. */
+  public PagedSortedTypedSearchQuery sharing(Optional<String> sharingInput) {
+    this.sharingInput = sharingInput;
     return this;
   }
 
@@ -99,8 +109,8 @@ public class PagedSortedTypedSearchQuery extends PagedSortedTypedQuery {
     validateQ();
     validateId();
     validateCategoryId();
-    validateResourceTypesWithTemplateId();
     validateMode();
+    validateResourceTypesWithTemplateId();
   }
 
   /**
@@ -183,6 +193,16 @@ public class PagedSortedTypedSearchQuery extends PagedSortedTypedQuery {
         throw new CedarAssertionException("Combine 'is_based_on' with filters, not a text query; 'q' and 'is_based_on' cannot be used together.")
             .badRequest().parameter("q", q).parameter("is_based_on", isBasedOn);
       }
+      // The search by template lists the template's instances from the graph, ordered and paged, within any
+      // last-modified window. It applies no other selector or filter, so a request naming one is refused rather
+      // than answered as though it had not. A filter set to 'all' filters nothing and is honoured.
+      refuseWithIsBasedOn("id", id);
+      refuseWithIsBasedOn("sharing", sharingInput.filter(sharing -> !sharing.isEmpty()).orElse(null));
+      refuseWithIsBasedOn("mode", mode);
+      refuseWithIsBasedOn("category_id", categoryId);
+      refuseWithIsBasedOn("version", version == ResourceVersionFilter.ALL ? null : getVersionAsString());
+      refuseWithIsBasedOn("publication_status",
+          publicationStatus == ResourcePublicationStatusFilter.ALL ? null : getPublicationStatusAsString());
       if (resourceTypesInput.isPresent()) {
         throw new CedarAssertionException(
             "You must not specify 'resource_types' if the 'is_based_on' is specified!")
@@ -196,6 +216,17 @@ public class PagedSortedTypedSearchQuery extends PagedSortedTypedQuery {
       }
     } else {
       validateResourceTypes();
+    }
+  }
+
+  private void refuseWithIsBasedOn(String parameter, String value) throws CedarException {
+    if (value != null) {
+      throw new CedarAssertionException("A search by 'is_based_on' returns the template's instances and applies no "
+          + "other selector or filter, so it cannot honour '" + parameter + "=" + value + "'. It can be combined with "
+          + "'limit', 'offset', 'sort', 'modified_after' and 'modified_before'.")
+          .badRequest()
+          .parameter(parameter, value)
+          .parameter("is_based_on", isBasedOn);
     }
   }
 

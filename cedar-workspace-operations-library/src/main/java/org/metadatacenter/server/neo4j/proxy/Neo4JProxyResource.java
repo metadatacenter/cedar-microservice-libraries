@@ -16,7 +16,6 @@ import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderFolderCont
 import org.metadatacenter.server.neo4j.cypher.query.CypherQueryBuilderResource;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
 import org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder;
-import org.metadatacenter.server.security.model.auth.NodeSharePermission;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
@@ -121,23 +120,6 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
     CypherParameters params = CypherParamBuilderFilesystemResource.getResourceByParentIdAndName(parentId, name);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     return executeReadGetOne(q, FileSystemResource.class);
-  }
-
-  void updateResourceOwner(CedarResourceId resourceId, CedarUserId userId) {
-    boolean userExists = proxies.user().userExists(userId);
-    if (userExists) {
-      boolean resourceExists = proxies.resource().resourceExists(resourceId);
-      if (resourceExists) {
-        proxies.resource().updateOwner(resourceId, userId);
-      }
-    }
-  }
-
-  private boolean resourceExists(CedarResourceId resourceId) {
-    String cypher = CypherQueryBuilderResource.resourceExists();
-    CypherParameters params = CypherParamBuilderResource.matchId(resourceId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeReadGetBoolean(q);
   }
 
   public List<FolderServerResourceExtract> viewSharedWithMeFiltered(List<CedarResourceType> resourceTypes, ResourceVersionFilter version,
@@ -325,41 +307,12 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
     return executeReadGetLong(q);
   }
 
-  public boolean setEverybodyPermission(CedarFilesystemResourceId resourceId, NodeSharePermission everybodyPermission) {
-    String cypher = CypherQueryBuilderFilesystemResource.setEverybodyPermission();
-    CypherParameters params = CypherParamBuilderFilesystemResource.matchResourceIdAndEverybodyPermission(resourceId, everybodyPermission);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "setting everybodyPermission");
-  }
-
   public CedarResourceType getResourceType(CedarResourceId resourceId, CedarUserId ownerId) {
     String cypher = CypherQueryBuilderResource.getResourceTypeById();
     CypherParameters params = CypherParamBuilderResource.matchId(resourceId);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
     String typeString = executeReadGetString(q);
     return CedarResourceType.forValue(typeString);
-  }
-
-  boolean updateOwner(CedarResourceId resourceId, CedarUserId userId) {
-    boolean removed = removeOwner(resourceId);
-    if (removed) {
-      return setOwner(resourceId, userId);
-    }
-    return false;
-  }
-
-  private boolean setOwner(CedarResourceId resourceId, CedarUserId userId) {
-    String cypher = CypherQueryBuilderResource.setResourceOwner();
-    CypherParameters params = CypherParamBuilderResource.matchResourceAndUser(resourceId, userId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "setting owner");
-  }
-
-  private boolean removeOwner(CedarResourceId resourceId) {
-    String cypher = CypherQueryBuilderResource.removeResourceOwner();
-    CypherParameters params = CypherParamBuilderResource.matchId(resourceId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeWrite(q, "removing owner");
   }
 
   public Set<String> findResourcesOpenThroughAFolder(Collection<String> resourceIds) {

@@ -585,7 +585,9 @@ public final class LogQueryBuilder {
         throw new IllegalArgumentException("Empty metric.");
       }
       String k = key.trim();
-      if (!seen.add(k)) {
+      // the function is read without case and MySQL compares aliases without case, so "SUM:x" repeats "sum:x"
+      int fnEnd = k.indexOf(':') < 0 ? k.length() : k.indexOf(':');
+      if (!seen.add(k.substring(0, fnEnd).toLowerCase(Locale.ROOT) + k.substring(fnEnd))) {
         continue;
       }
       if ("count".equalsIgnoreCase(k)) {

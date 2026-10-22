@@ -8,8 +8,16 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.metadatacenter.error.CedarAssertionResult;
+import org.metadatacenter.error.CedarErrorKey;
+import org.metadatacenter.error.CedarErrorPack;
 import org.metadatacenter.http.CedarResponseStatus;
 import org.metadatacenter.rest.CedarAssertionNoun;
+import org.metadatacenter.rest.assertion.assertiontarget.AssertionNounTargetFutureImpl;
+import org.metadatacenter.rest.assertion.assertiontarget.AssertionNounTargetPresentImpl;
+import org.metadatacenter.rest.assertion.assertiontarget.AssertionPOJOTargetFutureImpl;
+import org.metadatacenter.rest.assertion.assertiontarget.AssertionPOJOTargetPresentImpl;
+import org.metadatacenter.rest.assertion.assertiontarget.AssertionTargetFuture;
+import org.metadatacenter.rest.exception.CedarAssertionException;
 import org.metadatacenter.rest.assertion.noun.CedarParameterImpl;
 import org.metadatacenter.rest.assertion.noun.CedarRequestNoun;
 import org.metadatacenter.rest.assertion.noun.CedarUserNoun;
@@ -30,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.metadatacenter.constant.HttpConstants.CONTENT_TYPE_APPLICATION_MERGE_PATCH_JSON;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -257,6 +266,99 @@ class AssertionSemanticsTest {
     assertNotNull(new NonNullAssertion().check(context, missing));
     assertNotNull(new NonNullAssertion().check(context, explicitNull));
     assertNull(new NonNullAssertion().check(context, value));
+  }
+
+  /**
+   * {@code c.must(c.user()).have(...)} is the permission gate at the head of most endpoints. Every
+   * permission named is required, and a refusal is a 403 that names the permission missing.
+   */
+  @Test
+  void havingRequiresEveryPermissionAndRefusesAsForbiddenNamingTheMissingOne() throws Exception {
+    CedarUserNoun reader = new CedarUserNoun(userWith(CedarPermission.TEMPLATE_READ, CedarPermission.FOLDER_READ));
+
+    new AssertionNounTargetPresentImpl(context, reader).have(CedarPermission.TEMPLATE_READ, CedarPermission.FOLDER_READ);
+    CedarAssertionException refused = assertThrows(CedarAssertionException.class, () ->
+        new AssertionNounTargetPresentImpl(context, reader)
+            .have(CedarPermission.TEMPLATE_READ, CedarPermission.TEMPLATE_UPDATE, CedarPermission.FOLDER_READ));
+
+    assertSame(CedarResponseStatus.FORBIDDEN, refused.getErrorPack().getStatus());
+    assertSame(CedarErrorKey.PERMISSION_MISSING, refused.getErrorPack().getErrorKey());
+    assertEquals(CedarPermission.TEMPLATE_UPDATE.getPermissionName(),
+        refused.getErrorPack().getParameters().get("permissionName"));
+  }
+
+  /** A present assertion refuses when any target fails any assertion, with that assertion's own status. */
+  @Test
+  void beingRefusesWhenAnyTargetFailsAnyAssertion() throws Exception {
+    new AssertionNounTargetPresentImpl(context, new CedarUserNoun(userWith(CedarPermission.LOGGED_IN)))
+        .be(new LoggedInAssertion());
+    CedarAssertionException anonymous = assertThrows(CedarAssertionException.class, () ->
+        new AssertionNounTargetPresentImpl(context, new CedarUserNoun(null)).be(new LoggedInAssertion()));
+    assertSame(CedarResponseStatus.UNAUTHORIZED, anonymous.getErrorPack().getStatus());
+
+    new AssertionPOJOTargetPresentImpl(context, Boolean.TRUE, "value").be(new NonNullAssertion());
+    assertThrows(CedarAssertionException.class, () ->
+        new AssertionPOJOTargetPresentImpl(context, Boolean.TRUE, null).be(new NonNullAssertion(), new TrueAssertion()));
+    assertThrows(CedarAssertionException.class, () ->
+        new AssertionPOJOTargetPresentImpl(context, "value").be(new NonNullAssertion(), new TrueAssertion()));
+  }
+
+  static Stream<Arguments> deferredOutcomes() {
+    return Stream.of(
+        Arguments.of((DeferredOutcome) (target, pack) -> target.otherwiseBadRequest(pack), CedarResponseStatus.BAD_REQUEST),
+        Arguments.of((DeferredOutcome) (target, pack) -> target.otherwiseNotFound(pack), CedarResponseStatus.NOT_FOUND),
+        Arguments.of((DeferredOutcome) (target, pack) -> target.otherwiseForbidden(pack), CedarResponseStatus.FORBIDDEN),
+        Arguments.of((DeferredOutcome) (target, pack) -> target.otherwiseConflict(pack), CedarResponseStatus.CONFLICT),
+        Arguments.of((DeferredOutcome) (target, pack) -> target.otherwiseInternalServerError(pack),
+            CedarResponseStatus.INTERNAL_SERVER_ERROR));
+  }
+
+  /**
+   * {@code c.should(x).be(...).otherwiseNotFound(pack)} answers with the status the caller chose and the
+   * error key it supplied, whatever status the failing assertion itself would have used.
+   */
+  @ParameterizedTest
+  @MethodSource("deferredOutcomes")
+  void aDeferredAssertionAnswersWithTheCallersStatusAndErrorPack(DeferredOutcome outcome, CedarResponseStatus status)
+      throws Exception {
+    outcome.apply(new AssertionPOJOTargetFutureImpl(context, "present").be(new NonNullAssertion()),
+        new CedarErrorPack().errorKey(CedarErrorKey.ARTIFACT_NOT_FOUND));
+
+    CedarAssertionException refused = assertThrows(CedarAssertionException.class, () ->
+        outcome.apply(new AssertionPOJOTargetFutureImpl(context, "present", null).be(new NonNullAssertion()),
+            new CedarErrorPack().errorKey(CedarErrorKey.ARTIFACT_NOT_FOUND)));
+
+    assertSame(status, refused.getErrorPack().getStatus());
+    assertSame(CedarErrorKey.ARTIFACT_NOT_FOUND, refused.getErrorPack().getErrorKey());
+  }
+
+  /** {@code c.should(c.user()).have(...)} refuses with the caller's status when any permission named is missing. */
+  @Test
+  void aDeferredPermissionGateRefusesAUserMissingAnyPermissionNamed() throws Exception {
+    CedarUserNoun reader = new CedarUserNoun(userWith(CedarPermission.TEMPLATE_READ));
+
+    new AssertionNounTargetFutureImpl(context, reader).have(CedarPermission.TEMPLATE_READ)
+        .otherwiseForbidden(new CedarErrorPack());
+    CedarAssertionException refused = assertThrows(CedarAssertionException.class, () ->
+        new AssertionNounTargetFutureImpl(context, reader)
+            .have(CedarPermission.TEMPLATE_READ, CedarPermission.TEMPLATE_UPDATE)
+            .otherwiseForbidden(new CedarErrorPack().errorKey(CedarErrorKey.PERMISSION_MISSING)));
+
+    assertSame(CedarResponseStatus.FORBIDDEN, refused.getErrorPack().getStatus());
+    assertSame(CedarErrorKey.PERMISSION_MISSING, refused.getErrorPack().getErrorKey());
+  }
+
+  @Test
+  void aDeferredAssertionWithoutAPackIsABadRequest() {
+    CedarAssertionException refused = assertThrows(CedarAssertionException.class, () ->
+        new AssertionPOJOTargetFutureImpl(context, (Object) null).be(new NonNullAssertion()).otherwiseBadRequest());
+
+    assertSame(CedarResponseStatus.BAD_REQUEST, refused.getErrorPack().getStatus());
+  }
+
+  @FunctionalInterface
+  interface DeferredOutcome {
+    void apply(AssertionTargetFuture target, CedarErrorPack pack) throws CedarAssertionException;
   }
 
   private static CedarParameterImpl parameter(JsonNode value) {

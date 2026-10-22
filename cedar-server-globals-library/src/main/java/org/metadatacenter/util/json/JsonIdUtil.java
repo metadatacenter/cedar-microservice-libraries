@@ -15,26 +15,35 @@ public class JsonIdUtil {
   public static JsonNode localizeAtIdsAndTemplateId(JsonNode node, LinkedDataUtil
       linkedDataUtil) {
     ObjectNode object = (ObjectNode) node;
+    // An instance carries no CEDAR @type. Its schema:isBasedOn identifies it as an instance.
+    if (getKeyValueIfString(object, SCHEMA_IS_BASED_ON) != null) {
+      localizeFieldValueAsId(object, "@id", linkedDataUtil, CedarResourceType.INSTANCE);
+    }
     localizeFieldValueAsId(object, SCHEMA_IS_BASED_ON, linkedDataUtil, CedarResourceType.TEMPLATE);
     localizeAtIdRecursively(object, linkedDataUtil);
     return object;
   }
 
+  /**
+   * The artifacts a template nests sit under objects of no CEDAR type, such as {@code properties}, so
+   * the descent goes through every object. Only an object whose @type names a CEDAR artifact has its
+   * @id localized, which leaves the term IRIs an instance cites as they are.
+   */
   private static void localizeAtIdRecursively(ObjectNode object, LinkedDataUtil linkedDataUtil) {
     String atType = getKeyValueIfString(object, "@type");
     CedarResourceType resourceType = CedarResourceType.forAtType(atType);
     if (resourceType != null) {
       localizeFieldValueAsId(object, "@id", linkedDataUtil, resourceType);
-      Iterator<Map.Entry<String, JsonNode>> fields = object.fields();
-      while (fields.hasNext()) {
-        Map.Entry<String, JsonNode> entry = fields.next();
-        JsonNode child = entry.getValue();
-        if (child != null) {
-          if (child.isObject()) {
-            localizeAtIdRecursively((ObjectNode) child, linkedDataUtil);
-          } else if (child.isArray()) {
-            localizeAtIdRecursivelyInArray((ArrayNode) child, linkedDataUtil);
-          }
+    }
+    Iterator<Map.Entry<String, JsonNode>> fields = object.fields();
+    while (fields.hasNext()) {
+      Map.Entry<String, JsonNode> entry = fields.next();
+      JsonNode child = entry.getValue();
+      if (child != null) {
+        if (child.isObject()) {
+          localizeAtIdRecursively((ObjectNode) child, linkedDataUtil);
+        } else if (child.isArray()) {
+          localizeAtIdRecursivelyInArray((ArrayNode) child, linkedDataUtil);
         }
       }
     }

@@ -11,11 +11,13 @@ import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.user.CedarSuperRole;
 import org.metadatacenter.server.security.model.user.CedarUser;
+import org.metadatacenter.server.security.model.user.CedarUserExtract;
 import org.metadatacenter.server.security.model.user.CedarUserRole;
 import org.metadatacenter.server.security.util.CedarUserUtil;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a CEDAR account is allowed to do the moment it is created.
@@ -156,6 +158,57 @@ public class BlueprintDefaultRolesTest {
         "test user 2 no longer holds what a normal account holds");
     Assertions.assertEquals(List.of(CedarUserRole.values()), TestAuthUtil.getAdminUser(config).getRoles(),
         "the fixture administrator no longer holds what the built-in administrator holds");
+  }
+
+  /**
+   * The account the resource server provisions on a user's first login is built by CedarUserUtil,
+   * not by the fixture. It has to hold what the fixture's test user holds, or every authorization
+   * matrix describes an actor production never creates.
+   */
+  @Test
+  public void aProvisionedAccountHoldsWhatTheFixtureUserHolds() throws Exception {
+    CedarConfig config = config();
+
+    CedarUser provisioned = provision(config, "new-user", CedarSuperRole.NORMAL);
+
+    Assertions.assertEquals(NORMAL_ROLES, provisioned.getRoles());
+    Assertions.assertEquals(Set.copyOf(TestAuthUtil.getTestUser1(config).getPermissions()),
+        Set.copyOf(provisioned.getPermissions()),
+        "the permissions of a provisioned account and of the fixture's normal user diverged");
+  }
+
+  /**
+   * An API key is the whole of a credential, so who receives which key is an authority decision. The
+   * two configured administrator accounts receive the keys the deployment configures for them. Every
+   * other account receives a fresh random key, never one of theirs.
+   */
+  @Test
+  public void onlyTheConfiguredAdministratorsReceiveTheConfiguredApiKeys() throws Exception {
+    CedarConfig config = config();
+    String adminKey = config.getAdminUserConfig().getApiKey();
+    String caDSRAdminKey = config.getCaDSRAdminUserConfig().getApiKey();
+
+    CedarUser admin = provision(config, config.getAdminUserConfig().getUserName(), CedarSuperRole.BUILT_IN_ADMIN);
+    CedarUser caDSRAdmin = provision(config, config.getCaDSRAdminUserConfig().getUserName(), CedarSuperRole.NORMAL);
+    CedarUser first = provision(config, "first-user", CedarSuperRole.NORMAL);
+    CedarUser second = provision(config, "second-user", CedarSuperRole.BUILT_IN_ADMIN);
+
+    Assertions.assertEquals(adminKey, admin.getFirstActiveApiKey());
+    Assertions.assertEquals(caDSRAdminKey, caDSRAdmin.getFirstActiveApiKey());
+    for (CedarUser ordinary : List.of(first, second)) {
+      String key = ordinary.getFirstActiveApiKey();
+      Assertions.assertTrue(key.matches("[0-9a-f]{64}"), key);
+      Assertions.assertNotEquals(adminKey, key);
+      Assertions.assertNotEquals(caDSRAdminKey, key);
+    }
+    Assertions.assertNotEquals(first.getFirstActiveApiKey(), second.getFirstActiveApiKey());
+  }
+
+  private static CedarUser provision(CedarConfig config, String username, CedarSuperRole superRole) {
+    CedarUserExtract representation = new CedarUserExtract(
+        "https://metadatacenter.org/users/" + username, "First", "Last", username + "@test.com");
+    return CedarUserUtil.createUserFromBlueprint(config.getBlueprintUserProfile(), representation, superRole,
+        config, username);
   }
 
   private CedarUser normalAccount() throws Exception {

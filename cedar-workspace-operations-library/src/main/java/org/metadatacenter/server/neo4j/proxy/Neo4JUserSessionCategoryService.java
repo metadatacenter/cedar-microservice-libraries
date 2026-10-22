@@ -82,11 +82,6 @@ public class Neo4JUserSessionCategoryService extends AbstractNeo4JUserSession im
   }
 
   @Override
-  public List<FolderServerCategory> getChildrenOf(CedarCategoryId parentCategoryId, int limit, int offset) {
-    return null;
-  }
-
-  @Override
   public List<FolderServerCategory> getAllCategories(int limit, int offset) {
     return proxies.category().getAllCategories(limit, offset);
   }

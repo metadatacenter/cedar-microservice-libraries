@@ -105,11 +105,7 @@ public class CedarUserUtil {
         roles.addAll(roleList);
       }
     }
-    if (roles.isEmpty()) {
-      return null;
-    } else {
-      return roles;
-    }
+    return roles;
   }
 
   static String generateApiKey() {

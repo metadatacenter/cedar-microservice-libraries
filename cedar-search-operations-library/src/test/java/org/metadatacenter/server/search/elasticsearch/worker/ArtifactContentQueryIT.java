@@ -219,9 +219,9 @@ class ArtifactContentQueryIT {
   void matchesOnlyTheDeclaredArtifacts(String query, String user, boolean deep, Set<String> expected) throws Exception {
     var result = deep
         ? worker.searchDeep(context(user), query, List.of("instance"), ResourceVersionFilter.ALL,
-            ResourcePublicationStatusFilter.ALL, null, List.of("name"), 100, 0)
+            ResourcePublicationStatusFilter.ALL, null, List.of("name"), 100, 0, ModifiedDateRange.ALL, SearchSharingFilter.ALL)
         : worker.search(context(user), query, List.of("instance"), ResourceVersionFilter.ALL,
-            ResourcePublicationStatusFilter.ALL, null, List.of("name"), 100, 0);
+            ResourcePublicationStatusFilter.ALL, null, List.of("name"), 100, 0, ModifiedDateRange.ALL, SearchSharingFilter.ALL);
     List<String> ids = result.getHits().stream().map(SearchHit::getId).toList();
     assertEquals(expected.size(), result.getTotalCount());
     assertEquals(expected.size(), ids.size());
@@ -287,9 +287,11 @@ class ArtifactContentQueryIT {
       for (int offset = 0; offset < 2; offset++) {
         var result = deep
             ? worker.searchDeep(context("reader"), "\"Paging tie\"", List.of("instance"), ResourceVersionFilter.ALL,
-                ResourcePublicationStatusFilter.ALL, null, List.of("name"), 1, offset)
+                ResourcePublicationStatusFilter.ALL, null, List.of("name"), 1, offset, ModifiedDateRange.ALL,
+                SearchSharingFilter.ALL)
             : worker.search(context("reader"), "\"Paging tie\"", List.of("instance"), ResourceVersionFilter.ALL,
-                ResourcePublicationStatusFilter.ALL, null, List.of("name"), 1, offset);
+                ResourcePublicationStatusFilter.ALL, null, List.of("name"), 1, offset, ModifiedDateRange.ALL,
+                SearchSharingFilter.ALL);
         assertEquals(2, result.getTotalCount());
         ids.addAll(result.getHits().stream().map(SearchHit::getId).toList());
       }

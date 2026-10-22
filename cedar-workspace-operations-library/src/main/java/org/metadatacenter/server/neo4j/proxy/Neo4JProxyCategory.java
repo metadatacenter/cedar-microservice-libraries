@@ -256,13 +256,6 @@ public class Neo4JProxyCategory extends AbstractNeo4JProxy {
   }
 
 
-  private boolean categoryExists(CedarCategoryId categoryId) {
-    String cypher = CypherQueryBuilderCategory.categoryExists();
-    CypherParameters params = CypherParamBuilderCategory.matchId(categoryId);
-    CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeReadGetBoolean(q);
-  }
-
   public List<FolderServerCategory> getCategoryPath(CedarCategoryId categoryId) {
     String cypher = CypherQueryBuilderCategory.getCategoryPath();
     CypherParameters params = CypherParamBuilderCategory.getCategoryById(categoryId);
