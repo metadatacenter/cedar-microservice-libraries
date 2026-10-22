@@ -16,6 +16,8 @@ import com.mongodb.client.result.DeleteResult;
 import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 import org.bson.conversions.Bson;
+import org.bson.json.JsonMode;
+import org.bson.json.JsonWriterSettings;
 import org.metadatacenter.exception.ArtifactServerResourceNotFoundException;
 import org.metadatacenter.server.dao.ArtifactRevisionConflictException;
 import org.metadatacenter.server.dao.ArtifactWithRevision;
@@ -220,11 +222,31 @@ public class GenericLDDaoMongoDB implements GenericDao<String, JsonNode> {
     }
   }
 
+  /*
+   * The shared JSON policy reads a fractional number as a BigDecimal, which the driver stores exactly, as a
+   * Decimal128. Extended JSON has no plain form for that type and writes it as {"$numberDecimal": "1E-7"}, an
+   * object no artifact reader accepts where a number belongs. The public form writes it as the number it holds,
+   * so a stored decimal reads back as it was written, whenever it was stored.
+   */
+  static final JsonWriterSettings PUBLIC_JSON = JsonWriterSettings.builder()
+      .outputMode(JsonMode.RELAXED)
+      .decimal128Converter((value, writer) -> {
+        if (value.isFinite()) {
+          writer.writeNumber(value.toString());
+        } else {
+          // A BigDecimal is always finite. Keep extended JSON for anything else rather than invent a number.
+          writer.writeStartObject();
+          writer.writeString("$numberDecimal", value.toString());
+          writer.writeEndObject();
+        }
+      })
+      .build();
+
   private JsonNode toPublicJson(Document storedDocument) throws IOException {
     Document publicDocument = new Document(storedDocument);
     publicDocument.remove(INTERNAL_REVISION_FIELD);
     publicDocument.remove(TemplateReferenceGuard.DELETION_TOKEN);
-    return jsonUtils.fixMongoDB(JsonMapper.STRICT_MAPPER.readTree(publicDocument.toJson()),
+    return jsonUtils.fixMongoDB(JsonMapper.STRICT_MAPPER.readTree(publicDocument.toJson(PUBLIC_JSON)),
         FixMongoDirection.READ_FROM_MONGO);
   }
 
