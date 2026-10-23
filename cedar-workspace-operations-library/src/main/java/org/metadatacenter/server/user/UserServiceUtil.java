@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.metadatacenter.server.security.model.user.CedarUserUIFolderView;
 import org.metadatacenter.server.security.model.user.CedarUserUIPreferences;
+import org.metadatacenter.server.security.model.user.CedarUserUIWorkspace;
 import org.metadatacenter.util.json.JsonMapper;
 
 import java.util.Map;
@@ -73,6 +74,9 @@ public abstract class UserServiceUtil {
     if (uiPreferences.getResourcePublicationStatusFilter() == null) {
       return false;
     }
+    if (!workspaceIsComplete(uiPreferences.getWorkspace())) {
+      return false;
+    }
     if (uiPreferences.getFolderView() == null) {
       return false;
     } else {
@@ -80,5 +84,13 @@ public abstract class UserServiceUtil {
       return folderView.getSortBy() != null && folderView.getSortDirection() != null &&
           folderView.getViewMode() != null;
     }
+  }
+
+  // The Workspace writes its listing choices as one object. Only the last-modified range may be
+  // null, so a write that clears another choice, or spells one in a way this release does not know,
+  // is refused rather than stored as a gap.
+  private static boolean workspaceIsComplete(CedarUserUIWorkspace workspace) {
+    return workspace != null && workspace.getResourceTypes() != null && workspace.getVersion() != null &&
+        workspace.getSortBy() != null && workspace.getSortDirection() != null && workspace.getViewMode() != null;
   }
 }
