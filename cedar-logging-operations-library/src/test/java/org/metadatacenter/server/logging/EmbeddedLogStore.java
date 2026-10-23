@@ -174,11 +174,18 @@ final class EmbeddedLogStore {
   }
 
   /**
+   * The mariaDB4j version whose install command {@link PrivateTemporaryDirectoryDB} copies. EmbeddedLogStoreTest fails
+   * when the classpath carries another version, so whoever upgrades mariaDB4j rechecks the copy.
+   */
+  static final String COPIED_FROM_MARIADB4J_VERSION = "3.3.1";
+
+  /**
    * mariaDB4j passes the configured temporary directory to the server, but runs mariadb-install-db without one. The
    * install's bootstrap server then uses TMPDIR, or /tmp when TMPDIR is unset, and every test JVM of a build shares
    * that directory. This database sets TMPDIR to the configured directory for the install. Otherwise the install
-   * command is the one that {@link DB#createDBInstallProcess()} builds in mariaDB4j 3.3.1. The test support library's
-   * EmbeddedCedarMySql carries the same class, since that library depends on this one.
+   * command is the one that {@link DB#createDBInstallProcess()} builds in mariaDB4j
+   * {@value EmbeddedLogStore#COPIED_FROM_MARIADB4J_VERSION}. The test support library's EmbeddedCedarMySql carries the
+   * same class, since that library depends on this one.
    */
   private static final class PrivateTemporaryDirectoryDB extends DB {
 
