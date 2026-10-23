@@ -1,6 +1,10 @@
 package org.metadatacenter.server.logging;
 
+import ch.vorburger.exec.ManagedProcess;
+import ch.vorburger.exec.ManagedProcessBuilder;
+import ch.vorburger.exec.ManagedProcessException;
 import ch.vorburger.mariadb4j.DB;
+import ch.vorburger.mariadb4j.DBConfiguration;
 import ch.vorburger.mariadb4j.DBConfigurationBuilder;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.dropwizard.hibernate.UnitOfWorkAwareProxyFactory;
@@ -27,6 +31,7 @@ import org.metadatacenter.server.logging.dbmodel.agg.LogAggregationState;
 import org.metadatacenter.server.logging.model.AppLogMessage;
 import org.metadatacenter.util.json.JsonMapper;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.util.List;
@@ -90,10 +95,13 @@ final class EmbeddedLogStore {
         DBConfigurationBuilder configuration = DBConfigurationBuilder.newBuilder();
         configuration.setBaseDir(Files.createTempDirectory("mdb-base-").toFile());
         configuration.setDataDir(Files.createTempDirectory("mdb-data-").toFile());
+        // Every starting server, the install's bootstrap server among them, deletes each #sql file in its temporary
+        // directory. Concurrent test JVMs share java.io.tmpdir, so each instance needs its own temporary directory.
+        configuration.setTmpDir(Files.createTempDirectory("mdb-tmp-").toString());
         configuration.setDeletingTemporaryBaseAndDataDirsOnShutdown(true);
         configuration.addArg("--bind-address=127.0.0.1");
         configuration.setPort(0);
-        DB db = DB.newEmbeddedDB(configuration.build());
+        DB db = PrivateTemporaryDirectoryDB.create(configuration.build());
         db.start();
         instance = new EmbeddedLogStore(db.getConfiguration().getPort());
       } catch (Exception e) {
@@ -162,6 +170,52 @@ final class EmbeddedLogStore {
       return JsonMapper.TOLERANT_MAPPER.treeToValue(json, AppLogMessage.class);
     } catch (Exception e) {
       throw new IllegalStateException(e);
+    }
+  }
+
+  /**
+   * mariaDB4j passes the configured temporary directory to the server, but runs mariadb-install-db without one. The
+   * install's bootstrap server then uses TMPDIR, or /tmp when TMPDIR is unset, and every test JVM of a build shares
+   * that directory. This database sets TMPDIR to the configured directory for the install. Otherwise the install
+   * command is the one that {@link DB#createDBInstallProcess()} builds in mariaDB4j 3.3.1. The test support library's
+   * EmbeddedCedarMySql carries the same class, since that library depends on this one.
+   */
+  private static final class PrivateTemporaryDirectoryDB extends DB {
+
+    private PrivateTemporaryDirectoryDB(DBConfiguration configuration) {
+      super(configuration);
+    }
+
+    /**
+     * Creates the database, prepares its directories and installs it, as {@link DB#newEmbeddedDB(DBConfiguration)}
+     * does. The data directory is always new, so the install always runs.
+     */
+    static DB create(DBConfiguration configuration) throws ManagedProcessException {
+      PrivateTemporaryDirectoryDB db = new PrivateTemporaryDirectoryDB(configuration);
+      db.prepareDirectories();
+      db.unpackEmbeddedDb();
+      db.install();
+      return db;
+    }
+
+    @Override
+    protected ManagedProcess createDBInstallProcess() throws ManagedProcessException, IOException {
+      if (configuration.isWindows()) {
+        return super.createDBInstallProcess();
+      }
+      ManagedProcessBuilder builder =
+          new ManagedProcessBuilder(configuration.getExecutable(DBConfiguration.Executable.InstallDB));
+      builder.setOutputStreamLogDispatcher(getOutputStreamLogDispatcher("mysql_install_db"));
+      builder.getEnvironment().put(configuration.getOSLibraryEnvironmentVarName(),
+          configuration.getLibDir().getAbsolutePath());
+      builder.getEnvironment().put("TMPDIR", configuration.getTmpDir().getAbsolutePath());
+      builder.setWorkingDirectory(configuration.getBaseDir());
+      builder.addFileArgument("--datadir", configuration.getDataDir());
+      builder.addFileArgument("--basedir", configuration.getBaseDir());
+      builder.addArgument("--no-defaults");
+      builder.addArgument("--force");
+      builder.addArgument("--skip-name-resolve");
+      return builder.build();
     }
   }
 }

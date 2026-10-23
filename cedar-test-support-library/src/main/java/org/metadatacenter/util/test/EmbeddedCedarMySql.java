@@ -1,9 +1,14 @@
 package org.metadatacenter.util.test;
 
+import ch.vorburger.exec.ManagedProcess;
+import ch.vorburger.exec.ManagedProcessBuilder;
+import ch.vorburger.exec.ManagedProcessException;
 import ch.vorburger.mariadb4j.DB;
+import ch.vorburger.mariadb4j.DBConfiguration;
 import ch.vorburger.mariadb4j.DBConfigurationBuilder;
 import org.metadatacenter.config.environment.CedarEnvironmentSource;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
@@ -39,10 +44,14 @@ public final class EmbeddedCedarMySql {
         // delete another test JVM's database binaries or writable store.
         configuration.setBaseDir(Files.createTempDirectory("mdb-base-").toFile());
         configuration.setDataDir(Files.createTempDirectory("mdb-data-").toFile());
+        // Every starting server, the install's bootstrap server among them,
+        // deletes each #sql file in its temporary directory. Each instance
+        // therefore needs its own temporary directory.
+        configuration.setTmpDir(Files.createTempDirectory("mdb-tmp-").toString());
         configuration.setDeletingTemporaryBaseAndDataDirsOnShutdown(true);
         configuration.addArg("--bind-address=127.0.0.1");
         configuration.setPort(0); // 0 picks a free port
-        db = DB.newEmbeddedDB(configuration.build());
+        db = PrivateTemporaryDirectoryDB.create(configuration.build());
         db.start();
       } catch (Exception e) {
         throw new IllegalStateException("Could not start the embedded MariaDB", e);
@@ -67,6 +76,51 @@ public final class EmbeddedCedarMySql {
       throw new IllegalStateException("Could not stop the embedded MariaDB", e);
     } finally {
       db = null;
+    }
+  }
+
+  /**
+   * mariaDB4j passes the configured temporary directory to the server, but runs mariadb-install-db without one. The
+   * install's bootstrap server then uses TMPDIR, or /tmp when TMPDIR is unset, and every test JVM of a build shares
+   * that directory. This database sets TMPDIR to the configured directory for the install. Otherwise the install
+   * command is the one that {@link DB#createDBInstallProcess()} builds in mariaDB4j 3.3.1.
+   */
+  private static final class PrivateTemporaryDirectoryDB extends DB {
+
+    private PrivateTemporaryDirectoryDB(DBConfiguration configuration) {
+      super(configuration);
+    }
+
+    /**
+     * Creates the database, prepares its directories and installs it, as {@link DB#newEmbeddedDB(DBConfiguration)}
+     * does. The data directory is always new, so the install always runs.
+     */
+    static DB create(DBConfiguration configuration) throws ManagedProcessException {
+      PrivateTemporaryDirectoryDB db = new PrivateTemporaryDirectoryDB(configuration);
+      db.prepareDirectories();
+      db.unpackEmbeddedDb();
+      db.install();
+      return db;
+    }
+
+    @Override
+    protected ManagedProcess createDBInstallProcess() throws ManagedProcessException, IOException {
+      if (configuration.isWindows()) {
+        return super.createDBInstallProcess();
+      }
+      ManagedProcessBuilder builder =
+          new ManagedProcessBuilder(configuration.getExecutable(DBConfiguration.Executable.InstallDB));
+      builder.setOutputStreamLogDispatcher(getOutputStreamLogDispatcher("mysql_install_db"));
+      builder.getEnvironment().put(configuration.getOSLibraryEnvironmentVarName(),
+          configuration.getLibDir().getAbsolutePath());
+      builder.getEnvironment().put("TMPDIR", configuration.getTmpDir().getAbsolutePath());
+      builder.setWorkingDirectory(configuration.getBaseDir());
+      builder.addFileArgument("--datadir", configuration.getDataDir());
+      builder.addFileArgument("--basedir", configuration.getBaseDir());
+      builder.addArgument("--no-defaults");
+      builder.addArgument("--force");
+      builder.addArgument("--skip-name-resolve");
+      return builder.build();
     }
   }
 
