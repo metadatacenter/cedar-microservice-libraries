@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import org.metadatacenter.server.ArtifactCreationProvenance;
 import org.metadatacenter.server.ArtifactGraphUpdateResult;
 
 import org.metadatacenter.server.neo4j.ArtifactRestoreTransaction;
@@ -54,13 +55,18 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
   }
 
   FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentId, String jobId) {
+    return createResourceAsChildOfId(newResource, parentId, jobId, null);
+  }
+
+  FolderServerArtifact createResourceAsChildOfId(FolderServerArtifact newResource, CedarFolderId parentId, String jobId,
+      ArtifactCreationProvenance stated) {
     initializeVersioning();
     return executeInWriteTransaction(tx -> {
       VersionChainTransaction.lock(tx);
       ArtifactCreateCleanupOutbox.requireRegistration(tx, jobId, newResource.getId());
       var created = runInTransactionGetOne(tx, new CypherQueryWithParameters(
           CypherQueryBuilderArtifact.createResourceAsChildOfId(newResource),
-          CypherParamBuilderArtifact.createArtifact(newResource, parentId)), FolderServerArtifact.class);
+          CypherParamBuilderArtifact.createArtifact(newResource, parentId, stated)), FolderServerArtifact.class);
       if (created != null) ArtifactCreateCleanupOutbox.registered(tx, jobId);
       return created;
     }, "registering an artifact and retiring failed-create cleanup");
@@ -73,6 +79,11 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
 
   FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
       CedarFolderId parentId, CedarUserId expectedOwner, String jobId) {
+    return createInstanceCloneAsChildOfId(clone, sourceId, parentId, expectedOwner, jobId, null);
+  }
+
+  FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
+      CedarFolderId parentId, CedarUserId expectedOwner, String jobId, ArtifactCreationProvenance stated) {
     initializeVersioning();
     return executeInWriteTransaction(tx -> {
       VersionChainTransaction.lock(tx);
@@ -90,7 +101,7 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
       if (!owners.hasNext()) return null;
       var created = runInTransactionGetOne(tx, new CypherQueryWithParameters(
           CypherQueryBuilderArtifact.createResourceAsChildOfId(clone),
-          CypherParamBuilderArtifact.createArtifact(clone, parentId)), FolderServerArtifact.class);
+          CypherParamBuilderArtifact.createArtifact(clone, parentId, stated)), FolderServerArtifact.class);
       if (created != null) {
         var query = new CypherQueryWithParameters(CypherQueryBuilderArtifact.setDerivedFrom(),
             CypherParamBuilderResource.matchSourceAndTarget(created.getResourceId(), sourceId));
@@ -104,6 +115,11 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
 
   FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentId,
       boolean propagateSharing, String jobId) {
+    return createDraftAsChildOfId(draft, parentId, propagateSharing, jobId, null);
+  }
+
+  FolderServerArtifact createDraftAsChildOfId(FolderServerArtifact draft, CedarFolderId parentId,
+      boolean propagateSharing, String jobId, ArtifactCreationProvenance stated) {
     initializeVersioning();
     return executeInWriteTransaction(tx -> {
       VersionChainTransaction.lock(tx);
@@ -112,7 +128,7 @@ public class Neo4JProxyArtifact extends AbstractNeo4JProxy {
       VersionChainTransaction.requireDraftSource(tx, schema.getPreviousVersion().getId(), schema.getVersion().getValue());
       var created = runInTransactionGetOne(tx, new CypherQueryWithParameters(
           CypherQueryBuilderArtifact.createResourceAsChildOfId(draft),
-          CypherParamBuilderArtifact.createArtifact(draft,parentId)), FolderServerArtifact.class);
+          CypherParamBuilderArtifact.createArtifact(draft, parentId, stated)), FolderServerArtifact.class);
       if (created != null) {
         if (propagateSharing) {
           Map<String,Object> args=Map.of("source",schema.getPreviousVersion().getId(),"target",created.getId());

@@ -118,8 +118,10 @@ class CloneInstancesExecutorServiceTest {
       when(folders.findFolderById(destination)).thenReturn(folder);
       when(folders.findArtifactById(old)).thenReturn(original);
       // Reads succeeded, but the graph's atomic registration rejects the now-stale owner.
+      // The created document states no dates, so the node is left to stamp its own.
       when(folders.createInstanceCloneWithCleanup(any(), org.mockito.ArgumentMatchers.eq(old),
-          org.mockito.ArgumentMatchers.eq(destination), org.mockito.ArgumentMatchers.eq(owner), org.mockito.ArgumentMatchers.eq("cleanup-job"))).thenReturn(null);
+          org.mockito.ArgumentMatchers.eq(destination), org.mockito.ArgumentMatchers.eq(owner),
+          org.mockito.ArgumentMatchers.eq("cleanup-job"), org.mockito.ArgumentMatchers.isNull())).thenReturn(null);
     }
     var service = new CloneInstancesExecutorService(folders, context, urls, mock(LinkedDataUtil.class), client, cleanup);
 
@@ -128,7 +130,8 @@ class CloneInstancesExecutorServiceTest {
 
     if (transferred) verify(folders).createInstanceCloneWithCleanup(any(),
         org.mockito.ArgumentMatchers.eq(old), org.mockito.ArgumentMatchers.eq(destination),
-        org.mockito.ArgumentMatchers.eq(owner), org.mockito.ArgumentMatchers.eq("cleanup-job"));
+        org.mockito.ArgumentMatchers.eq(owner), org.mockito.ArgumentMatchers.eq("cleanup-job"),
+        org.mockito.ArgumentMatchers.isNull());
     var order = org.mockito.Mockito.inOrder(cleanup, client);
     order.verify(cleanup).prepare(CedarResourceType.INSTANCE, "worker-clone");
     order.verify(client).post(org.mockito.ArgumentMatchers.eq("instances"), org.mockito.ArgumentMatchers.eq(context),

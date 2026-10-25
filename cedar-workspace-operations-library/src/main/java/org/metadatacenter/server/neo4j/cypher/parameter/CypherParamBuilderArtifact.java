@@ -16,6 +16,11 @@ public class CypherParamBuilderArtifact extends AbstractCypherParamBuilder {
     return createFilesystemResource(newResource, parentFolderId);
   }
 
+  public static CypherParameters createArtifact(FolderServerArtifact newResource, CedarFolderId parentFolderId,
+      org.metadatacenter.server.ArtifactCreationProvenance stated) {
+    return createFilesystemResource(newResource, parentFolderId, stated);
+  }
+
   public static CypherParameters updateArtifactById(CedarArtifactId artifactId, Map<NodeProperty, String> updateFields, CedarUserId updatedBy) {
     return updateResourceById(artifactId, updateFields, updatedBy);
   }

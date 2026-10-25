@@ -18,6 +18,7 @@ import org.metadatacenter.model.folderserver.basic.*;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
+import org.metadatacenter.server.ArtifactCreationProvenance;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.jsonld.LinkedDataUtil;
 import org.metadatacenter.server.neo4j.cypher.sort.QuerySortOptions;
@@ -280,7 +281,7 @@ public class CloneInstancesExecutorService implements AutoCloseable {
                 ModelUtil.extractDescriptionFromResource(resourceType, jsonNode).getValue(),
                 ModelUtil.extractIdentifierFromResource(resourceType, jsonNode).getValue(),
                 newTemplateId,
-                userId, cleanupJob);
+                userId, cleanupJob, ArtifactCreationProvenance.fromDocument(jsonNode));
 
         if (folderServerCreatedResource == null) {
           throw new CedarProcessingException("The cloned instance could not be registered in its destination");
