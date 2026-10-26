@@ -6,6 +6,7 @@ import com.mongodb.client.MongoCollection;
 import org.bson.Document;
 import org.metadatacenter.exception.ArtifactServerResourceNotFoundException;
 import org.metadatacenter.server.dao.ArtifactRevisionConflictException;
+import org.metadatacenter.server.dao.TemplateReferencedException;
 
 import java.io.IOException;
 import java.util.UUID;
@@ -108,9 +109,12 @@ public final class TemplateReferenceGuard {
       reapCompleted(id);
       // Read reservations first. A writer that removes its reservation has already made its
       // document visible; a new reservation cannot pass the deletion fence installed above.
-      if (reservations.countDocuments(eq("templateId", id)) != 0
-          || instances.countDocuments(eq("schema:isBasedOn", id)) != 0) {
-        throw new ArtifactRevisionConflictException(id, revision);
+      if (reservations.countDocuments(eq("templateId", id)) != 0) {
+        throw new TemplateReferencedException("A write of an instance that references template " + id
+            + " is in progress");
+      }
+      if (instances.countDocuments(eq("schema:isBasedOn", id)) != 0) {
+        throw new TemplateReferencedException("Stored instances reference template " + id);
       }
       return write.run(token);
     } finally {

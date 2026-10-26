@@ -1,5 +1,6 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import org.metadatacenter.server.ArtifactCreationProvenance;
 import org.metadatacenter.server.ArtifactGraphUpdateResult;
 
 import org.metadatacenter.model.request.ModifiedDateRange;
@@ -63,23 +64,24 @@ public class Neo4JUserSessionFolderService extends AbstractNeo4JUserSession impl
   }
 
   @Override
-  public FolderServerArtifact createResourceWithCleanup(FolderServerArtifact artifact, CedarFolderId parentId, String jobId) {
+  public FolderServerArtifact createResourceWithCleanup(FolderServerArtifact artifact, CedarFolderId parentId, String jobId,
+                                                        ArtifactCreationProvenance stated) {
     artifact.setCreatedByTotal(cu.getResourceId());
-    return proxies.artifact().createResourceAsChildOfId(artifact, parentId, jobId);
+    return proxies.artifact().createResourceAsChildOfId(artifact, parentId, jobId, stated);
   }
 
   @Override
   public FolderServerArtifact createDraftWithCleanup(FolderServerArtifact draft, CedarFolderId parentId,
-                                                     boolean sharing, String jobId) {
+                                                     boolean sharing, String jobId, ArtifactCreationProvenance stated) {
     draft.setCreatedByTotal(cu.getResourceId());
-    return proxies.artifact().createDraftAsChildOfId(draft, parentId, sharing, jobId);
+    return proxies.artifact().createDraftAsChildOfId(draft, parentId, sharing, jobId, stated);
   }
 
   @Override
   public FolderServerArtifact createInstanceCloneWithCleanup(FolderServerArtifact clone, CedarArtifactId sourceId,
-      CedarFolderId parentId, CedarUserId owner, String jobId) {
+      CedarFolderId parentId, CedarUserId owner, String jobId, ArtifactCreationProvenance stated) {
     clone.setCreatedByTotal(owner);
-    return proxies.artifact().createInstanceCloneAsChildOfId(clone, sourceId, parentId, owner, jobId);
+    return proxies.artifact().createInstanceCloneAsChildOfId(clone, sourceId, parentId, owner, jobId, stated);
   }
 
   @Override

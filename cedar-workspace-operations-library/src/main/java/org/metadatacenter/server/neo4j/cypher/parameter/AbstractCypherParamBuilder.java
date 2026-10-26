@@ -25,9 +25,22 @@ public abstract class AbstractCypherParamBuilder {
   }
 
   protected static CypherParameters createFilesystemResource(FileSystemResource newResource, CedarFolderId parentFolderId) {
+    return createFilesystemResource(newResource, parentFolderId, null);
+  }
+
+  /**
+   * The node for a new resource. With {@code stated}, it carries the times its stored document states
+   * rather than a second reading of the clock; without, it stamps the current time.
+   */
+  protected static CypherParameters createFilesystemResource(FileSystemResource newResource, CedarFolderId parentFolderId,
+      org.metadatacenter.server.ArtifactCreationProvenance stated) {
     Instant now = Instant.now();
     String nowString = CedarConstants.xsdDateTimeFormatter.format(now);
     long nowTS = now.getEpochSecond();
+    String createdOn = stated == null ? nowString : stated.graphCreatedOn();
+    long createdOnTS = stated == null ? nowTS : stated.createdOnEpochSecond();
+    String lastUpdatedOn = stated == null ? nowString : stated.graphLastUpdatedOn();
+    long lastUpdatedOnTS = stated == null ? nowTS : stated.lastUpdatedOnEpochSecond();
     CypherParameters params = new CypherParameters();
     params.put(ParameterPlaceholder.PARENT_ID, parentFolderId);
     params.put(NodeProperty.PARENT_FOLDER_ID, parentFolderId);
@@ -39,11 +52,11 @@ public abstract class AbstractCypherParamBuilder {
     params.put(NodeProperty.DESCRIPTION, newResource.getDescription());
     params.put(NodeProperty.IDENTIFIER, newResource.getIdentifier());
     params.put(NodeProperty.CREATED_BY, newResource.getCreatedBy());
-    params.put(NodeProperty.CREATED_ON, nowString);
-    params.put(NodeProperty.CREATED_ON_TS, nowTS);
+    params.put(NodeProperty.CREATED_ON, createdOn);
+    params.put(NodeProperty.CREATED_ON_TS, createdOnTS);
     params.put(NodeProperty.LAST_UPDATED_BY, newResource.getLastUpdatedBy());
-    params.put(NodeProperty.LAST_UPDATED_ON, nowString);
-    params.put(NodeProperty.LAST_UPDATED_ON_TS, nowTS);
+    params.put(NodeProperty.LAST_UPDATED_ON, lastUpdatedOn);
+    params.put(NodeProperty.LAST_UPDATED_ON_TS, lastUpdatedOnTS);
     params.put(NodeProperty.OWNED_BY, newResource.getOwnedBy());
     params.put(NodeProperty.RESOURCE_TYPE, newResource.getType().getValue());
 

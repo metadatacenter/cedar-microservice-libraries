@@ -20,6 +20,7 @@ import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.model.folderserver.basic.FolderServerInstance;
 import org.metadatacenter.model.folderserver.basic.FolderServerSchemaArtifact;
 import org.metadatacenter.rest.context.CedarRequestContext;
+import org.metadatacenter.server.ArtifactCreationProvenance;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.search.elasticsearch.service.NodeIndexingService;
 import org.metadatacenter.util.CedarResourceTypeUtil;
@@ -69,6 +70,15 @@ public final class ArtifactCopyOperations {
       CedarArtifactId newId, CedarFolderId targetFolderId, CedarResourceType resourceType, String name,
       String description, String identifier, CedarTemplateId instanceTemplateOverride, CedarUserId ownerOverride,
       String cleanupJobId) throws CedarException {
+    return registerCopy(folderSession, oldId, newId, targetFolderId, resourceType, name, description, identifier,
+        instanceTemplateOverride, ownerOverride, cleanupJobId, null);
+  }
+
+  /** As above, with the node carrying the times the stored copy states, when given. */
+  public static FolderServerArtifact registerCopy(FolderServiceSession folderSession, CedarArtifactId oldId,
+      CedarArtifactId newId, CedarFolderId targetFolderId, CedarResourceType resourceType, String name,
+      String description, String identifier, CedarTemplateId instanceTemplateOverride, CedarUserId ownerOverride,
+      String cleanupJobId, ArtifactCreationProvenance stated) throws CedarException {
     if (CedarResourceTypeUtil.isNotValidForRestCall(resourceType)) {
       throw new CedarProcessingException("You passed an illegal resourceType:'" + resourceType.getValue() +
           "'. The allowed values are:" + CedarResourceTypeUtil.getValidResourceTypesForRestCalls()).badRequest()
@@ -110,8 +120,9 @@ public final class ArtifactCopyOperations {
     FolderServerArtifact createdResource = cleanupJobId == null
         ? (ownerOverride == null ? folderSession.createResourceAsChildOfId(newResource, targetFolderId)
             : folderSession.createInstanceCloneAsChildOfId(newResource, oldId, targetFolderId, ownerOverride))
-        : (ownerOverride == null ? folderSession.createResourceWithCleanup(newResource, targetFolderId, cleanupJobId)
-            : folderSession.createInstanceCloneWithCleanup(newResource, oldId, targetFolderId, ownerOverride, cleanupJobId));
+        : (ownerOverride == null ? folderSession.createResourceWithCleanup(newResource, targetFolderId, cleanupJobId, stated)
+            : folderSession.createInstanceCloneWithCleanup(newResource, oldId, targetFolderId, ownerOverride, cleanupJobId,
+                stated));
     if (createdResource == null) {
       throw new CedarProcessingException("The artifact was not created!")
           .parameter("@id", oldId)

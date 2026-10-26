@@ -55,13 +55,31 @@ public interface FolderServiceSession {
   FolderServerArtifact createInstanceCloneAsChildOfId(FolderServerArtifact clone, CedarArtifactId sourceId,
                                                       CedarFolderId parentId, CedarUserId expectedOwner);
 
-  FolderServerArtifact createResourceWithCleanup(FolderServerArtifact artifact, CedarFolderId parentId, String jobId);
+  default FolderServerArtifact createResourceWithCleanup(FolderServerArtifact artifact, CedarFolderId parentId,
+                                                         String jobId) {
+    return createResourceWithCleanup(artifact, parentId, jobId, null);
+  }
+
+  /** Registers a stored document, with the node carrying the times the document states when given. */
+  FolderServerArtifact createResourceWithCleanup(FolderServerArtifact artifact, CedarFolderId parentId, String jobId,
+                                                 ArtifactCreationProvenance stated);
+
+  default FolderServerArtifact createDraftWithCleanup(FolderServerArtifact draft, CedarFolderId parentId,
+                                                      boolean propagateSharing, String jobId) {
+    return createDraftWithCleanup(draft, parentId, propagateSharing, jobId, null);
+  }
 
   FolderServerArtifact createDraftWithCleanup(FolderServerArtifact draft, CedarFolderId parentId,
-                                               boolean propagateSharing, String jobId);
+                                               boolean propagateSharing, String jobId, ArtifactCreationProvenance stated);
+
+  default FolderServerArtifact createInstanceCloneWithCleanup(FolderServerArtifact clone, CedarArtifactId sourceId,
+                                                              CedarFolderId parentId, CedarUserId owner, String jobId) {
+    return createInstanceCloneWithCleanup(clone, sourceId, parentId, owner, jobId, null);
+  }
 
   FolderServerArtifact createInstanceCloneWithCleanup(FolderServerArtifact clone, CedarArtifactId sourceId,
-                                                      CedarFolderId parentId, CedarUserId owner, String jobId);
+                                                      CedarFolderId parentId, CedarUserId owner, String jobId,
+                                                      ArtifactCreationProvenance stated);
 
   FolderServerFolder updateFolderById(CedarFolderId folderId, Map<NodeProperty, String> updateFields);
 

@@ -22,6 +22,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.metadatacenter.exception.ArtifactServerResourceNotFoundException;
 import org.metadatacenter.server.dao.ArtifactRevisionConflictException;
+import org.metadatacenter.server.dao.TemplateReferencedException;
 import org.metadatacenter.util.json.JsonMapper;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -193,6 +194,11 @@ class TemplateReferenceGuardTest {
         "the fence is removed only where this request's token still stands");
   }
 
+  /**
+   * A template that stored instances or an instance write in flight reference is refused as referenced,
+   * which a caller can tell from a race: the template's own state refuses the write, and a retry against
+   * its current revision is refused again.
+   */
   @ParameterizedTest
   @MethodSource("references")
   void aReferencedTemplateIsRefusedAndItsFenceIsLifted(long reserved, long stored) throws Exception {
@@ -201,9 +207,9 @@ class TemplateReferenceGuardTest {
     when(reservations.countDocuments(any(Bson.class))).thenReturn(reserved);
     when(instances.countDocuments(any(Bson.class))).thenReturn(stored);
 
-    assertThrows(ArtifactRevisionConflictException.class,
+    assertThrows(TemplateReferencedException.class,
         () -> guard.update(TEMPLATE_ID, JsonMapper.STRICT_MAPPER.createObjectNode(), 5, dao));
-    assertThrows(ArtifactRevisionConflictException.class, () -> guard.delete(TEMPLATE_ID, 5, dao));
+    assertThrows(TemplateReferencedException.class, () -> guard.delete(TEMPLATE_ID, 5, dao));
 
     verify(dao, never()).updateMatching(anyString(), any(), anyLong(), any());
     verify(dao, never()).deleteMatching(anyString(), anyLong(), any());
@@ -218,12 +224,35 @@ class TemplateReferenceGuardTest {
   void aStaleRevisionIsRefusedBeforeAnythingIsCounted() throws Exception {
     fenceMatches(0);
 
-    assertThrows(ArtifactRevisionConflictException.class, () -> guard.delete(TEMPLATE_ID, 5, dao));
+    assertRace(assertThrows(ArtifactRevisionConflictException.class, () -> guard.delete(TEMPLATE_ID, 5, dao)));
 
     verify(reservations, never()).countDocuments(any(Bson.class));
     verify(instances, never()).countDocuments(any(Bson.class));
     verify(dao, never()).deleteMatching(anyString(), anyLong(), any());
     verify(templates, times(1)).updateOne(any(Bson.class), any(Bson.class));
+  }
+
+  /**
+   * Another guarded mutation can replace this request's fence after the references were counted, and the
+   * write conditional on that fence then matches nothing. That is a race the other writer won, not a
+   * reference, and it is reported as the race it is.
+   */
+  @Test
+  void aFenceAnotherMutationTookOverIsARaceRatherThanAReference() throws Exception {
+    fenceMatches(1);
+    noReservations();
+    when(dao.updateMatching(anyString(), any(), anyLong(), any()))
+        .thenThrow(new ArtifactRevisionConflictException(TEMPLATE_ID, 5));
+    org.mockito.Mockito.doThrow(new ArtifactRevisionConflictException(TEMPLATE_ID, 5))
+        .when(dao).deleteMatching(anyString(), anyLong(), any());
+
+    assertRace(assertThrows(ArtifactRevisionConflictException.class,
+        () -> guard.update(TEMPLATE_ID, JsonMapper.STRICT_MAPPER.createObjectNode(), 5, dao)));
+    assertRace(assertThrows(ArtifactRevisionConflictException.class, () -> guard.delete(TEMPLATE_ID, 5, dao)));
+  }
+
+  private static void assertRace(ArtifactRevisionConflictException refusal) {
+    assertFalse(refusal instanceof TemplateReferencedException, "a race was reported as a reference: " + refusal);
   }
 
   /**
