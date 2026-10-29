@@ -86,6 +86,16 @@
     </dependency>
 
     <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <!--
+        The adapter sends every request to Keycloak through this client but declares it provided, so
+        it arrived only by way of resteasy-client. KeycloakSigningKeys builds its requests for the
+        same client, so the library names it rather than relying on that path.
+      -->
+    </dependency>
+
+    <dependency>
       <groupId>org.keycloak</groupId>
       <artifactId>keycloak-admin-client-jakarta</artifactId>
       <!--

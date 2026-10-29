@@ -32,6 +32,7 @@ import org.keycloak.adapters.KeycloakDeployment;
 import org.metadatacenter.server.security.AuthorizationKeycloakAndApiKeyResolver;
 import org.metadatacenter.server.security.IAuthorizationResolver;
 import org.metadatacenter.server.security.KeycloakDeploymentProvider;
+import org.metadatacenter.server.security.KeycloakSigningKeys;
 import org.metadatacenter.server.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,6 +71,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   protected static CedarConfig cedarConfig;
   protected static UserService userService;
   protected static AppLoggerQueueService appLoggerQueueService;
+  private KeycloakDeployment keycloakDeployment;
 
   static {
     HTTP_HEADERS = new ArrayList<>();
@@ -166,7 +168,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
     //Initialize Keycloak
     KeycloakDeploymentProvider keycloakDeploymentProvider = new KeycloakDeploymentProvider();
-    KeycloakDeployment keycloakDeployment = keycloakDeploymentProvider.buildDeployment(cedarConfig.getKeycloakConfig());
+    keycloakDeployment = keycloakDeploymentProvider.buildDeployment(cedarConfig.getKeycloakConfig());
     // Init Authorization Resolver. The deployment carries the realm's signing keys, so the resolver can
     // verify a bearer token's signature instead of trusting its payload.
     IAuthorizationResolver authResolver = new AuthorizationKeycloakAndApiKeyResolver(keycloakDeployment);
@@ -339,24 +341,29 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   }
 
   /**
-   * The two dependencies every CEDAR microservice opens, probed here so that no server can publish
+   * The three dependencies every CEDAR microservice opens, probed here so that no server can publish
    * a health endpoint that stays green while they are gone.
    *
    * <p>They are gated differently because they fail differently. Neo4j resolves the caller of every
    * authenticated request through {@link Authorization}, so a server that cannot reach it can serve
-   * nothing and is unhealthy. Redis carries the application log queue, whose enqueue is best-effort
-   * by design and drops events rather than failing the request that produced them, so its loss is
-   * reported and the server stays healthy. A service for which Redis carries something it cannot
-   * drop registers its own gating check on that queue.
+   * nothing and is unhealthy. Keycloak's signing keys verify every bearer token, which is how every
+   * browser request authenticates, so a server that cannot fetch them refuses every signed-in user and
+   * is unhealthy too, even though API keys still work. Redis carries the application log queue, whose
+   * enqueue is best-effort by design and drops events rather than failing the request that produced
+   * them, so its loss is reported and the server stays healthy. A service for which Redis carries
+   * something it cannot drop registers its own gating check on that queue.
    *
-   * <p>Both handles already exist at this point: {@code run} initializes the Neo4j services and the
-   * logger queue before calling this. A subclass that overrides {@code setupEnvironment} must call
-   * {@code super}, as {@link CedarMicroserviceApplicationWithMongo} does when it adds the document
-   * store.
+   * <p>Every handle already exists at this point: {@code run} initializes the Neo4j services, the
+   * Keycloak deployment and the logger queue before calling this. A subclass that overrides
+   * {@code setupEnvironment} must call {@code super}, as {@link CedarMicroserviceApplicationWithMongo}
+   * does when it adds the document store.
    */
   private void registerSharedHealthChecks(Environment environment) {
     environment.healthChecks().register("neo4j", CedarDependencyHealthCheck.gating(
         "Neo4j", CedarDataServices.getInstance().getProxies()::verifyConnectivity));
+    KeycloakDeployment deployment = keycloakDeployment;
+    environment.healthChecks().register("keycloak-signing-keys", CedarDependencyHealthCheck.gating(
+        "The realm's key set", () -> KeycloakSigningKeys.verify(deployment)));
     environment.healthChecks().register("app-log-queue", CedarDependencyHealthCheck.reporting(
         "The Redis application log queue", appLoggerQueueService::verifyConnectivity));
   }
