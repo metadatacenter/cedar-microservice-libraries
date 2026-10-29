@@ -28,6 +28,7 @@ import org.metadatacenter.server.url.MicroserviceUrlUtil;
 import org.metadatacenter.util.ModelUtil;
 import org.metadatacenter.util.http.CedarUrlUtil;
 import org.metadatacenter.util.http.HttpTimeouts;
+import org.metadatacenter.util.http.ArtifactRequestNotSentException;
 import org.metadatacenter.util.http.ArtifactServiceClient;
 import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
@@ -257,7 +258,13 @@ public class CloneInstancesExecutorService implements AutoCloseable {
     try {
       String url = microserviceUrlUtil.getArtifact().getResourceType(resourceType);
 
-      ClassicHttpResponse templateProxyResponse = artifactClient.post(url, c, originalDocument, HttpTimeouts.BATCH);
+      ClassicHttpResponse templateProxyResponse;
+      try {
+        templateProxyResponse = artifactClient.post(url, c, originalDocument, HttpTimeouts.BATCH);
+      } catch (ArtifactRequestNotSentException notSent) {
+        cleanupService.notSent(cleanupJob);
+        throw notSent;
+      }
 
       int statusCode = templateProxyResponse.getCode();
       if (statusCode != HttpStatus.SC_CREATED) {

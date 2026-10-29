@@ -314,9 +314,21 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
         Map.of("job",jobId,"reason",reason)).consume();
   }
 
-  /** Only an explicit client rejection establishes that this attempt created no content. */
+  /** Of the artifact server's answers, only an explicit client rejection proves this attempt created no content. */
   public void rejected(String jobId, int status) {
     if (status < 400 || status >= 500 || status == 408) return;
+    forget(jobId);
+  }
+
+  /**
+   * A create the artifact server never received created no content either. Left in place, its job would
+   * only park, since no answer named a revision to delete.
+   */
+  public void notSent(String jobId) {
+    forget(jobId);
+  }
+
+  private void forget(String jobId) {
     try (var session = driver.session(); var tx = session.beginTransaction()) {
       VersionChainTransaction.lock(tx);
       tx.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) WHERE j.resourceId IS NULL "

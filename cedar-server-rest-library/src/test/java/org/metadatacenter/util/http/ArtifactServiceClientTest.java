@@ -5,12 +5,16 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.metadatacenter.config.ArtifactServiceConfig;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.constant.CedarHeaderParameters;
+import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.rest.context.CedarRequestContext;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -94,6 +98,37 @@ class ArtifactServiceClientTest {
     }
     assertEquals(0, otherCalls.get());
     assertTrue(requests.isEmpty());
+  }
+
+  /**
+   * A request attempted only once that finds no connection never reached the service. A GET, or a PUT
+   * carrying If-Match, is repeated after an answerless attempt, so a refused last attempt does not show
+   * that an earlier one went unreceived.
+   */
+  @Test
+  void onlyARequestAttemptedOnceThatCouldNotConnectIsNeverSent() throws Exception {
+    int closedPort;
+    try (var socket = new ServerSocket(0, 0, InetAddress.getLoopbackAddress())) {
+      closedPort = socket.getLocalPort();
+    }
+    String closed = "http://127.0.0.1:" + closedPort + "/";
+    CedarConfig config = mock(CedarConfig.class, RETURNS_DEEP_STUBS);
+    when(config.getServers().getArtifact().getBase()).thenReturn(closed);
+    when(config.getArtifactService().requireApiKey()).thenReturn(KEY);
+    ArtifactServiceClient unreachable = new ArtifactServiceClient(config);
+
+    assertThrows(ArtifactRequestNotSentException.class, () -> unreachable.post(closed + "templates", user, "{}"));
+    assertThrows(ArtifactRequestNotSentException.class,
+        () -> unreachable.post(closed + "templates", user, "{}", HttpTimeouts.BATCH));
+    assertThrows(ArtifactRequestNotSentException.class, () -> unreachable.put(closed + "templates/id", user, "{}", null));
+    assertThrows(ArtifactRequestNotSentException.class, () -> unreachable.delete(closed + "templates/id", user, null));
+
+    for (Executable repeated : List.<Executable>of(() -> unreachable.get(closed + "templates/id", user),
+        () -> unreachable.put(closed + "templates/id", user, "{}"),
+        () -> unreachable.delete(closed + "templates/id", user, "\"4\""))) {
+      var failure = assertThrows(CedarDependencyUnavailableException.class, repeated);
+      assertFalse(failure instanceof ArtifactRequestNotSentException, failure.toString());
+    }
   }
 
   @Test
