@@ -5,7 +5,7 @@
   <parent>
     <groupId>org.metadatacenter</groupId>
     <artifactId>cedar-microservice-libraries</artifactId>
-    <version>2.9.30</version>
+    <version>2.9.31</version>
   </parent>
 
   <groupId>org.metadatacenter</groupId>
@@ -83,6 +83,16 @@
           <artifactId>keycloak-server-spi-private</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <!--
+        The adapter sends every request to Keycloak through this client but declares it provided, so
+        it arrived only by way of resteasy-client. KeycloakSigningKeys builds its requests for the
+        same client, so the library names it rather than relying on that path.
+      -->
     </dependency>
 
     <dependency>

@@ -371,6 +371,22 @@ class ArtifactCreateCleanupOutboxTest {
     }
   }
 
+  @Test void aCreateTheArtifactServerNeverReceivedLeavesNoJob() {
+    try(var box=open()) {
+      String minted=box.prepare(CedarResourceType.TEMPLATE,"create");
+      box.notSent(minted);
+      assertTrue(state(minted).isEmpty(),"A create that was never sent stored nothing to look for");
+
+      String chosen=atIdentity(box);
+      box.notSent(chosen);
+      assertTrue(state(chosen).isEmpty(),"Nothing can land at an identity no request reached");
+
+      String answered=created(box);
+      box.notSent(answered);
+      assertEquals("\"7\"",state(answered).get("etag"),"A create the server answered keeps its revision");
+    }
+  }
+
   @Test void aCreateAtAnIdentityTakesOnlyThatIdentitysOutcome() {
     try(var box=open()) {
       String refused=atIdentity(box);

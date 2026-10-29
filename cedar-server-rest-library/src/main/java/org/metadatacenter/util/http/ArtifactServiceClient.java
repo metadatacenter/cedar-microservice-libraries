@@ -4,6 +4,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import org.apache.hc.client5.http.fluent.Request;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.Method;
 import org.metadatacenter.config.ArtifactServiceConfig;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.constant.CedarHeaderParameters;
@@ -31,7 +32,8 @@ public final class ArtifactServiceClient {
 
   public ClassicHttpResponse get(String url, CedarRequestContext context, HttpTimeouts timeouts)
       throws CedarProcessingException {
-    return execute(url, Request.get(url).setHeader(HttpHeaders.ACCEPT_ENCODING, "identity"), context, timeouts);
+    return execute(url, Request.get(url).setHeader(HttpHeaders.ACCEPT_ENCODING, "identity"), Method.GET, null, context,
+        timeouts);
   }
 
   public ClassicHttpResponse post(String url, CedarRequestContext context, String content)
@@ -41,7 +43,8 @@ public final class ArtifactServiceClient {
 
   public ClassicHttpResponse post(String url, CedarRequestContext context, String content, HttpTimeouts timeouts)
       throws CedarProcessingException {
-    return execute(url, Request.post(url).bodyString(content, ContentType.APPLICATION_JSON), context, timeouts);
+    return execute(url, Request.post(url).bodyString(content, ContentType.APPLICATION_JSON), Method.POST, null, context,
+        timeouts);
   }
 
   public ClassicHttpResponse put(String url, CedarRequestContext context, String content)
@@ -51,19 +54,21 @@ public final class ArtifactServiceClient {
 
   public ClassicHttpResponse put(String url, CedarRequestContext context, String content, String ifMatch)
       throws CedarProcessingException {
-    Request request = Request.put(url).bodyString(content, ContentType.APPLICATION_JSON);
-    header(request, HttpHeaders.IF_MATCH, ifMatch);
-    return execute(url, request, context, HttpTimeouts.INTERACTIVE);
+    return execute(url, Request.put(url).bodyString(content, ContentType.APPLICATION_JSON), Method.PUT, ifMatch, context,
+        HttpTimeouts.INTERACTIVE);
   }
 
   public ClassicHttpResponse delete(String url, CedarRequestContext context, String ifMatch)
       throws CedarProcessingException {
-    Request request = Request.delete(url);
-    header(request, HttpHeaders.IF_MATCH, ifMatch);
-    return execute(url, request, context, HttpTimeouts.INTERACTIVE);
+    return execute(url, Request.delete(url), Method.DELETE, ifMatch, context, HttpTimeouts.INTERACTIVE);
   }
 
-  private ClassicHttpResponse execute(String url, Request request, CedarRequestContext context, HttpTimeouts timeouts)
+  /**
+   * Sends the request with the installation's service key and the caller's identity. A request attempted
+   * only once that could not connect is reported as never sent, since the service cannot have received it.
+   */
+  private ClassicHttpResponse execute(String url, Request request, Method method, String ifMatch,
+                                      CedarRequestContext context, HttpTimeouts timeouts)
       throws CedarProcessingException {
     URI target = URI.create(url);
     if (!Objects.equals(base.getScheme(), target.getScheme()) || !Objects.equals(base.getHost(), target.getHost())
@@ -79,10 +84,14 @@ public final class ArtifactServiceClient {
     header(request, CedarHeaderParameters.CLIENT_SESSION_ID, context.getClientSessionIdHeader());
     header(request, CedarHeaderParameters.GLOBAL_REQUEST_ID_KEY, context.getGlobalRequestIdHeader());
     header(request, CedarHeaderParameters.LOCAL_REQUEST_ID_KEY, context.getLocalRequestIdHeader());
+    header(request, HttpHeaders.IF_MATCH, ifMatch);
     try {
       return (timeouts == HttpTimeouts.BATCH ? HttpTimeouts.ARTIFACT_BATCH : HttpTimeouts.ARTIFACT_INTERACTIVE)
           .execute(request);
     } catch (IOException e) {
+      if (HttpTimeouts.neverConnected(e) && !HttpTimeouts.repeatsAnswerless(method, ifMatch != null)) {
+        throw new ArtifactRequestNotSentException(e);
+      }
       throw new CedarDependencyUnavailableException("Downstream service is unavailable", e);
     }
   }

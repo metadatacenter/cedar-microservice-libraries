@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.keycloak.representations.adapters.config.AdapterConfig;
 import org.metadatacenter.config.KeycloakConfig;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,6 +29,14 @@ class KeycloakDeploymentProviderTest {
 
     assertTrue(adapterConfig.isDisableTrustManager());
     assertTrue(adapterConfig.isAllowAnyHostname());
+  }
+
+  @Test
+  void boundsEveryRequestTheAdapterSendsToKeycloak() throws Exception {
+    AdapterConfig adapterConfig = provider.buildAdapterConfig(keycloakConfig(false));
+
+    assertEquals(KeycloakDeploymentProvider.CONNECTION_TIMEOUT_MILLIS, adapterConfig.getConnectionTimeout());
+    assertEquals(KeycloakDeploymentProvider.SOCKET_TIMEOUT_MILLIS, adapterConfig.getSocketTimeout());
   }
 
   private KeycloakConfig keycloakConfig(boolean allowInsecureTls) throws Exception {

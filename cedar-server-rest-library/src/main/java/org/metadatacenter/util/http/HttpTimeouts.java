@@ -285,7 +285,7 @@ public final class HttpTimeouts {
    * false: the request arrived, and the server may still be working on it.
    */
   private static boolean answeredNothing(IOException exception) {
-    if (exception instanceof ConnectTimeoutException || exception instanceof ConnectException) {
+    if (neverConnected(exception)) {
       return true;
     }
     if (exception instanceof NoHttpResponseException || exception instanceof ConnectionClosedException) {
@@ -294,6 +294,26 @@ public final class HttpTimeouts {
     // A peer that resets rather than closing cleanly, which a pooling client meets whenever the far
     // side retires an idle connection between the lease and the write.
     return exception instanceof SocketException && !(exception instanceof SocketTimeoutException);
+  }
+
+  /**
+   * Whether no connection to the dependency opened, so the request never left this process. A connect
+   * timeout counts, and is told apart from a response timeout by class.
+   */
+  static boolean neverConnected(IOException exception) {
+    return exception instanceof ConnectTimeoutException || exception instanceof ConnectException;
+  }
+
+  /**
+   * Whether a request of this method is sent again after an attempt that answered nothing, as
+   * {@link #ANSWERLESS_ATTEMPT} decides it. A request that is never repeated is attempted exactly once.
+   */
+  static boolean repeatsAnswerless(Method method, boolean conditional) {
+    return switch (method) {
+      case GET, HEAD, OPTIONS, TRACE -> true;
+      case PUT, DELETE -> conditional;
+      default -> false;
+    };
   }
 
   /**
@@ -322,14 +342,8 @@ public final class HttpTimeouts {
 
     @Override
     public boolean retryRequest(HttpRequest request, IOException exception, int execCount, HttpContext context) {
-      if (execCount != 1 || !answeredNothing(exception)) {
-        return false;
-      }
-      return switch (Method.normalizedValueOf(request.getMethod())) {
-        case GET, HEAD, OPTIONS, TRACE -> true;
-        case PUT, DELETE -> request.containsHeader(HttpHeaders.IF_MATCH);
-        default -> false;
-      };
+      return execCount == 1 && answeredNothing(exception) && repeatsAnswerless(
+          Method.normalizedValueOf(request.getMethod()), request.containsHeader(HttpHeaders.IF_MATCH));
     }
 
     @Override

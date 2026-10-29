@@ -41,6 +41,7 @@ public final class ArtifactCreateCleanupService implements AutoCloseable {
 
   public void created(String job, String id, String etag) { outbox.created(job,id,exactRevision(etag)); }
   public void rejected(String job, int status) { outbox.rejected(job,status); }
+  public void notSent(String job) { outbox.notSent(job); }
 
   /**
    * The single datastore revision a validator names, formatted as a conditional write names it, or

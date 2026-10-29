@@ -11,6 +11,18 @@ public class KeycloakDeploymentProvider {
 
   private static final Logger log = LoggerFactory.getLogger(KeycloakDeploymentProvider.class);
 
+  /**
+   * How long the adapter's client may take to open a connection to Keycloak. Keycloak sits on the same host or
+   * network as every server, so two seconds is long for one that is answering at all.
+   */
+  static final long CONNECTION_TIMEOUT_MILLIS = 2_000;
+
+  /**
+   * How long the adapter's client may wait for Keycloak's response once connected. The discovery document and the
+   * key set are small, so five seconds leaves room for a Keycloak that is busy rather than gone.
+   */
+  static final long SOCKET_TIMEOUT_MILLIS = 5_000;
+
   public KeycloakDeploymentProvider() {
   }
 
@@ -36,6 +48,12 @@ public class KeycloakDeploymentProvider {
     // These servers only ever verify incoming tokens; they never drive a login, so bearer-only is the
     // correct mode and it avoids needing a client secret for a public client.
     adapterConfig.setBearerOnly(true);
+    // The adapter's client waits indefinitely unless told otherwise, and every bearer request that needs the realm's
+    // keys waits with it. A host that could not reach Keycloak held each such request for about 30 seconds before
+    // answering 500, and every signed-in page looked hung rather than broken. Bounded, the lookup fails while the
+    // caller is still waiting.
+    adapterConfig.setConnectionTimeout(CONNECTION_TIMEOUT_MILLIS);
+    adapterConfig.setSocketTimeout(SOCKET_TIMEOUT_MILLIS);
     boolean allowInsecureTls = keycloakConfig.isAllowInsecureTls();
     adapterConfig.setDisableTrustManager(allowInsecureTls);
     adapterConfig.setAllowAnyHostname(allowInsecureTls);
