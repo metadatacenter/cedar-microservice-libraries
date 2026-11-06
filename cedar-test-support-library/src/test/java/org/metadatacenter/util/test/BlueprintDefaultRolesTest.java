@@ -8,6 +8,7 @@ import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentSource;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.model.SystemComponent;
+import org.metadatacenter.server.security.CedarUserRolePermissionUtil;
 import org.metadatacenter.server.security.model.auth.CedarPermission;
 import org.metadatacenter.server.security.model.user.CedarSuperRole;
 import org.metadatacenter.server.security.model.user.CedarUser;
@@ -15,6 +16,7 @@ import org.metadatacenter.server.security.model.user.CedarUserExtract;
 import org.metadatacenter.server.security.model.user.CedarUserRole;
 import org.metadatacenter.server.security.util.CedarUserUtil;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -141,6 +143,33 @@ public class BlueprintDefaultRolesTest {
     Assertions.assertFalse(normal.has(CedarPermission.SEARCH_INDEX_REINDEX));
     Assertions.assertFalse(normal.has(CedarPermission.MONITOR_READ));
     Assertions.assertFalse(normal.has(CedarPermission.SEND_PROCESS_MESSAGE));
+  }
+
+  /**
+   * monitorViewer is the read-only way into the Monitor: a person holds it next to normal, and it adds
+   * MONITOR_READ and nothing else. Before it, the only super role that reached the Monitor was the
+   * built-in administrator's, so reading a health check meant holding every administrative role.
+   */
+  @Test
+  public void aMonitorViewerReceivesOnlyTheMonitorRole() throws Exception {
+    Assertions.assertEquals(List.of(CedarUserRole.MONITOR_MANAGER),
+        CedarUserUtil.getRolesForType(config().getBlueprintUserProfile(), CedarSuperRole.MONITOR_VIEWER));
+  }
+
+  @Test
+  public void aNormalAccountThatIsAlsoAMonitorViewerGainsOnlyMonitorRead() throws Exception {
+    CedarConfig config = config();
+    CedarUser normal = provision(config, "normal-only", CedarSuperRole.NORMAL);
+    CedarUser viewer = provision(config, "monitor-viewer", CedarSuperRole.NORMAL);
+    viewer.getRoles().addAll(
+        CedarUserUtil.getRolesForType(config.getBlueprintUserProfile(), CedarSuperRole.MONITOR_VIEWER));
+    CedarUserRolePermissionUtil.expandRolesIntoPermissions(viewer);
+
+    Set<String> gained = new HashSet<>(viewer.getPermissions());
+    gained.removeAll(normal.getPermissions());
+    Assertions.assertEquals(Set.of(CedarPermission.MONITOR_READ.getPermissionName()), gained,
+        "a monitor viewer must gain read access to the Monitor and nothing else; in particular not "
+            + "SEARCH_INDEX_REINDEX, which the Monitor's rebuild button forwards to the resource server");
   }
 
   /**
