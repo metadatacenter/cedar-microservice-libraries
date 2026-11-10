@@ -29,7 +29,6 @@ import org.metadatacenter.server.security.model.user.CedarUserAuthSource;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Proxy;
@@ -70,7 +69,7 @@ class AuthorizationKeycloakAndApiKeyResolverTest {
   void setUp() throws Exception {
     realmKey = keyPair();
     // The deployment learns the realm's issuer from its discovery document, so a Keycloak answers for that alone.
-    keycloak = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+    keycloak = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     String base = "http://127.0.0.1:" + keycloak.getAddress().getPort();
     String realm = base + "/realms/CEDAR";
     keycloak.createContext("/realms/CEDAR/.well-known/openid-configuration", exchange -> {

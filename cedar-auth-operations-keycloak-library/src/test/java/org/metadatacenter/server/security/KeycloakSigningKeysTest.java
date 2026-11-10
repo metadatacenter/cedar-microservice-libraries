@@ -48,7 +48,7 @@ class KeycloakSigningKeysTest {
 
   @BeforeEach
   void startKeycloak() throws Exception {
-    keycloak = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+    keycloak = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     base = "http://127.0.0.1:" + keycloak.getAddress().getPort();
     String realm = base + "/realms/CEDAR";
     discoveryBody = """
@@ -107,7 +107,7 @@ class KeycloakSigningKeysTest {
   @Test
   void anUnreachableKeycloakFailsWithItsCause() throws Exception {
     int closedPort;
-    try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+    try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
       closedPort = socket.getLocalPort();
     }
 
@@ -122,7 +122,7 @@ class KeycloakSigningKeysTest {
    */
   @Test
   void aKeycloakThatNeverAnswersFailsWithinTheReadTimeout() throws Exception {
-    try (ServerSocket silent = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+    try (ServerSocket silent = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
       List<Socket> held = new CopyOnWriteArrayList<>();
       Thread acceptor = new Thread(() -> {
         try {

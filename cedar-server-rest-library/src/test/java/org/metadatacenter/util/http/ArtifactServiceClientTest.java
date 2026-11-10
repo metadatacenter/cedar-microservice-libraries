@@ -108,7 +108,7 @@ class ArtifactServiceClientTest {
   @Test
   void onlyARequestAttemptedOnceThatCouldNotConnectIsNeverSent() throws Exception {
     int closedPort;
-    try (var socket = new ServerSocket(0, 0, InetAddress.getLoopbackAddress())) {
+    try (var socket = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
       closedPort = socket.getLocalPort();
     }
     String closed = "http://127.0.0.1:" + closedPort + "/";
