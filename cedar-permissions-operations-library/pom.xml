@@ -18,7 +18,7 @@
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
-      <artifactId>cedar-server-utils-core-library</artifactId>
+      <artifactId>cedar-core-library</artifactId>
     </dependency>
 
   </dependencies>
