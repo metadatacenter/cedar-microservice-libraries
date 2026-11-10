@@ -37,6 +37,16 @@
     </dependency>
 
     <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-text</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>jakarta.ws.rs</groupId>
+      <artifactId>jakarta.ws.rs-api</artifactId>
+    </dependency>
+
+    <dependency>
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-logging-operations-library</artifactId>
     </dependency>
@@ -46,6 +56,11 @@
     <dependency>
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-auth-operations-library</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.mongodb</groupId>
+      <artifactId>mongodb-driver-sync</artifactId>
     </dependency>
 
     <dependency>
