@@ -40,6 +40,12 @@ public class ApplicationRequestLogDAO extends AbstractDAO<ApplicationRequestLog>
         .setParameter("id", localRequestId).setLockMode(LockModeType.PESSIMISTIC_WRITE).uniqueResult();
   }
 
+  /** Writes the session's pending changes and releases its entities; the transaction and its row locks remain. */
+  public void flushAndClear() {
+    currentSession().flush();
+    currentSession().clear();
+  }
+
   public Long createOrUpdate(ApplicationRequestLog log) {
     return persist(log).getId();
   }
