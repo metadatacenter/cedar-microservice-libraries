@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Map;
@@ -164,7 +163,7 @@ public class RouteSurfaceTest {
     private final HttpServer server;
 
     Stub(ToIntFunction<com.sun.net.httpserver.HttpExchange> status) throws Exception {
-      server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+      server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
       server.createContext("/", exchange -> {
         exchange.getRequestBody().readAllBytes();
         exchange.sendResponseHeaders(status.applyAsInt(exchange), -1);

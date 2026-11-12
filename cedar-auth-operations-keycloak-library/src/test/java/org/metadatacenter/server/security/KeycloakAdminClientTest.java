@@ -16,7 +16,6 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -51,7 +50,7 @@ class KeycloakAdminClientTest {
 
   @Test
   void theAdministratorSignsInWithItsPassword() throws Exception {
-    server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+    server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     serveTokens();
 
     try (Keycloak keycloak = KeycloakUtils.buildKeycloak(info("http", false))) {
@@ -71,7 +70,7 @@ class KeycloakAdminClientTest {
 
   @Test
   void aSelfSignedKeycloakIsReachedOnlyWithTheDevelopmentOptIn(@TempDir Path dir) throws Exception {
-    HttpsServer https = HttpsServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+    HttpsServer https = HttpsServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     https.setHttpsConfigurator(new HttpsConfigurator(selfSigned(dir)));
     server = https;
     serveTokens();
@@ -87,7 +86,7 @@ class KeycloakAdminClientTest {
 
   @Test
   void aUserIsReadWholeWhenKeycloakDescribesItWithAPropertyTheClientDoesNotKnow() throws Exception {
-    server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+    server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server.createContext("/admin/realms/CEDAR/users", exchange -> {
       byte[] body = """
           [{"id": "u-1", "future_detail": {"nested": {"depth": 2}, "list": [1]}, "username": "ada",

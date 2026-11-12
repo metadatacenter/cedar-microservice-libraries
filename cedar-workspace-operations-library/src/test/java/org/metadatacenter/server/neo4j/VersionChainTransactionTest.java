@@ -65,6 +65,24 @@ class VersionChainTransactionTest {
       }
     }
   }
+  @Test void everyRecordedMutationMovesTheGenerationOfItsJob() {
+    try(var s=driver.session()) {
+      s.run("CREATE (:Artifact:Template {`_id`:'t'}), (:Artifact:Instance {`_id`:'i',`schema_isBasedOn`:'t'})").consume();
+      java.util.function.Function<String,Long> generation=id -> s.run(
+          "MATCH (j:CedarVersionProjection {resourceId:$id}) RETURN j.generation AS g",Map.of("id",id)).single().get("g").asLong();
+      s.writeTransaction(tx -> { VersionChainTransaction.lock(tx); VersionChainTransaction.enqueue(tx,"t",false); return null; });
+      assertEquals(1,generation.apply("t"));
+      // A writer that read generation 1 must find it moved, or it would remove a job it has not written out.
+      s.writeTransaction(tx -> { VersionChainTransaction.lock(tx); VersionChainTransaction.enqueue(tx,"t",true); return null; });
+      assertEquals(2,generation.apply("t"));
+      // A template's content change records work for each of its instances as well.
+      s.writeTransaction(tx -> { VersionChainTransaction.lock(tx); VersionChainTransaction.enqueueContent(tx,"t","{}"); return null; });
+      assertEquals(3,generation.apply("t"));
+      assertEquals(1,generation.apply("i"));
+      s.writeTransaction(tx -> { VersionChainTransaction.lock(tx); VersionChainTransaction.enqueueContent(tx,"t","{}"); return null; });
+      assertEquals(2,generation.apply("i"));
+    }
+  }
   @Test void deletingTheWholeSeriesLeavesNoLatestOrProjection() {
     chain("bibo:draft");
     try(var s=driver.session()) {

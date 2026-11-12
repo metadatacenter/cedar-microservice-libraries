@@ -93,9 +93,15 @@ public final class VersionChainTransaction {
     }
   }
 
+  /**
+   * Records that an artifact's projections are out of date. The generation counts the mutations
+   * recorded against the job: whoever writes the projections out reads it first and removes the job
+   * only if it has not moved, so a mutation committed during that write is projected in its turn.
+   */
   public static void enqueue(Transaction tx, String id, boolean previousChanged) {
     tx.run("MERGE (j:CedarVersionProjection {resourceId:$id}) "
-        + "SET j.syncPrevious=coalesce(j.syncPrevious,false) OR $previous, j.updatedAt=timestamp()",
+        + "SET j.syncPrevious=coalesce(j.syncPrevious,false) OR $previous, j.updatedAt=timestamp(), "
+        + "j.generation=coalesce(j.generation,0)+1",
         Map.of("id",id,"previous",previousChanged)).consume();
   }
 
@@ -107,7 +113,8 @@ public final class VersionChainTransaction {
     // Instance reindex intent must survive a crash immediately after the template graph commit.
     tx.run("MATCH (t:Template {_id:$id}), (i:Instance {schema_isBasedOn:$id}) "
         + "MERGE (j:CedarVersionProjection {resourceId:i._id}) "
-        + "SET j.syncPrevious=coalesce(j.syncPrevious,false), j.updatedAt=timestamp()",
+        + "SET j.syncPrevious=coalesce(j.syncPrevious,false), j.updatedAt=timestamp(), "
+        + "j.generation=coalesce(j.generation,0)+1",
         Map.of("id", id)).consume();
   }
 

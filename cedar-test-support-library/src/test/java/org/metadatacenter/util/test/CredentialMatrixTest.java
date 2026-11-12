@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 
@@ -31,7 +30,7 @@ public class CredentialMatrixTest {
 
   @BeforeEach
   public void startStub() throws Exception {
-    server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+    server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     server.createContext("/", exchange -> {
       String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
       exchange.sendResponseHeaders(answer(exchange, body), -1);

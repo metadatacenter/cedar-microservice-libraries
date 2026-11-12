@@ -14,6 +14,7 @@ import org.metadatacenter.util.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class AppLoggerExecutorService {
@@ -32,6 +33,27 @@ public class AppLoggerExecutorService {
 
   @UnitOfWork
   public void handleLog(AppLogMessage appLog) {
+    apply(appLog);
+  }
+
+  /**
+   * Handles a claimed batch in one transaction, so its messages share one commit.
+   *
+   * <p>The batch is all or nothing. A failure rolls every message back and the caller handles them one
+   * at a time, which is also how a message that cannot be written is told from its neighbours. A
+   * message delivered twice costs nothing extra: its receipt says it was processed, here as anywhere.
+   * Each message's changes are written and its entities released before the next, so the session
+   * does not grow with the batch and a later message reads what an earlier one wrote.
+   */
+  @UnitOfWork
+  public void handleLogs(List<AppLogMessage> appLogs) {
+    for (AppLogMessage appLog : appLogs) {
+      apply(appLog);
+      requestLogDAO.flushAndClear();
+    }
+  }
+
+  private void apply(AppLogMessage appLog) {
     var receipt = requestLogDAO.claimEvent(appLog);
     if (receipt.isProcessed(appLog)) return;
     if (appLog.getType() == AppLogType.CYPHER_QUERY) {
