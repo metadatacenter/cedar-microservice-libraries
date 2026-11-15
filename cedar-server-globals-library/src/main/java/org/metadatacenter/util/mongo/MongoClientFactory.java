@@ -18,6 +18,8 @@ public class MongoClientFactory {
 
   private MongoClient mongoClient;
 
+  static final long MIN_TEST_READ_TIMEOUT_MILLIS = 5_000;
+
   public MongoClientFactory(MongoConnection mongoConnection) {
     this.mongoConnection = mongoConnection;
   }
@@ -37,7 +39,9 @@ public class MongoClientFactory {
     OptionalLong testTimeout = CedarTestRuntime.dependencyTimeoutMillis();
     long serverSelectionTimeout = testTimeout.orElse(mongoConnection.getServerSelectionTimeoutMillis());
     long connectTimeout = testTimeout.orElse(mongoConnection.getConnectTimeoutMillis());
-    long readTimeout = testTimeout.orElse(mongoConnection.getReadTimeoutMillis());
+    long readTimeout = testTimeout.isPresent()
+        ? testReadTimeoutMillis(testTimeout.getAsLong())
+        : mongoConnection.getReadTimeoutMillis();
     long poolWaitTimeout = testTimeout.orElse(mongoConnection.getPoolWaitTimeoutMillis());
 
     return MongoClientSettings.builder()
@@ -52,6 +56,15 @@ public class MongoClientFactory {
             .maxSize(mongoConnection.getMaxPoolSize()))
         .credential(credential)
         .build();
+  }
+
+  /**
+   * A test JVM shortens every wait so an outage reaches its exception path quickly, but a read from a
+   * healthy embedded server is not an outage: dropping or building an index can take longer than the
+   * one-second test timeout while a parallel build loads the machine.
+   */
+  static long testReadTimeoutMillis(long dependencyTimeoutMillis) {
+    return Math.max(dependencyTimeoutMillis, MIN_TEST_READ_TIMEOUT_MILLIS);
   }
 
   public MongoClient getClient() {
