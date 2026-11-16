@@ -1,6 +1,7 @@
 package org.metadatacenter.server.dao.mongodb;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.mongodb.MongoClientSettings;
 import com.mongodb.MongoWriteException;
 import com.mongodb.ServerAddress;
 import com.mongodb.WriteError;
@@ -11,10 +12,14 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.result.UpdateResult;
 import com.mongodb.client.result.DeleteResult;
 import org.bson.BsonDocument;
+import org.bson.BsonInt64;
+import org.bson.BsonString;
+import org.bson.BsonValue;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.bson.types.Decimal128;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.metadatacenter.server.dao.ArtifactRevisionConflictException;
 import org.metadatacenter.util.json.JsonMapper;
 
@@ -27,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class GenericLDDaoMongoDBTest {
@@ -62,6 +68,9 @@ class GenericLDDaoMongoDBTest {
 
     assertEquals(submitted, returned);
     assertFalse(returned.has(GenericLDDaoMongoDB.INTERNAL_REVISION_FIELD));
+    ArgumentCaptor<Bson> filter = ArgumentCaptor.forClass(Bson.class);
+    verify(collection).replaceOne(filter.capture(), any(Document.class));
+    assertMatchesExactlyTheObservedRevision(filter.getValue(), 1L);
   }
 
   @Test
@@ -89,6 +98,22 @@ class GenericLDDaoMongoDBTest {
 
     assertThrows(ArtifactRevisionConflictException.class,
         () -> dao.delete("artifact-id", 1L));
+    ArgumentCaptor<Bson> filter = ArgumentCaptor.forClass(Bson.class);
+    verify(collection).deleteOne(filter.capture());
+    assertMatchesExactlyTheObservedRevision(filter.getValue(), 1L);
+  }
+
+  /**
+   * The mocked collection answers whatever filter it is given, so the filter itself is what shows that
+   * a conditional write names the revision its caller read: without that clause a stale writer would
+   * replace or delete a newer document.
+   */
+  private static void assertMatchesExactlyTheObservedRevision(Bson filter, long revision) {
+    BsonDocument rendered = filter.toBsonDocument(Document.class, MongoClientSettings.getDefaultCodecRegistry());
+    List<BsonValue> clauses = rendered.getArray("$and").getValues();
+    assertTrue(clauses.contains(new BsonDocument("@id", new BsonString("artifact-id"))), rendered.toJson());
+    assertTrue(clauses.contains(new BsonDocument(GenericLDDaoMongoDB.INTERNAL_REVISION_FIELD, new BsonInt64(revision))),
+        rendered.toJson());
   }
 
   @Test
