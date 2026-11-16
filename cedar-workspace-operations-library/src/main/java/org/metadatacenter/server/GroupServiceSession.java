@@ -22,14 +22,34 @@ public interface GroupServiceSession {
 
   FolderServerGroup createGroup(String groupName, String groupDescription);
 
+  /**
+   * Changes the group's fields, answering null when the group does not exist.
+   *
+   * @throws GroupAdministrationRefusedException when the group exists and the caller may not administer it
+   */
   FolderServerGroup updateGroupById(CedarGroupId groupId, Map<NodeProperty, String> updateFields);
 
+  /**
+   * Changes the group's fields under the precondition, answering null when the group does not exist.
+   *
+   * @throws GroupAdministrationRefusedException when the group exists and the caller may not administer it
+   */
   VersionedResource<FolderServerGroup> updateGroupById(CedarGroupId groupId,
                                                         Map<NodeProperty, String> updateFields,
                                                         RevisionPrecondition precondition);
 
+  /**
+   * Deletes the group, answering false when it does not exist.
+   *
+   * @throws GroupAdministrationRefusedException when the group exists and the caller may not administer it
+   */
   boolean deleteGroupById(CedarGroupId groupId);
 
+  /**
+   * Deletes the group under the precondition, answering false when it does not exist.
+   *
+   * @throws GroupAdministrationRefusedException when the group exists and the caller may not administer it
+   */
   boolean deleteGroupById(CedarGroupId groupId, RevisionPrecondition precondition);
 
   CedarGroupUsers findGroupUsers(CedarGroupId groupId);
