@@ -1,11 +1,9 @@
 package org.metadatacenter.server.neo4j;
 
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.config.CedarTestRuntime;
 import org.metadatacenter.model.CedarResourceType;
 import org.neo4j.driver.*;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
@@ -48,7 +46,7 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
   private final long recheckMillis;
 
   public ArtifactCreateCleanupOutbox(CedarConfig config) {
-    this(driver(config), DELAY_MILLIS, RECHECK_MILLIS);
+    this(Neo4jDrivers.open(config), DELAY_MILLIS, RECHECK_MILLIS);
   }
 
   public ArtifactCreateCleanupOutbox(Driver driver, long delayMillis) {
@@ -74,16 +72,6 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
       session.run("CREATE CONSTRAINT cedar_create_cleanup_job IF NOT EXISTS "
           + "FOR (j:CedarArtifactCreateCleanup) REQUIRE j.jobId IS UNIQUE").consume();
     }
-  }
-
-  private static Driver driver(CedarConfig config) {
-    var neo = Neo4jConfig.fromCedarConfig(config);
-    var settings = Config.builder();
-    CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> settings
-        .withConnectionTimeout(timeout, TimeUnit.MILLISECONDS)
-        .withConnectionAcquisitionTimeout(timeout, TimeUnit.MILLISECONDS)
-        .withMaxTransactionRetryTime(timeout, TimeUnit.MILLISECONDS));
-    return GraphDatabase.driver(neo.getUri(), AuthTokens.basic(neo.getUserName(), neo.getUserPassword()), settings.build());
   }
 
   /** Fail closed before issuing a content write if its recovery intent cannot be persisted. */

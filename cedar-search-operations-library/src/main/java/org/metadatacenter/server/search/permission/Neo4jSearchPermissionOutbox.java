@@ -1,14 +1,10 @@
 package org.metadatacenter.server.search.permission;
 
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.config.CedarTestRuntime;
-import org.metadatacenter.server.neo4j.Neo4jConfig;
+import org.metadatacenter.server.neo4j.Neo4jDrivers;
 import org.metadatacenter.server.search.SearchPermissionQueueEvent;
 import org.metadatacenter.server.search.SearchPermissionQueueEventType;
-import org.neo4j.driver.AuthTokens;
-import org.neo4j.driver.Config;
 import org.neo4j.driver.Driver;
-import org.neo4j.driver.GraphDatabase;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.Transaction;
@@ -49,14 +45,7 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
   private volatile boolean relayLockReady;
 
   Neo4jSearchPermissionOutbox(CedarConfig cedarConfig) {
-    Neo4jConfig neo4j = Neo4jConfig.fromCedarConfig(cedarConfig);
-    Config.ConfigBuilder driverConfig = Config.builder();
-    CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> driverConfig
-        .withConnectionTimeout(timeout, TimeUnit.MILLISECONDS)
-        .withConnectionAcquisitionTimeout(timeout, TimeUnit.MILLISECONDS)
-        .withMaxTransactionRetryTime(timeout, TimeUnit.MILLISECONDS));
-    this.driver = GraphDatabase.driver(neo4j.getUri(),
-        AuthTokens.basic(neo4j.getUserName(), neo4j.getUserPassword()), driverConfig.build());
+    this.driver = Neo4jDrivers.open(cedarConfig);
   }
 
   Neo4jSearchPermissionOutbox(Driver driver) {
