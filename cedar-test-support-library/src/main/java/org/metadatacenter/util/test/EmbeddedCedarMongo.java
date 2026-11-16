@@ -60,18 +60,32 @@ public final class EmbeddedCedarMongo {
 
   public static synchronized void startAndRedirectEnvironment(Map<String, String> extraEnvironment) {
     if (running == null) {
-      running = startOnAFreePort();
+      TransitionWalker.ReachedState<RunningMongodProcess> started = startOnAFreePort();
       registerShutdownHook();
-      ServerAddress address = running.current().getServerAddress();
+      ServerAddress address = started.current().getServerAddress();
 
-      userName = valueOrDefault(CedarEnvironmentSource.get("CEDAR_MONGO_APP_USER_NAME"), DEFAULT_TEST_USER);
-      password = valueOrDefault(CedarEnvironmentSource.get("CEDAR_MONGO_APP_USER_PASSWORD"), DEFAULT_TEST_PASSWORD);
+      String startedUser = valueOrDefault(CedarEnvironmentSource.get("CEDAR_MONGO_APP_USER_NAME"), DEFAULT_TEST_USER);
+      String startedPassword = valueOrDefault(CedarEnvironmentSource.get("CEDAR_MONGO_APP_USER_PASSWORD"),
+          DEFAULT_TEST_PASSWORD);
+      // The server counts as running only once the application user and the identifier indexes exist.
+      // Kept after a failed provisioning, it would refuse every later class's login or accept a repeated
+      // identifier, and the failure would surface far from its cause.
       try (MongoClient client = MongoClients.create("mongodb://" + address.getHost() + ":" + address.getPort())) {
-        client.getDatabase(DATABASE_NAME).runCommand(new Document("createUser", userName)
-            .append("pwd", password)
+        client.getDatabase(DATABASE_NAME).runCommand(new Document("createUser", startedUser)
+            .append("pwd", startedPassword)
             .append("roles", List.of(new Document("role", "readWrite").append("db", DATABASE_NAME))));
         createArtifactIdIndexes(client);
+      } catch (RuntimeException e) {
+        try {
+          closeProcess(started);
+        } catch (RuntimeException closing) {
+          e.addSuppressed(closing);
+        }
+        throw e;
       }
+      running = started;
+      userName = startedUser;
+      password = startedPassword;
     }
     // Re-applied even when the server is already up: in a shared JVM a later test class may
     // have replaced the override, and its own extra entries must land as well

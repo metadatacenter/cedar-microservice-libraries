@@ -170,21 +170,40 @@ public final class EmbeddedCedarNeo4j {
   /**
    * Seeds at most once per JVM. Repeating the graph seeding would duplicate the users and the
    * CONTAINS chains they hang from, which corrupts path computation, so a second call in a
-   * shared JVM is a no-op; the guard lives here so every caller is safe without discipline.
+   * shared JVM is a no-op; the guard lives here so every caller is safe without discipline. A seed
+   * that fails part-way empties the graph and leaves the guard open, so the next call starts again.
    */
   public static synchronized void seed(CedarConfig cedarConfig) throws Exception {
     if (seeded) {
       return;
     }
-    seeded = true;
-    CedarUser admin = TestAuthUtil.getAdminUser(cedarConfig);
-    CedarRequestContext adminContext = CedarRequestContextFactory.fromUser(admin);
-    createProductionConstraints(adminContext);
-    CedarDataServices.getInstance().getNeoUserService().createUser(admin);
-    CedarDataServices.getInstance().getAdminServiceSession(adminContext).ensureGlobalObjectsExists();
+    try {
+      CedarUser admin = TestAuthUtil.getAdminUser(cedarConfig);
+      CedarRequestContext adminContext = CedarRequestContextFactory.fromUser(admin);
+      createProductionConstraints(adminContext);
+      CedarDataServices.getInstance().getNeoUserService().createUser(admin);
+      CedarDataServices.getInstance().getAdminServiceSession(adminContext).ensureGlobalObjectsExists();
 
-    seedUser(TestAuthUtil.getTestUser1(cedarConfig));
-    seedUser(TestAuthUtil.getTestUser2(cedarConfig));
+      seedUser(TestAuthUtil.getTestUser1(cedarConfig));
+      seedUser(TestAuthUtil.getTestUser2(cedarConfig));
+    } catch (Exception | Error e) {
+      // A partial seed must not count as one: every later class would skip seeding and fail on a missing
+      // user or home folder, far from this failure. The graph is emptied so the next call seeds afresh.
+      discardPartialSeed(e);
+      throw e;
+    }
+    seeded = true;
+  }
+
+  private static void discardPartialSeed(Throwable failure) {
+    if (embedded == null) {
+      return;
+    }
+    try {
+      embedded.defaultDatabaseService().executeTransactionally("MATCH (n) DETACH DELETE n");
+    } catch (RuntimeException e) {
+      failure.addSuppressed(e);
+    }
   }
 
   /**
