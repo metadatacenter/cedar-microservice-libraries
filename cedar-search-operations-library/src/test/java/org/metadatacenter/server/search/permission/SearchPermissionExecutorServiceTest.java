@@ -88,6 +88,61 @@ class SearchPermissionExecutorServiceTest {
     verify(indexing).removeDocumentFromIndex(CedarUntypedFilesystemResourceId.build(resourceId));
   }
 
+  /**
+   * A membership change alters who can reach everything shared with the group, so the event re-projects
+   * each indexed resource the graph says the group can see, and nothing else. The index is not asked:
+   * it is the graph that knows which resources the group reaches.
+   */
+  @Test
+  void aMembershipChangeReprojectsEveryIndexedResourceTheGroupCanSee() throws Exception {
+    String groupId = "https://repo.metadatacenter.orgx/groups/members-changed";
+    FileSystemResource folder = resource("https://repo.metadatacenter.orgx/folders/shared-with-the-group",
+        CedarResourceType.FOLDER);
+    FileSystemResource template = resource("https://repo.metadatacenter.orgx/templates/inside-the-folder",
+        CedarResourceType.TEMPLATE);
+    FileSystemResource unindexed = resource("https://repo.metadatacenter.orgx/folders/never-indexed",
+        CedarResourceType.FOLDER);
+    java.util.Map<String, FileSystemResource> graph = java.util.Map.of(
+        folder.getId(), folder, template.getId(), template, unindexed.getId(), unindexed);
+    NodeSearchingService searching = mock(NodeSearchingService.class);
+    NodeIndexingService indexing = mock(NodeIndexingService.class);
+    FolderServiceSession folders = mock(FolderServiceSession.class);
+    when(folders.findAllNodesVisibleByGroupId(org.mockito.ArgumentMatchers.argThat(
+        (CedarGroupId id) -> id != null && groupId.equals(id.getId()))))
+        .thenReturn(List.of(folder, template, unindexed));
+    when(folders.findResourceById(any())).thenAnswer(invocation ->
+        graph.get(((org.metadatacenter.id.CedarFilesystemResourceId) invocation.getArgument(0)).getId()));
+    IndexUtils indexUtils = mock(IndexUtils.class);
+    when(indexUtils.needsIndexing(folder)).thenReturn(true);
+    when(indexUtils.needsIndexing(template)).thenReturn(true);
+    when(indexUtils.needsIndexing(unindexed)).thenReturn(false);
+    when(indexing.preparePermissionProjection(any(), any(), any(), any()))
+        .thenReturn(mock(NodeIndexingService.PermissionProjection.class));
+
+    try (SearchPermissionExecutorService service = new SearchPermissionExecutorService(
+        indexUtils, searching, indexing, folders,
+        mock(ResourcePermissionServiceSession.class), mock(CategoryServiceSession.class),
+        mock(CedarRequestContext.class))) {
+      service.handleEvent(new SearchPermissionQueueEvent(groupId, SearchPermissionQueueEventType.GROUP_MEMBERS_UPDATED));
+    }
+
+    org.mockito.ArgumentCaptor<FileSystemResource> projected = org.mockito.ArgumentCaptor.forClass(FileSystemResource.class);
+    verify(indexing, times(2)).preparePermissionProjection(projected.capture(), any(), any(), any());
+    assertEquals(java.util.Set.of(folder.getId(), template.getId()),
+        projected.getAllValues().stream().map(FileSystemResource::getId).collect(java.util.stream.Collectors.toSet()));
+    verify(indexing).updatePermissionProjections(org.mockito.ArgumentMatchers.argThat(batch -> batch.size() == 2));
+    verify(searching, never()).findAllCedarIdsForGroup(any());
+    verify(indexing, never()).removeDocumentFromIndex(any());
+  }
+
+  private static FileSystemResource resource(String id, CedarResourceType type) {
+    FileSystemResource resource = mock(FileSystemResource.class);
+    when(resource.getId()).thenReturn(id);
+    when(resource.getType()).thenReturn(type);
+    when(resource.getResourceId()).thenReturn(CedarUntypedFilesystemResourceId.build(id));
+    return resource;
+  }
+
   @Test
   void aDeletedGroupRemovesAnIndexedResourceThatNoLongerExistsInTheGraph() throws Exception {
     String resourceId = "https://repo.metadatacenter.orgx/templates/deleted";
