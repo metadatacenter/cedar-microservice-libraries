@@ -338,7 +338,7 @@ public final class HttpTimeouts {
    * doubles the wait a call site was promised. Repeating it needs a request deadline to come out
    * of, and there is none yet.
    */
-  private static final HttpRequestRetryStrategy ANSWERLESS_ATTEMPT = new HttpRequestRetryStrategy() {
+  static final HttpRequestRetryStrategy ANSWERLESS_ATTEMPT = new HttpRequestRetryStrategy() {
 
     @Override
     public boolean retryRequest(HttpRequest request, IOException exception, int execCount, HttpContext context) {
