@@ -58,6 +58,8 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerIT {
   private static RestHighLevelClient client;
   private static ElasticsearchPermissionEnabledContentSearchingWorker worker;
 
+  private static final String WALK_PRIVATE_ID = "walk-template-private";
+
   @BeforeAll
   static void startIndex() throws Exception {
     String host = System.getenv().getOrDefault("CEDAR_OPENSEARCH_HOST", "127.0.0.1");
@@ -81,6 +83,8 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerIT {
     for (int i = 0; i < 5; i++) {
       index("walk-template-" + i, "walkprobe " + i, List.of(readKey(READER_ID)), null);
     }
+    // Readable by its owner alone, and sorted among the reader's rows, so it falls on a continued page.
+    index(WALK_PRIVATE_ID, "walkprobe 2 private", List.of(readKey(OWNER_ID)), null);
     refresh();
   }
 
@@ -134,7 +138,8 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerIT {
 
     assertEquals(5, walked.size());
     assertEquals(Set.of("walk-template-0", "walk-template-1", "walk-template-2",
-        "walk-template-3", "walk-template-4"), new HashSet<>(walked));
+        "walk-template-3", "walk-template-4"), new HashSet<>(walked),
+        "a continued page must keep the permission filter and leave out the owner's private row");
   }
 
   @Test
