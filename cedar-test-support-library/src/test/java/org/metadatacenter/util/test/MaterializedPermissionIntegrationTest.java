@@ -12,12 +12,16 @@ import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
+import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
 import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.result.BackendCallResult;
 import org.metadatacenter.server.security.model.auth.CedarNodeMaterializedPermissions;
+import org.metadatacenter.server.security.model.auth.NodeSharePermission;
+import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionGroup;
+import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionGroupPermissionPair;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUser;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUserPermissionPair;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionsRequest;
@@ -33,11 +37,10 @@ import java.util.Map;
  * document, so it decides who can find what. It had no test of its own: the callers are covered, and
  * the resolution itself was reached only through them.
  *
- * <p>It is worth its own test because of how it is computed. The roles are resolved by six separate
- * upward traversals of the same ancestor chain, one per role per principal kind, and the viewer pair
- * is skipped entirely when Everybody already grants read. Those are exactly the details that a
- * consolidation of those queries into fewer round trips has to preserve, and none of them is visible
- * from the callers. The area has already produced one silent defect of this shape — a grantee who was
+ * <p>It is worth its own test because of how it is computed. The roles are resolved by one upward
+ * traversal of the ancestor chain, public read is inherited from any folder above, and viewer rows
+ * are skipped entirely when Everybody already grants read. Any change to those queries has to
+ * preserve these details, and none of them is visible from the callers. The area has already produced one silent defect of this shape — a grantee who was
  * not also an owner was dropped from the materialized list, so a shared artifact never carried its
  * grantee's key and a name search could not find it.
  *
@@ -62,6 +65,9 @@ public class MaterializedPermissionIntegrationTest {
   /** A folder user 2 may view, and an artifact inside it carrying no grant of its own. */
   private static FolderServerFolder sharedFolder;
   private static FolderServerArtifact inheritsFromFolder;
+  /** A folder Everybody may view, and an artifact inside it that also grants user 2 VIEWER directly. */
+  private static FolderServerFolder publicFolder;
+  private static FolderServerArtifact insidePublicFolder;
 
   @BeforeAll
   public static void oneTimeSetUp() throws Exception {
@@ -85,6 +91,11 @@ public class MaterializedPermissionIntegrationTest {
     grantToUser2(sharedViewer, ResourceRole.VIEWER);
     grantToUser2(sharedEditor, ResourceRole.EDITOR);
     grantToUser2(sharedFolder, ResourceRole.VIEWER);
+
+    publicFolder = createFolder("MP public folder");
+    insidePublicFolder = createTemplate("MP inside public folder", publicFolder.getResourceId());
+    shareWithEverybody(publicFolder);
+    grantToUser2(insidePublicFolder, ResourceRole.VIEWER);
   }
 
   /**
@@ -141,6 +152,30 @@ public class MaterializedPermissionIntegrationTest {
     Assertions.assertEquals(ResourceRole.VIEWER, permissions.getUserRoles().get(user2.getId()));
   }
 
+  /**
+   * Read granted to Everybody on a folder reaches what the folder contains. The artifact carries no
+   * public grant of its own, so its public read comes only from the walk up its ancestors, and without
+   * that walk other users would stop finding it by search.
+   */
+  @Test
+  public void publicReadOnAFolderReachesTheArtifactsInside() {
+    Assertions.assertEquals(NodeSharePermission.READ, materialized(publicFolder).getEverybodyPermission());
+    Assertions.assertEquals(NodeSharePermission.READ, materialized(insidePublicFolder).getEverybodyPermission(),
+        "the artifact inherits public read from the folder above it");
+  }
+
+  /**
+   * When Everybody already reads a resource, a viewer grant adds nothing a search could use, so no
+   * viewer key is materialized for it. The owner's manager role is still there.
+   */
+  @Test
+  public void aViewerGrantIsNotMaterializedWhereEverybodyAlreadyReads() {
+    CedarNodeMaterializedPermissions permissions = materialized(insidePublicFolder);
+    Assertions.assertNull(permissions.getUserRoles().get(user2.getId()),
+        "a viewer grant under inherited public read adds no key");
+    Assertions.assertEquals(ResourceRole.MANAGER, permissions.getUserRoles().get(user1.getId()));
+  }
+
   // ── fixtures and helpers ───────────────────────────────────────────────────
 
   private static CedarNodeMaterializedPermissions materialized(org.metadatacenter.model.folderserver.basic.FileSystemResource resource) {
@@ -185,6 +220,18 @@ public class MaterializedPermissionIntegrationTest {
         .createFolderAsChildOfId(folder, user1HomeId, newFolderId);
     Assertions.assertNotNull(created, "The folder '" + name + "' should be created");
     return created;
+  }
+
+  private static void shareWithEverybody(org.metadatacenter.model.folderserver.basic.FileSystemResource resource) {
+    FolderServerGroup everybody = CedarDataServices.getInstance().getGroupServiceSession(user1Context)
+        .findGroupByName(cedarConfig.getFolderStructureConfig().getEverybodyGroup().getName());
+    ResourcePermissionsRequest request = new ResourcePermissionsRequest();
+    request.setOwner(new ResourcePermissionUser(user1.getId()));
+    request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
+        new ResourcePermissionGroup(everybody.getId()), ResourceRole.VIEWER));
+    BackendCallResult result = CedarDataServices.getInstance().getResourcePermissionServiceSession(user1Context)
+        .updateResourcePermissions(resource.getResourceId(), request);
+    Assertions.assertFalse(result.isError(), "sharing with Everybody should succeed: " + result);
   }
 
   private static void grantToUser2(org.metadatacenter.model.folderserver.basic.FileSystemResource resource,
