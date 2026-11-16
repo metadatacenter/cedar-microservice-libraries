@@ -31,6 +31,8 @@ import java.util.Map;
  */
 public final class EmbeddedCedarMySql {
 
+  private static final int START_ATTEMPTS = 3;
+
   private static DB db;
 
   private EmbeddedCedarMySql() {
@@ -38,6 +40,26 @@ public final class EmbeddedCedarMySql {
 
   public static synchronized void startAndRedirectEnvironment(String envPrefix, Map<String, String> extraEnvironment) {
     if (db == null) {
+      db = startOnAFreePort();
+    }
+    Map<String, String> environment = new HashMap<>(CedarEnvironmentSource.getAll());
+    environment.put(envPrefix + "_HOST", "127.0.0.1");
+    environment.put(envPrefix + "_PORT", String.valueOf(db.getConfiguration().getPort()));
+    environment.put(envPrefix + "_USER", "root");
+    environment.put(envPrefix + "_PASSWORD", "");
+    environment.putAll(extraEnvironment);
+    CedarEnvironmentSource.setOverride(environment);
+  }
+
+  /**
+   * MariaDB4j finds a free port by binding one and releasing it, and the server binds it later, so
+   * another process can take it in between. A failed start is therefore retried, each time on a port
+   * found afresh, and its directories are removed.
+   */
+  private static DB startOnAFreePort() {
+    IllegalStateException failure = null;
+    for (int attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
+      DB candidate = null;
       try {
         DBConfigurationBuilder configuration = DBConfigurationBuilder.newBuilder();
         // Maven reactor workers share java.io.tmpdir, but must never unpack or
@@ -51,19 +73,27 @@ public final class EmbeddedCedarMySql {
         configuration.setDeletingTemporaryBaseAndDataDirsOnShutdown(true);
         configuration.addArg("--bind-address=127.0.0.1");
         configuration.setPort(0); // 0 picks a free port
-        db = PrivateTemporaryDirectoryDB.create(configuration.build());
-        db.start();
+        candidate = PrivateTemporaryDirectoryDB.create(configuration.build());
+        candidate.start();
+        return candidate;
       } catch (Exception e) {
-        throw new IllegalStateException("Could not start the embedded MariaDB", e);
+        failure = new IllegalStateException("Could not start the embedded MariaDB (attempt " + attempt + " of "
+            + START_ATTEMPTS + ")", e);
+        stopQuietly(candidate);
       }
     }
-    Map<String, String> environment = new HashMap<>(CedarEnvironmentSource.getAll());
-    environment.put(envPrefix + "_HOST", "127.0.0.1");
-    environment.put(envPrefix + "_PORT", String.valueOf(db.getConfiguration().getPort()));
-    environment.put(envPrefix + "_USER", "root");
-    environment.put(envPrefix + "_PASSWORD", "");
-    environment.putAll(extraEnvironment);
-    CedarEnvironmentSource.setOverride(environment);
+    throw failure;
+  }
+
+  private static void stopQuietly(DB candidate) {
+    if (candidate == null) {
+      return;
+    }
+    try {
+      candidate.stop();
+    } catch (Exception ignored) {
+      // A server that never started has nothing to stop.
+    }
   }
 
   static synchronized void stop() {

@@ -135,7 +135,7 @@ class AppLoggerQueueServiceTest {
   @Test
   void anUnreachableRedisCostsTheRequestNothing() {
     AppLoggerQueueService offline =
-        new AppLoggerQueueService(QueueTestConfig.onPort(EmbeddedRedis.freePort()));
+        new AppLoggerQueueService(QueueTestConfig.onPort(1)); // privileged: nothing listens there
     try {
       assertDoesNotThrow(() -> offline.enqueueEvent(message("dropped")));
       assertDoesNotThrow(() -> offline.enqueueEvent(message("dropped-again")));

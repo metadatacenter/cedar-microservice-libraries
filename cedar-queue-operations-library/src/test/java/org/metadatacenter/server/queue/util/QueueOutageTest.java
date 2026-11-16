@@ -26,13 +26,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("integration")
 class QueueOutageTest {
 
+  /** Privileged, so nothing a test run starts can listen on it, and a connection is refused at once. */
+  private static final int UNREACHABLE_PORT = 1;
+
   private static SearchPermissionQueueEvent event(String id) {
     return new SearchPermissionQueueEvent(id, SearchPermissionQueueEventType.RESOURCE_MOVED);
   }
 
   @Test
   void enqueueingToAnUnreachableQueueDoesNotFailTheCaller() {
-    CacheServerPersistent config = QueueTestConfig.onPort(EmbeddedRedis.freePort());
+    CacheServerPersistent config = QueueTestConfig.onPort(UNREACHABLE_PORT);
     PermissionQueueService queue = new PermissionQueueService(config);
     try {
       assertDoesNotThrow(() -> queue.enqueueEvent(event("dropped-1")),
@@ -46,7 +49,7 @@ class QueueOutageTest {
 
   @Test
   void everyDropIsCounted() {
-    CacheServerPersistent config = QueueTestConfig.onPort(EmbeddedRedis.freePort());
+    CacheServerPersistent config = QueueTestConfig.onPort(UNREACHABLE_PORT);
     PermissionQueueService queue = new PermissionQueueService(config);
     try {
       queue.enqueueEvent(event("a"));
@@ -77,7 +80,7 @@ class QueueOutageTest {
 
   @Test
   void dropCountsAreKeptPerService() {
-    CacheServerPersistent config = QueueTestConfig.onPort(EmbeddedRedis.freePort());
+    CacheServerPersistent config = QueueTestConfig.onPort(UNREACHABLE_PORT);
     PermissionQueueService one = new PermissionQueueService(config);
     PermissionQueueService two = new PermissionQueueService(config);
     try {
@@ -96,36 +99,35 @@ class QueueOutageTest {
   /**
    * The outage ends. The service holds a pool whose connections all point at a server that went
    * away, so recovering means those connections are discarded rather than handed back out. Without
-   * that, a single outage would disable enqueueing until the process restarted.
+   * that, a single outage would disable enqueueing until the process restarted. The service reaches
+   * Redis through a proxy that keeps its port throughout, so the outage cannot lose the address to
+   * another process the way a stopped and restarted server could.
    */
   @Test
-  void theServiceRecoversWhenTheQueueComesBack() {
-    // start() picks a free port and retries if another process wins the race for it; startOn() with
-    // a port that nothing has bound yet has no such second chance, and lost that race often enough
-    // to fail a build over an unrelated change.
-    EmbeddedRedis redis = EmbeddedRedis.start();
-    int port = redis.port();
-    PermissionQueueService queue = new PermissionQueueService(QueueTestConfig.onPort(port));
-    try {
-      queue.enqueueEvent(event("before-the-outage"));
-      assertEquals(0, queue.getDroppedEventCount(), "nothing should drop while Redis is up");
+  void theServiceRecoversWhenTheQueueComesBack() throws Exception {
+    try (EmbeddedRedis redis = EmbeddedRedis.start();
+         LoopbackFaultProxy proxy = new LoopbackFaultProxy(redis.port())) {
+      PermissionQueueService queue = new PermissionQueueService(QueueTestConfig.onPort(proxy.port()));
+      try {
+        queue.enqueueEvent(event("before-the-outage"));
+        assertEquals(0, queue.getDroppedEventCount(), "nothing should drop while Redis is up");
 
-      redis.stop();
-      queue.enqueueEvent(event("during-the-outage"));
-      assertEquals(1, queue.getDroppedEventCount(), "the event sent during the outage is dropped");
+        proxy.failConnections();
+        queue.enqueueEvent(event("during-the-outage"));
+        assertEquals(1, queue.getDroppedEventCount(), "the event sent during the outage is dropped");
 
-      redis = EmbeddedRedis.restartOn(port);
-      queue.enqueueEvent(event("after-the-outage"));
+        proxy.restoreConnections();
+        queue.enqueueEvent(event("after-the-outage"));
 
-      assertEquals(1, queue.getDroppedEventCount(),
-          "once Redis is back, enqueueing should succeed again rather than keep dropping");
-      try (Jedis jedis = new Jedis("127.0.0.1", port)) {
-        assertEquals(1, jedis.llen(QueueTestConfig.queueName(QueueService.SEARCH_PERMISSION_QUEUE_ID)),
-            "the post-outage event should be on the queue");
+        assertEquals(1, queue.getDroppedEventCount(),
+            "once Redis is back, enqueueing should succeed again rather than keep dropping");
+        try (Jedis jedis = new Jedis("127.0.0.1", redis.port())) {
+          assertEquals(2, jedis.llen(QueueTestConfig.queueName(QueueService.SEARCH_PERMISSION_QUEUE_ID)),
+              "the events sent before and after the outage should be on the queue");
+        }
+      } finally {
+        queue.close();
       }
-    } finally {
-      queue.close();
-      redis.stop();
     }
   }
 }

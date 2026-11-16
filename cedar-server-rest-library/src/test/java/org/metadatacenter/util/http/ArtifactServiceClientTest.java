@@ -12,9 +12,7 @@ import org.metadatacenter.constant.CedarHeaderParameters;
 import org.metadatacenter.exception.CedarDependencyUnavailableException;
 import org.metadatacenter.rest.context.CedarRequestContext;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -107,10 +105,8 @@ class ArtifactServiceClientTest {
    */
   @Test
   void onlyARequestAttemptedOnceThatCouldNotConnectIsNeverSent() throws Exception {
-    int closedPort;
-    try (var socket = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
-      closedPort = socket.getLocalPort();
-    }
+    // Privileged, so nothing a test run starts can listen on it, and a connection is refused at once.
+    int closedPort = 1;
     String closed = "http://127.0.0.1:" + closedPort + "/";
     CedarConfig config = mock(CedarConfig.class, RETURNS_DEEP_STUBS);
     when(config.getServers().getArtifact().getBase()).thenReturn(closed);

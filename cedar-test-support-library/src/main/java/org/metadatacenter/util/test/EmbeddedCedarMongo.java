@@ -41,6 +41,8 @@ public final class EmbeddedCedarMongo {
   public static final List<String> ARTIFACT_COLLECTIONS =
       List.of("template-fields", "template-elements", "templates", "template-instances");
 
+  private static final int START_ATTEMPTS = 3;
+
   private static final String DEFAULT_TEST_USER = "cedar-test";
   private static final String DEFAULT_TEST_PASSWORD = "cedar-test-password";
 
@@ -58,7 +60,7 @@ public final class EmbeddedCedarMongo {
 
   public static synchronized void startAndRedirectEnvironment(Map<String, String> extraEnvironment) {
     if (running == null) {
-      running = Mongod.instance().start(Version.Main.V5_0);
+      running = startOnAFreePort();
       registerShutdownHook();
       ServerAddress address = running.current().getServerAddress();
 
@@ -81,6 +83,24 @@ public final class EmbeddedCedarMongo {
     environment.put("CEDAR_MONGO_APP_USER_PASSWORD", password);
     environment.putAll(extraEnvironment);
     CedarEnvironmentSource.setOverride(environment);
+  }
+
+  /**
+   * Flapdoodle finds a free port by binding one and releasing it, and mongod binds it later, so another
+   * process can take it in between. A failed start is therefore retried, each time on a port found
+   * afresh.
+   */
+  private static TransitionWalker.ReachedState<RunningMongodProcess> startOnAFreePort() {
+    RuntimeException failure = null;
+    for (int attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
+      try {
+        return Mongod.instance().start(Version.Main.V5_0);
+      } catch (RuntimeException e) {
+        failure = e;
+      }
+    }
+    throw new IllegalStateException("Could not start the embedded MongoDB after " + START_ATTEMPTS + " attempts",
+        failure);
   }
 
   /**

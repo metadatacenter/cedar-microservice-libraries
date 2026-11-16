@@ -20,7 +20,6 @@ import java.util.function.IntSupplier;
 public final class EmbeddedRedis implements AutoCloseable {
 
   private static final int START_ATTEMPTS = 5;
-  private static final long RETRY_PAUSE_MILLIS = 100;
 
   private final RedisServer server;
   private final int port;
@@ -48,12 +47,8 @@ public final class EmbeddedRedis implements AutoCloseable {
         + START_ATTEMPTS + " attempts", lastFailure);
   }
 
-  /**
-   * Starts on a caller-chosen port, which is what lets a test stop the server and bring it back at
-   * the same address - the shape of a real outage, and the only way to check that a service
-   * recovers from one rather than merely failing gracefully.
-   */
-  public static EmbeddedRedis startOn(int port) {
+  /** Starts on a caller-chosen port, once. */
+  static EmbeddedRedis startOn(int port) {
     try {
       RedisServer server = RedisServer.newRedisServer().bind("127.0.0.1").port(port).build();
       server.start();
@@ -64,48 +59,9 @@ public final class EmbeddedRedis implements AutoCloseable {
   }
 
   /**
-   * Starts again on a port this helper has just released. Unlike {@link #start()} it cannot move to
-   * another port, because coming back at the same address is the whole point of a restart, so it
-   * waits and retries instead: a server that has only just stopped can hold its listening socket a
-   * moment longer.
-   */
-  public static EmbeddedRedis restartOn(int port) {
-    return restartOn(port, EmbeddedRedis::startOn);
-  }
-
-  static EmbeddedRedis restartOn(int port, Starter starter) {
-    IllegalStateException lastFailure = null;
-    for (int attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
-      try {
-        return starter.startOnce(port);
-      } catch (IllegalStateException e) {
-        lastFailure = e;
-        pauseBeforeRetry();
-      }
-    }
-    throw new IllegalStateException("Could not restart the embedded Redis on port " + port
-        + " after " + START_ATTEMPTS + " attempts", lastFailure);
-  }
-
-  /** One attempt at starting on a given port, so a test can drive the retry without a real race. */
-  @FunctionalInterface
-  interface Starter {
-    EmbeddedRedis startOnce(int port);
-  }
-
-  private static void pauseBeforeRetry() {
-    try {
-      Thread.sleep(RETRY_PAUSE_MILLIS);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new IllegalStateException("Interrupted while waiting for the embedded Redis port", e);
-    }
-  }
-
-  /**
-   * A port free at this instant. Nothing reserves it, so a caller should bind it promptly. The
-   * ordinary {@link #start()} path retries if another embedded dependency wins that race; callers
-   * that only need a deliberately unreachable address can use this value directly.
+   * A port free at this instant. Nothing reserves it, so {@link #start()} binds it at once and retries
+   * on another if a different process wins that race. It is no unreachable address: something else may
+   * listen on it a moment later. A test that needs one uses port 1, which nothing in a test run can bind.
    */
   public static int freePort() {
     try (ServerSocket socket = new ServerSocket(
