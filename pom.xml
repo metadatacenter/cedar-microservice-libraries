@@ -27,6 +27,7 @@
     <module>cedar-auth-operations-keycloak-library</module>
     <module>cedar-cache-operations-library</module>
     <module>cedar-inclusion-subgraph-library</module>
+    <module>cedar-library-integration-tests</module>
     <module>cedar-logging-operations-library</module>
     <module>cedar-permissions-operations-library</module>
     <module>cedar-queue-operations-library</module>

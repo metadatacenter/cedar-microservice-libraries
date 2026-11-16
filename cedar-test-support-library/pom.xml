@@ -17,10 +17,13 @@
   </description>
 
   <properties>
-    <!-- Line coverage measured on 2026-11-04: 77.9%. The build fails below this floor. -->
-    <cedar.coverage.line.minimum>0.75</cedar.coverage.line.minimum>
-    <!-- Branch coverage measured on 2026-10-26: 76.4%. The build fails below this floor. -->
-    <cedar.coverage.branch.minimum>0.74</cedar.coverage.branch.minimum>
+    <!-- The harness's integration tests run in cedar-library-integration-tests, so these floors count
+         only this module's unit tests. With the integration tests the harness was 77.9% of lines
+         covered; their coverage counts in the repository's merged figure.
+         Line coverage measured on 2026-11-16: 35.7%. The build fails below this floor. -->
+    <cedar.coverage.line.minimum>0.33</cedar.coverage.line.minimum>
+    <!-- Branch coverage measured on 2026-11-16: 35.4%. The build fails below this floor. -->
+    <cedar.coverage.branch.minimum>0.33</cedar.coverage.branch.minimum>
   </properties>
 
   <dependencies>
