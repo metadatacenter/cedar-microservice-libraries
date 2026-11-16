@@ -75,6 +75,13 @@
       <scope>test</scope>
     </dependency>
 
+    <!-- The embedded graph the regeneration task runs against. -->
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-test-support-library</artifactId>
+      <scope>test</scope>
+    </dependency>
+
   </dependencies>
 
 </project>
