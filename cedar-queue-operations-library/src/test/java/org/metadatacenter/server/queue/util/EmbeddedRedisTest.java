@@ -9,6 +9,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 @Tag("integration")
@@ -35,5 +37,17 @@ class EmbeddedRedisTest {
     redis.stop();
 
     assertDoesNotThrow(redis::stop, "the second stop must not raise a failure of its own");
+  }
+
+  /** A stopped server leaves no directory behind in the shared temporary directory. */
+  @Test
+  void stoppingRemovesTheServersDirectory() {
+    EmbeddedRedis redis = EmbeddedRedis.start();
+    java.nio.file.Path directory = redis.directory();
+    assertTrue(java.nio.file.Files.isDirectory(directory), "the server runs from a directory of its own");
+
+    redis.stop();
+
+    assertFalse(java.nio.file.Files.exists(directory), directory + " was left behind");
   }
 }

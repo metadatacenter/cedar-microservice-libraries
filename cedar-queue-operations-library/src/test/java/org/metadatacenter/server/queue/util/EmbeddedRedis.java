@@ -1,8 +1,13 @@
 package org.metadatacenter.server.queue.util;
 
 import redis.embedded.RedisServer;
+import redis.embedded.core.ExecutableProvider;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.stream.Stream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.util.function.IntSupplier;
@@ -23,11 +28,13 @@ public final class EmbeddedRedis implements AutoCloseable {
 
   private final RedisServer server;
   private final int port;
+  private final Path directory;
   private boolean stopped;
 
-  private EmbeddedRedis(RedisServer server, int port) {
+  private EmbeddedRedis(RedisServer server, int port, Path directory) {
     this.server = server;
     this.port = port;
+    this.directory = directory;
   }
 
   public static EmbeddedRedis start() {
@@ -49,12 +56,31 @@ public final class EmbeddedRedis implements AutoCloseable {
 
   /** Starts on a caller-chosen port, once. */
   static EmbeddedRedis startOn(int port) {
+    Path directory = null;
     try {
-      RedisServer server = RedisServer.newRedisServer().bind("127.0.0.1").port(port).build();
+      // The binary is unpacked into, and the server writes its dump to, a directory of its own, which
+      // stop() removes. Left to the library, each start left a redis-<n> directory in the shared
+      // temporary directory.
+      directory = Files.createTempDirectory("embedded-redis-");
+      RedisServer server = RedisServer.newRedisServer()
+          .executableProvider(ExecutableProvider.newJarResourceProvider(directory.toFile()))
+          .bind("127.0.0.1").port(port).build();
       server.start();
-      return new EmbeddedRedis(server, port);
+      return new EmbeddedRedis(server, port, directory);
     } catch (IOException e) {
+      deleteQuietly(directory);
       throw new IllegalStateException("Could not start the embedded Redis on port " + port, e);
+    }
+  }
+
+  private static void deleteQuietly(Path directory) {
+    if (directory == null) {
+      return;
+    }
+    try (Stream<Path> paths = Files.walk(directory)) {
+      paths.sorted(Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+    } catch (IOException ignored) {
+      // Leaving a directory behind is untidy, not a test failure.
     }
   }
 
@@ -70,6 +96,11 @@ public final class EmbeddedRedis implements AutoCloseable {
     } catch (IOException e) {
       throw new IllegalStateException("Could not find a free port for the embedded Redis", e);
     }
+  }
+
+  /** The directory the server runs from, which {@link #stop()} removes. */
+  Path directory() {
+    return directory;
   }
 
   public int port() {
@@ -90,6 +121,8 @@ public final class EmbeddedRedis implements AutoCloseable {
       server.stop();
     } catch (IOException e) {
       throw new IllegalStateException("Could not stop the embedded Redis on port " + port, e);
+    } finally {
+      deleteQuietly(directory);
     }
   }
 
