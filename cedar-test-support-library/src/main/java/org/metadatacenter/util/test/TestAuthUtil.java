@@ -103,6 +103,17 @@ public final class TestAuthUtil {
     return inMemoryUserService;
   }
 
+  /**
+   * Restores the shared service's users to the fixtures. The service lives as long as the JVM, so a
+   * role, key or preference one class writes through it would otherwise reach every later class. The
+   * class-isolation extension calls this after each test class.
+   */
+  static synchronized void resetInMemoryUserService() {
+    if (inMemoryUserService != null) {
+      inMemoryUserService.replaceAll(testUser1, testUser2, adminUser);
+    }
+  }
+
   public static void installInMemoryUserService(CedarConfig cedarConfig) {
     Authorization.setUserService(getInMemoryUserService(cedarConfig));
   }

@@ -193,6 +193,9 @@ public final class EmbeddedCedarNeo4j {
       throw e;
     }
     seeded = true;
+    // Seeding gave the fixture users new home folders. The stored user service records a home folder
+    // when it is created, so the in-memory one, which keeps copies, takes the fixtures again.
+    TestAuthUtil.resetInMemoryUserService();
   }
 
   private static void discardPartialSeed(Throwable failure) {
