@@ -42,6 +42,7 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
 
   private static final int MAX_ATTEMPTS = 60;
   private final Driver driver;
+  private final boolean ownsDriver;
   private final long delayMillis;
   private final long recheckMillis;
 
@@ -54,10 +55,24 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
   }
 
   public ArtifactCreateCleanupOutbox(Driver driver, long delayMillis, long recheckMillis) {
+    this(driver, true, delayMillis, recheckMillis);
+  }
+
+  private ArtifactCreateCleanupOutbox(Driver driver, boolean ownsDriver, long delayMillis, long recheckMillis) {
     this.driver = driver;
+    this.ownsDriver = ownsDriver;
     this.delayMillis = delayMillis;
     this.recheckMillis = recheckMillis;
     initializeSchema(driver);
+  }
+
+  /**
+   * An outbox on a driver its caller keeps: closing the outbox leaves the driver open. The outbox
+   * keeps its state in the graph, so a second outbox on the same driver stands in for a restarted
+   * process without paying for a new driver's connections.
+   */
+  public static ArtifactCreateCleanupOutbox onSharedDriver(Driver driver, long delayMillis) {
+    return new ArtifactCreateCleanupOutbox(driver, false, delayMillis, RECHECK_MILLIS);
   }
 
   /**
@@ -325,5 +340,9 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
     }
   }
 
-  @Override public void close() { driver.close(); }
+  @Override public void close() {
+    if (ownsDriver) {
+      driver.close();
+    }
+  }
 }
