@@ -11,10 +11,12 @@ import org.metadatacenter.server.logging.AppLogger;
 import org.metadatacenter.server.logging.AppLoggerQueueService;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.neo4j.configuration.GraphDatabaseInternalSettings;
+import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.harness.Neo4j;
 import org.neo4j.harness.Neo4jBuilders;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -85,6 +87,44 @@ public final class EmbeddedCedarNeo4j {
       embedded = null;
     }
     seeded = false;
+  }
+
+  /**
+   * Empties the running graph in place and seeds it again, for a class that needs a fresh graph. It
+   * deletes every node and relationship, drops every constraint and index, clears the seeded flag and
+   * then calls {@link #seed(CedarConfig)}. The server, its Bolt port and every driver connected to it
+   * stay as they are, so the reset costs a fraction of the second or more that
+   * {@link #stopAndReset()} and a new harness take. The version lifecycle lock and the constraints the
+   * admin tool restores after rebuilding a schema are created again. Other constraints an application
+   * created when it started are dropped with the rest, as they are when the harness is restarted.
+   *
+   * @throws IllegalStateException when the harness is not running
+   */
+  public static synchronized void resetAndSeed(CedarConfig cedarConfig) throws Exception {
+    if (embedded == null) {
+      throw new IllegalStateException("The embedded Neo4j is not running, so there is nothing to reset");
+    }
+    GraphDatabaseService database = embedded.defaultDatabaseService();
+    database.executeTransactionally("MATCH (n) DETACH DELETE n");
+    // A constraint owns its backing index, so the constraints go first. The token lookup indexes
+    // belong to every Neo4j database and are left in place.
+    for (String constraint : names(database, "SHOW CONSTRAINTS YIELD name RETURN name")) {
+      database.executeTransactionally("DROP CONSTRAINT `" + constraint + "` IF EXISTS");
+    }
+    for (String index : names(database, "SHOW INDEXES YIELD name, type WHERE type <> 'LOOKUP' RETURN name")) {
+      database.executeTransactionally("DROP INDEX `" + index + "` IF EXISTS");
+    }
+    seeded = false;
+    seed(cedarConfig);
+    // The running proxies created the version lifecycle lock and its constraints once and remember
+    // having done so, so the reset recreates them as the admin tool does after rebuilding the schema.
+    CedarDataServices.getInstance().getAdminServiceSession(
+        CedarRequestContextFactory.fromUser(TestAuthUtil.getAdminUser(cedarConfig))).ensureServerSchema();
+  }
+
+  private static List<String> names(GraphDatabaseService database, String query) {
+    return database.executeTransactionally(query, Map.of(),
+        result -> result.stream().map(row -> (String) row.get("name")).toList());
   }
 
   /**

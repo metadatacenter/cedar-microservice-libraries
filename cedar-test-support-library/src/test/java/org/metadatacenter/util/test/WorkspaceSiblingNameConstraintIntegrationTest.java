@@ -36,8 +36,8 @@ import java.util.Map;
  * message would turn every such 409 into a 500, and this class would fail first.
  *
  * <p>The constraints would outlive this class and refuse other classes' fixtures, so the class runs on
- * a graph of its own. It discards the shared graph before it starts and again when it finishes,
- * seeding a fresh one each time.
+ * a graph of its own. It empties and reseeds the shared graph in place before it starts and again
+ * when it finishes, which drops the constraints with everything else.
  */
 @Tag("integration")
 public class WorkspaceSiblingNameConstraintIntegrationTest {
@@ -49,9 +49,9 @@ public class WorkspaceSiblingNameConstraintIntegrationTest {
 
   @BeforeAll
   public static void oneTimeSetUp() throws Exception {
-    EmbeddedCedarNeo4j.stopAndReset();
     startSeededGraph();
     cedarConfig = CedarConfig.getInstance(CedarEnvironmentVariableProvider.getFor(SystemComponent.SERVER_RESOURCE));
+    EmbeddedCedarNeo4j.resetAndSeed(cedarConfig);
 
     // The constraints provisioning creates, after the backfill it runs first
     AdminServiceSession admin = CedarDataServices.getInstance().getAdminServiceSession(
@@ -69,9 +69,8 @@ public class WorkspaceSiblingNameConstraintIntegrationTest {
   }
 
   @AfterAll
-  public static void restoreTheSharedGraph() {
-    EmbeddedCedarNeo4j.stopAndReset();
-    startSeededGraph();
+  public static void restoreTheSharedGraph() throws Exception {
+    EmbeddedCedarNeo4j.resetAndSeed(cedarConfig);
   }
 
   private static void startSeededGraph() {
