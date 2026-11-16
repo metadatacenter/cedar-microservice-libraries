@@ -197,6 +197,41 @@ public class WorkspacePermissionIntegrationTest {
     }
   }
 
+  /**
+   * A role granted to a group gives each member exactly that role. Each arm of the grant replacement
+   * writes its own relationship, so a group Editor grant stored as Manager would hand every member
+   * grant management, moves and OpenView while the user grants above stayed correct.
+   */
+  @Test
+  public void eachGroupRoleGivesItsMembersExactlyItsDefinedCapabilities() {
+    GroupServiceSession user1Groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
+    FolderServerGroup group = user1Groups.createGroup("direct-group-role-test-group",
+        "Group for the group role capability test");
+    CedarGroupUsersRequest membership = new CedarGroupUsersRequest();
+    membership.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user1.getId()), true, true));
+    membership.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user2.getId()), false, true));
+    Assertions.assertFalse(user1Groups.updateGroupUsers(group.getResourceId(), membership).isError());
+
+    for (ResourceRole role : ResourceRole.values()) {
+      FolderServerFolder folder = createFolderUnderUser1Home("Group Role " + role.getValue());
+      ResourcePermissionsRequest request = requestOwnedByUser1();
+      request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
+          new ResourcePermissionGroup(group.getId()), role));
+      updatePermissionsAsUser1(folder, request);
+
+      ResourcePermissionServiceSession permissions = permissionsOf(user2Context);
+      Assertions.assertEquals(role, permissions.getResourceAuthority(folder.getResourceId()).highestSatisfiedRole(),
+          "a member of a group granted " + role + " resolves to " + role);
+      for (ResourceCapability capability : ResourceCapability.values()) {
+        boolean expected = capability != ResourceCapability.TRANSFER_OWNERSHIP
+            && role.provides(CedarResourceType.FOLDER, capability);
+        Assertions.assertEquals(expected,
+            permissions.userHasCapability(folder.getResourceId(), capability),
+            "group " + role + " has the wrong result for " + capability);
+      }
+    }
+  }
+
   @Test
   public void ownershipProvidesManagerCapabilitiesAndTransfer() {
     FolderServerFolder ownedFolder = createFolderUnderUser1Home("Owned Capability Folder");

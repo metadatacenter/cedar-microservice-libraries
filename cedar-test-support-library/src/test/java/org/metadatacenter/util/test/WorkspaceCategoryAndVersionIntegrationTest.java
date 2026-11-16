@@ -44,6 +44,8 @@ import org.metadatacenter.server.security.model.permission.category.CategoryPerm
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUser;
 import org.metadatacenter.server.security.model.permission.category.CategoryPermissionUserPermissionPair;
 import org.metadatacenter.server.security.model.permission.category.CategoryRole;
+import org.metadatacenter.server.security.model.auth.CedarGroupUsersRequest;
+import org.metadatacenter.server.security.model.auth.CedarGroupUserRequest;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUser;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionUserPermissionPair;
 import org.metadatacenter.server.security.model.permission.resource.ResourcePermissionsRequest;
@@ -262,6 +264,50 @@ public class WorkspaceCategoryAndVersionIntegrationTest {
         "The Manager role should inherit down the category hierarchy");
     Assertions.assertFalse(user2CategoryPermissions.userIsOwnerOfCategory(parent.getResourceId()),
         "The grant should not make user2 the category owner");
+  }
+
+  /**
+   * Each category role, granted to a user or to a group, gives exactly its capabilities. Every role and
+   * principal kind has its own arm in the grant replacement, so each is granted here once. Everyone
+   * reads every category through the root's Viewer grant, which the expected set allows for.
+   */
+  @Test
+  public void eachCategoryRoleGrantedToAUserOrAGroupGivesExactlyItsCapabilities() {
+    GroupServiceSession user1Groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
+    FolderServerGroup group = user1Groups.createGroup("category-role-test-group",
+        "Group for the category role capability test");
+    CedarGroupUsersRequest membership = new CedarGroupUsersRequest();
+    membership.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user1.getId()), true, true));
+    membership.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user2.getId()), false, true));
+    Assertions.assertFalse(user1Groups.updateGroupUsers(group.getResourceId(), membership).isError());
+
+    for (boolean throughGroup : new boolean[]{false, true}) {
+      for (CategoryRole role : CategoryRole.values()) {
+        String principal = throughGroup ? "group" : "user";
+        FolderServerCategory category = createCategoryAsUser1(rootCategoryId,
+            "Category Role " + principal + " " + role.getValue());
+        CategoryPermissionRequest request = new CategoryPermissionRequest();
+        request.setOwner(new CategoryPermissionUser(user1.getId()));
+        if (throughGroup) {
+          request.getGroupPermissions().add(new CategoryPermissionGroupPermissionPair(
+              new CategoryPermissionGroup(group.getId()), role));
+        } else {
+          request.getUserPermissions().add(new CategoryPermissionUserPermissionPair(
+              new CategoryPermissionUser(user2.getId()), role));
+        }
+        BackendCallResult result = categoryPermissionsOf(user1Context)
+            .updateCategoryPermissions(category.getResourceId(), request);
+        Assertions.assertFalse(result.isError(), principal + " " + role + ": " + result.getFirstErrorMessage());
+
+        CategoryPermissionServiceSession user2Permissions = categoryPermissionsOf(user2Context);
+        for (CategoryCapability capability : CategoryCapability.values()) {
+          boolean expected = capability != CategoryCapability.TRANSFER_OWNERSHIP
+              && (role.provides(capability) || CategoryRole.VIEWER.provides(capability));
+          Assertions.assertEquals(expected, user2Permissions.userHasCapability(category.getResourceId(), capability),
+              principal + " " + role + " has the wrong result for " + capability);
+        }
+      }
+    }
   }
 
   @Test
