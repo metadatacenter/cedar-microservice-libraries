@@ -7,6 +7,8 @@ import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
+import org.metadatacenter.server.AdminServiceSession;
+import org.metadatacenter.server.neo4j.GraphSchema;
 import org.metadatacenter.server.logging.AppLogger;
 import org.metadatacenter.server.logging.AppLoggerQueueService;
 import org.metadatacenter.server.security.model.user.CedarUser;
@@ -35,9 +37,10 @@ import java.util.Map;
  * data services and seeds before any application code runs, on the configuration instance the
  * application will then reuse.
  *
- * Seeding creates the graph skeleton the way provisioning does: the global objects (root
- * folders, Everybody group, root category) through the admin session, then the TestAuthUtil
- * users with Everybody membership and home folders.
+ * Seeding creates the graph the way provisioning does: the uniqueness constraints the admin tool
+ * creates ({@link GraphSchema#UNIQUE_CONSTRAINTS}), the global objects (root folders, Everybody
+ * group, root category) through the admin session, then the TestAuthUtil users with Everybody
+ * membership and home folders.
  *
  * The harness is closed when the JVM exits. It deletes its store directory only on close, so
  * without the close every test JVM left its whole store in the temporary directory.
@@ -175,12 +178,29 @@ public final class EmbeddedCedarNeo4j {
     }
     seeded = true;
     CedarUser admin = TestAuthUtil.getAdminUser(cedarConfig);
-    CedarDataServices.getInstance().getNeoUserService().createUser(admin);
     CedarRequestContext adminContext = CedarRequestContextFactory.fromUser(admin);
+    createProductionConstraints(adminContext);
+    CedarDataServices.getInstance().getNeoUserService().createUser(admin);
     CedarDataServices.getInstance().getAdminServiceSession(adminContext).ensureGlobalObjectsExists();
 
     seedUser(TestAuthUtil.getTestUser1(cedarConfig));
     seedUser(TestAuthUtil.getTestUser2(cedarConfig));
+  }
+
+  /**
+   * Creates the uniqueness constraints a provisioned graph carries, so that a suite meets the rules the
+   * deployed graph enforces: a second resource with an identifier already taken, a second group whose
+   * name differs only in case, or a second folder or category of the same name under one parent is
+   * refused here as it is in production.
+   */
+  private static void createProductionConstraints(CedarRequestContext adminContext) {
+    AdminServiceSession admin = CedarDataServices.getInstance().getAdminServiceSession(adminContext);
+    for (GraphSchema.UniqueConstraint constraint : GraphSchema.UNIQUE_CONSTRAINTS) {
+      if (!admin.createUniqueConstraint(constraint.label(), constraint.properties())) {
+        throw new IllegalStateException("Could not create the uniqueness constraint on "
+            + constraint.label().getSimpleLabel() + " " + constraint.properties());
+      }
+    }
   }
 
   private static void seedUser(CedarUser user) throws Exception {
