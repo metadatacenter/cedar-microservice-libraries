@@ -70,6 +70,38 @@ class Neo4jSearchPermissionOutboxTest {
         result -> result.stream().map(row -> (String) row.get("name")).toList());
   }
 
+  /**
+   * A permission change records its event in its own transaction, so the event commits with the change
+   * and is rolled back with it: an ACL change can neither commit without its event nor leave one
+   * behind for a change that never happened.
+   */
+  @Test
+  void anEventWrittenInTheChangesTransactionCommitsAndRollsBackWithIt() {
+    try (var driver = GraphDatabase.driver(neo4j.boltURI(), AuthTokens.none());
+         var outbox = new Neo4jSearchPermissionOutbox(driver);
+         var service = new SearchPermissionEnqueueService(
+             org.mockito.Mockito.mock(org.metadatacenter.server.queue.util.PermissionQueueService.class), outbox)) {
+      var folder = org.metadatacenter.id.CedarFolderId.build("https://repo.metadatacenter.orgx/folders/changed");
+      var template = org.metadatacenter.id.CedarUntypedFilesystemResourceId.build(
+          "https://repo.metadatacenter.orgx/templates/rolled-back");
+      try (var session = driver.session()) {
+        session.writeTransaction(tx -> {
+          service.permissionsChangedEvent(folder, true).writeIn(tx);
+          return null;
+        });
+        try (var tx = session.beginTransaction()) {
+          service.permissionsChangedEvent(template, false).writeIn(tx);
+          tx.rollback();
+        }
+      }
+
+      var pending = outbox.pending(100);
+      assertEquals(1, pending.size(), "only the committed change's event is recorded");
+      assertEquals(folder.getId(), pending.get(0).event().getId());
+      assertEquals(SearchPermissionQueueEventType.FOLDER_PERMISSION_CHANGED, pending.get(0).event().getEventType());
+    }
+  }
+
   @Test
   void eventsSurviveAClientRestartAndDisappearOnlyAfterAcknowledgement() {
     String outboxId;

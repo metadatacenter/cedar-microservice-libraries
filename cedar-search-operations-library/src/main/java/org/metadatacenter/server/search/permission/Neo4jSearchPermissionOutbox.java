@@ -80,6 +80,16 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
 
   @Override
   public String append(SearchPermissionQueueEvent event) {
+    try (Session session = driver.session()) {
+      return session.writeTransaction(tx -> appendIn(tx, event));
+    }
+  }
+
+  /**
+   * Records the event in a transaction the caller owns, so that it commits with the change that
+   * requires it. Returns the entry's outbox identifier.
+   */
+  static String appendIn(Transaction tx, SearchPermissionQueueEvent event) {
     String outboxId = UUID.randomUUID().toString();
     String query = "CREATE (e:" + LABEL + " {outboxId: $outboxId, resourceId: $resourceId, "
         + "eventType: $eventType, createdAt: $createdAt, createdAtTS: $createdAtTS})";
@@ -89,12 +99,7 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
         "eventType", event.getEventType().name(),
         "createdAt", event.getCreatedAt(),
         "createdAtTS", event.getCreatedAtTS());
-    try (Session session = driver.session()) {
-      session.writeTransaction(tx -> {
-        tx.run(query, parameters).consume();
-        return null;
-      });
-    }
+    tx.run(query, parameters).consume();
     return outboxId;
   }
 

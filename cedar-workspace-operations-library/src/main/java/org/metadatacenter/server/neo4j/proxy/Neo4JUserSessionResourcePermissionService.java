@@ -1,5 +1,7 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import org.metadatacenter.server.GraphWrite;
+
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.id.CedarGroupId;
@@ -51,7 +53,8 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
 
   @Override
   public BackendCallResult<VersionedResourcePermissions> updateResourcePermissions(
-      CedarFilesystemResourceId resourceId, ResourcePermissionsRequest request, RevisionPrecondition precondition) {
+      CedarFilesystemResourceId resourceId, ResourcePermissionsRequest request, RevisionPrecondition precondition,
+      GraphWrite alongside) {
 
     ResourcePermissionRequestValidator prv = new ResourcePermissionRequestValidator(this, proxies, resourceId, request);
     BackendCallResult<VersionedResourcePermissions> bcr = prv.getCallResult();
@@ -59,7 +62,7 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
       return bcr;
     } else {
       CedarNodePermissionsWithExtract newPermissions = prv.getPermissions();
-      VersionedResourcePermissions updated = proxies.permission().replacePermissions(resourceId, newPermissions, precondition);
+      VersionedResourcePermissions updated = proxies.permission().replacePermissions(resourceId, newPermissions, precondition, alongside);
       if (updated == null) {
         BackendCallResult<VersionedResourcePermissions> failure = new BackendCallResult<>();
         failure.addError(org.metadatacenter.error.CedarErrorType.SERVER_ERROR)
@@ -73,7 +76,8 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
 
   @Override
   public BackendCallResult<VersionedResourcePermissions> transferResourceOwnership(
-      CedarFilesystemResourceId resourceId, CedarUserId newOwnerId, RevisionPrecondition precondition) {
+      CedarFilesystemResourceId resourceId, CedarUserId newOwnerId, RevisionPrecondition precondition,
+      GraphWrite alongside) {
     BackendCallResult<VersionedResourcePermissions> result = new BackendCallResult<>();
     FileSystemResource resource = proxies.filesystemResource().findResourceById(resourceId);
     if (resource == null) {
@@ -106,7 +110,7 @@ public class Neo4JUserSessionResourcePermissionService extends AbstractNeo4JUser
       return result;
     }
     VersionedResourcePermissions transferred = proxies.permission().transferOwnership(
-        resourceId, cu.getResourceId(), newOwnerId, precondition);
+        resourceId, cu.getResourceId(), newOwnerId, precondition, alongside);
     if (transferred == null) {
       result.addError(org.metadatacenter.error.CedarErrorType.SERVER_ERROR)
           .message("Ownership could not be transferred")
