@@ -176,6 +176,35 @@ public class MaterializedPermissionIntegrationTest {
     Assertions.assertEquals(ResourceRole.MANAGER, permissions.getUserRoles().get(user1.getId()));
   }
 
+  /**
+   * Shared with Me leaves out what Everybody may read, whether the public grant is the resource's own
+   * or comes from a folder above it. The search index's filter excludes both, so a listing with no
+   * search term and a searched listing hold the same resources. A direct grant to user 2 does not
+   * bring a publicly readable artifact back into the listing.
+   */
+  @Test
+  public void sharedWithMeLeavesOutWhatEverybodyMayReadAndCountsWhatItLists() throws Exception {
+    org.metadatacenter.server.FolderServiceSession user2Folders = CedarDataServices.getInstance()
+        .getFolderServiceSession(CedarRequestContextFactory.fromUser(user2));
+    java.util.List<CedarResourceType> types = java.util.List.of(CedarResourceType.FOLDER, CedarResourceType.FIELD,
+        CedarResourceType.ELEMENT, CedarResourceType.TEMPLATE, CedarResourceType.INSTANCE);
+    java.util.List<String> listed = user2Folders.viewSharedWithMe(types,
+            org.metadatacenter.server.security.model.user.ResourceVersionFilter.ALL,
+            org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter.ALL,
+            1000, 0, java.util.List.of("name"))
+        .stream().map(org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract::getId).toList();
+
+    Assertions.assertTrue(listed.contains(sharedViewer.getId()), "a direct grant is listed: " + listed);
+    Assertions.assertTrue(listed.contains(sharedFolder.getId()), "a shared folder is listed: " + listed);
+    Assertions.assertFalse(listed.contains(publicFolder.getId()), "a public folder is not listed: " + listed);
+    Assertions.assertFalse(listed.contains(insidePublicFolder.getId()),
+        "an artifact that inherits public read is not listed, although user 2 holds a direct grant: " + listed);
+    Assertions.assertEquals(listed.size(), user2Folders.viewSharedWithMeCount(types,
+            org.metadatacenter.server.security.model.user.ResourceVersionFilter.ALL,
+            org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter.ALL),
+        "the count agrees with the listing");
+  }
+
   // ── fixtures and helpers ───────────────────────────────────────────────────
 
   private static CedarNodeMaterializedPermissions materialized(org.metadatacenter.model.folderserver.basic.FileSystemResource resource) {
