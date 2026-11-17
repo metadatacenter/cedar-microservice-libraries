@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.BindException;
+import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -37,14 +38,7 @@ class TcpFaultProxyTest {
         proxy.failConnections();
 
         assertTrue(endedOrReset(open), "a connection open when the outage began must end");
-        try (Socket during = connect(proxy)) {
-          try {
-            during.getOutputStream().write(41);
-          } catch (SocketException alreadyReset) {
-            // The reset can arrive before the write; either way nothing is forwarded.
-          }
-          assertTrue(endedOrReset(during), "a connection made during the outage must not be forwarded");
-        }
+        assertTrue(aNewConnectionIsNotForwarded(proxy), "a connection made during the outage must not be forwarded");
         assertThrows(BindException.class, () -> {
           try (ServerSocket ignored = new ServerSocket(proxy.port(), 1, InetAddress.getByName("127.0.0.1"))) {
             // The proxy must retain this exact address until close().
@@ -64,6 +58,30 @@ class TcpFaultProxyTest {
     Socket socket = new Socket("127.0.0.1", proxy.port());
     socket.setSoTimeout(5_000);
     return socket;
+  }
+
+  /**
+   * True when a connection made now ends or resets without forwarding. Under load the proxy can accept
+   * and reset the connection before connect returns, which also forwards nothing. A refused connection
+   * means the listener is gone, so it is thrown rather than counted.
+   */
+  private static boolean aNewConnectionIsNotForwarded(TcpFaultProxy proxy) throws IOException {
+    Socket during;
+    try {
+      during = connect(proxy);
+    } catch (ConnectException refused) {
+      throw refused;
+    } catch (SocketException resetWhileConnecting) {
+      return true;
+    }
+    try (during) {
+      try {
+        during.getOutputStream().write(41);
+      } catch (SocketException alreadyReset) {
+        // The reset can arrive before the write; either way nothing is forwarded.
+      }
+      return endedOrReset(during);
+    }
   }
 
   private static void assertEchoes(Socket socket, int value) throws IOException {
