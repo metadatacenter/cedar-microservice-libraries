@@ -487,9 +487,17 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
           .should(QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, value));
       String pattern = queryPattern(term.getText());
       if (!hasWildcard(term.getText())) pattern = "*" + pattern + "*";
-      return QueryBuilders.boolQuery()
+      BoolQueryBuilder matches = QueryBuilders.boolQuery()
           .should(QueryBuilders.queryStringQuery(pattern).field(INFO_SCHEMA_NAME + ".raw").boost(10))
           .should(QueryBuilders.queryStringQuery(pattern).field(SUMMARY_RAW_TEXT));
+      // Text analysis splits a code such as atlas-1611 into adjacent terms. A wildcard
+      // containing the hyphen cannot match those terms. Also search that word sequence,
+      // without broadening explicit wildcards or other query syntax.
+      if (value.matches("[\\p{L}\\p{N}]+(?:-[\\p{L}\\p{N}]+)+")) {
+        matches.should(QueryBuilders.matchPhraseQuery(INFO_SCHEMA_NAME + ".raw", value).boost(10));
+        matches.should(QueryBuilders.matchPhraseQuery(SUMMARY_RAW_TEXT, value));
+      }
+      return matches;
     }
     BoolQueryBuilder fields = QueryBuilders.boolQuery();
     if (!fieldName.equals("*") || UnescapedCharSequence.wasEscaped(term.getField(), 0)) {
