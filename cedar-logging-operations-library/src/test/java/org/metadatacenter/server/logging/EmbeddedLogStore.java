@@ -149,10 +149,17 @@ final class EmbeddedLogStore {
     }
   }
 
+  /**
+   * Empties every table by recreating it. A DELETE would only delete-mark the rows, and InnoDB's purge removes them
+   * later, in the background, while the next test runs. MariaDB 11.4.5 can then answer a backward scan of the primary
+   * key, such as {@code MAX(id)} or {@code ORDER BY id DESC LIMIT 1}, as if the table were empty, when the scan crosses
+   * delete-marked rows that purge is removing at that moment. A test whose rows sat below the 20,000 rows another test
+   * had left saw {@code MAX(id)} return nothing, so the prune range it computed ended at id 1.
+   */
   void clear() {
     inTransaction(session -> {
       for (String table : TABLES) {
-        session.createNativeMutationQuery("DELETE FROM " + table).executeUpdate();
+        session.createNativeMutationQuery("TRUNCATE TABLE " + table).executeUpdate();
       }
       return null;
     });

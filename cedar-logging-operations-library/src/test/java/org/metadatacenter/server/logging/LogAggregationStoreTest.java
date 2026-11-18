@@ -192,7 +192,9 @@ class LogAggregationStoreTest {
     range = store.aggregation.requestPruneRange(cutoff);
     assertEquals(110, range[0]);
     assertEquals(112, range[1], "with nothing complete waiting, the walk runs past the last row");
-    // A whole-estate build once counted 0 here, and only there. The message records what that pass saw.
+    // Builds under load twice counted 0 here, because MAX(id) found no row and the range ended at id 1. The rows an
+    // earlier test had deleted were still being purged above id 111; EmbeddedLogStore.clear() says why that matters.
+    // The message records what the pass saw.
     long pruned = prune(true, cutoff, 2);
     assertEquals(1, pruned, () -> "the pass walked ids " + walked[0] + " to " + walked[1] + " over rows "
         + store.column("SELECT CONCAT(id, ' aggregatedAt=', COALESCE(aggregatedAt, 'null'), ' requestTime=', "
