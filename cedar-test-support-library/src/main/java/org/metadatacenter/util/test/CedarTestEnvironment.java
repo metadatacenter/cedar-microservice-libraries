@@ -39,7 +39,6 @@ public final class CedarTestEnvironment {
     // Quota integration tests supply their own isolated Redis; ordinary suites stay backend-free.
     put(env, CEDAR_RATE_LIMIT_MODE, "off");
     put(env, CEDAR_HOST, "metadatacenter.orgx");
-    put(env, CEDAR_NET_GATEWAY, "127.0.0.1");
     put(env, CEDAR_KEYCLOAK_ALLOW_INSECURE_TLS, "false");
 
     // Every service now declares its own version, and the monitor also declares CEDAR_HOME, because
@@ -55,7 +54,6 @@ public final class CedarTestEnvironment {
     put(env, CEDAR_ADMIN_USER_API_KEY, "1234");
     put(env, CEDAR_CADSR_ADMIN_USER_API_KEY, "5678");
     put(env, CEDAR_CADSR_ONTOLOGIES_FOLDER, "/tmp/cadsr-ontologies");
-    put(env, CEDAR_SALT_API_KEY, "saltme");
 
     put(env, CEDAR_NEO4J_HOST, "127.0.0.1");
     put(env, CEDAR_NEO4J_BOLT_PORT, "7687");
@@ -69,7 +67,6 @@ public final class CedarTestEnvironment {
 
     put(env, CEDAR_OPENSEARCH_HOST, "127.0.0.1");
     put(env, CEDAR_OPENSEARCH_REST_PORT, "9200");
-    put(env, CEDAR_OPENSEARCH_TRANSPORT_PORT, "9300");
 
     put(env, CEDAR_REDIS_PERSISTENT_HOST, "127.0.0.1");
     put(env, CEDAR_REDIS_PERSISTENT_PORT, "6379");
@@ -118,28 +115,17 @@ public final class CedarTestEnvironment {
     put(env, CEDAR_TRUSTED_FOLDERS,
         "{\\\"caDSR\\\":[\\\"https://repo.metadatacenter.orgx/folders/00000000-1111-2222-3333-444444444444\\\"]}");
 
-    putServer(env, CEDAR_ARTIFACT_SERVER_HOST, CEDAR_ARTIFACT_HTTP_PORT, CEDAR_ARTIFACT_ADMIN_PORT,
-        CEDAR_ARTIFACT_STOP_PORT, 9001);
-    putServer(env, CEDAR_REPO_SERVER_HOST, CEDAR_REPO_HTTP_PORT, CEDAR_REPO_ADMIN_PORT,
-        CEDAR_REPO_STOP_PORT, 9002);
-    putServer(env, CEDAR_TERMINOLOGY_SERVER_HOST, CEDAR_TERMINOLOGY_HTTP_PORT, CEDAR_TERMINOLOGY_ADMIN_PORT,
-        CEDAR_TERMINOLOGY_STOP_PORT, 9004);
-    putServer(env, CEDAR_USER_SERVER_HOST, CEDAR_USER_HTTP_PORT, CEDAR_USER_ADMIN_PORT,
-        CEDAR_USER_STOP_PORT, 9005);
-    putServer(env, CEDAR_RESOURCE_SERVER_HOST, CEDAR_RESOURCE_HTTP_PORT, CEDAR_RESOURCE_ADMIN_PORT,
-        CEDAR_RESOURCE_STOP_PORT, 9007);
-    putServer(env, CEDAR_GROUP_SERVER_HOST, CEDAR_GROUP_HTTP_PORT, CEDAR_GROUP_ADMIN_PORT,
-        CEDAR_GROUP_STOP_PORT, 9009);
-    putServer(env, CEDAR_WORKER_SERVER_HOST, CEDAR_WORKER_HTTP_PORT, CEDAR_WORKER_ADMIN_PORT,
-        CEDAR_WORKER_STOP_PORT, 9011);
-    putServer(env, CEDAR_MESSAGING_SERVER_HOST, CEDAR_MESSAGING_HTTP_PORT, CEDAR_MESSAGING_ADMIN_PORT,
-        CEDAR_MESSAGING_STOP_PORT, 9012);
-    putServer(env, CEDAR_OPENVIEW_SERVER_HOST, CEDAR_OPENVIEW_HTTP_PORT, CEDAR_OPENVIEW_ADMIN_PORT,
-        CEDAR_OPENVIEW_STOP_PORT, 9013);
-    putServer(env, CEDAR_MONITOR_SERVER_HOST, CEDAR_MONITOR_HTTP_PORT, CEDAR_MONITOR_ADMIN_PORT,
-        CEDAR_MONITOR_STOP_PORT, 9014);
-    putServer(env, CEDAR_BRIDGE_SERVER_HOST, CEDAR_BRIDGE_HTTP_PORT, CEDAR_BRIDGE_ADMIN_PORT,
-        CEDAR_BRIDGE_STOP_PORT, 9015);
+    putServer(env, CEDAR_ARTIFACT_SERVER_HOST, CEDAR_ARTIFACT_HTTP_PORT, CEDAR_ARTIFACT_ADMIN_PORT, 9001);
+    putServer(env, CEDAR_REPO_SERVER_HOST, CEDAR_REPO_HTTP_PORT, CEDAR_REPO_ADMIN_PORT, 9002);
+    putServer(env, CEDAR_TERMINOLOGY_SERVER_HOST, CEDAR_TERMINOLOGY_HTTP_PORT, CEDAR_TERMINOLOGY_ADMIN_PORT, 9004);
+    putServer(env, CEDAR_USER_SERVER_HOST, CEDAR_USER_HTTP_PORT, CEDAR_USER_ADMIN_PORT, 9005);
+    putServer(env, CEDAR_RESOURCE_SERVER_HOST, CEDAR_RESOURCE_HTTP_PORT, CEDAR_RESOURCE_ADMIN_PORT, 9007);
+    putServer(env, CEDAR_GROUP_SERVER_HOST, CEDAR_GROUP_HTTP_PORT, CEDAR_GROUP_ADMIN_PORT, 9009);
+    putServer(env, CEDAR_WORKER_SERVER_HOST, CEDAR_WORKER_HTTP_PORT, CEDAR_WORKER_ADMIN_PORT, 9011);
+    putServer(env, CEDAR_MESSAGING_SERVER_HOST, CEDAR_MESSAGING_HTTP_PORT, CEDAR_MESSAGING_ADMIN_PORT, 9012);
+    putServer(env, CEDAR_OPENVIEW_SERVER_HOST, CEDAR_OPENVIEW_HTTP_PORT, CEDAR_OPENVIEW_ADMIN_PORT, 9013);
+    putServer(env, CEDAR_MONITOR_SERVER_HOST, CEDAR_MONITOR_HTTP_PORT, CEDAR_MONITOR_ADMIN_PORT, 9014);
+    putServer(env, CEDAR_BRIDGE_SERVER_HOST, CEDAR_BRIDGE_HTTP_PORT, CEDAR_BRIDGE_ADMIN_PORT, 9015);
 
     return env;
   }
@@ -171,12 +157,10 @@ public final class CedarTestEnvironment {
   }
 
   private static void putServer(Map<String, String> env, CedarEnvironmentVariable host,
-                                CedarEnvironmentVariable httpPort, CedarEnvironmentVariable adminPort,
-                                CedarEnvironmentVariable stopPort, int basePort) {
+                                CedarEnvironmentVariable httpPort, CedarEnvironmentVariable adminPort, int basePort) {
     put(env, host, "127.0.0.1");
     put(env, httpPort, String.valueOf(basePort));
     put(env, adminPort, String.valueOf(basePort + 100));
-    put(env, stopPort, String.valueOf(basePort + 200));
   }
 
   private static void put(Map<String, String> env, CedarEnvironmentVariable variable, String value) {

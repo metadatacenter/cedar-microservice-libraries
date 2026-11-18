@@ -43,7 +43,6 @@ class ElasticsearchManagementServiceTest {
   @BeforeEach
   void setUp() {
     OpensearchConfig opensearchConfig = mock(OpensearchConfig.class);
-    when(opensearchConfig.getClusterName()).thenReturn("test-cluster");
     client = mock(RestHighLevelClient.class);
     indicesClient = mock(IndicesClient.class);
     when(client.indices()).thenReturn(indicesClient);

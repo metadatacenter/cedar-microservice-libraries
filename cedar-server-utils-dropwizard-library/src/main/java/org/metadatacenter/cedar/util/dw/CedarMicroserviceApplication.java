@@ -46,7 +46,6 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static org.eclipse.jetty.ee10.servlets.CrossOriginFilter.*;
@@ -201,11 +200,6 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     // that reads it: cedar-services.sh polls 127.0.0.1, and the container health check curls localhost
     // from inside the container.
     adminConnector.setBindHost("127.0.0.1");
-    System.setProperty("STOP.PORT", String.valueOf(getServerStopPort(configuration)));
-    // A stop key anyone can derive from the service name is not a key. Nothing drives this connector —
-    // cedar-services.sh stops a service by signalling its pid — so a value that exists only in this
-    // process is enough, and leaves no shutdown that can be triggered from outside it.
-    System.setProperty("STOP.KEY", UUID.randomUUID().toString());
 
     log.info("**************************************************************");
     log.info("********** Running CEDAR microservice " + getName());
@@ -256,10 +250,6 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
 
   private Integer getApplicationAdminPort(T configuration) {
     return cedarConfig.getServers().get(getServerName()).getAdminPort();
-  }
-
-  private Integer getServerStopPort(T configuration) {
-    return cedarConfig.getServers().get(getServerName()).getStopPort();
   }
 
   private int getHttpPort(T configuration) {
