@@ -98,6 +98,24 @@ final class EmbeddedLogStore {
 
   static synchronized EmbeddedLogStore start() {
     if (instance == null) {
+      DB db = startOnAFreePort();
+      instance = new EmbeddedLogStore(db.getConfiguration().getPort());
+    }
+    instance.clear();
+    return instance;
+  }
+
+  private static final int START_ATTEMPTS = 3;
+
+  /**
+   * MariaDB4j finds a free port by binding one and releasing it, and the server binds it later, so another process can
+   * take it in between. A failed start is therefore retried, each time on a port found afresh, as the test support
+   * library's EmbeddedCedarMySql does.
+   */
+  private static DB startOnAFreePort() {
+    IllegalStateException failure = null;
+    for (int attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
+      DB candidate = null;
       try {
         DBConfigurationBuilder configuration = DBConfigurationBuilder.newBuilder();
         configuration.setBaseDir(Files.createTempDirectory("mdb-base-").toFile());
@@ -108,15 +126,27 @@ final class EmbeddedLogStore {
         configuration.setDeletingTemporaryBaseAndDataDirsOnShutdown(true);
         configuration.addArg("--bind-address=127.0.0.1");
         configuration.setPort(0);
-        DB db = PrivateTemporaryDirectoryDB.create(configuration.build());
-        db.start();
-        instance = new EmbeddedLogStore(db.getConfiguration().getPort());
+        candidate = PrivateTemporaryDirectoryDB.create(configuration.build());
+        candidate.start();
+        return candidate;
       } catch (Exception e) {
-        throw new IllegalStateException("Could not start the embedded MariaDB", e);
+        failure = new IllegalStateException("Could not start the embedded MariaDB (attempt " + attempt + " of "
+            + START_ATTEMPTS + ")", e);
+        stopQuietly(candidate);
       }
     }
-    instance.clear();
-    return instance;
+    throw failure;
+  }
+
+  private static void stopQuietly(DB candidate) {
+    if (candidate == null) {
+      return;
+    }
+    try {
+      candidate.stop();
+    } catch (Exception ignored) {
+      // A server that never started has nothing to stop.
+    }
   }
 
   void clear() {
