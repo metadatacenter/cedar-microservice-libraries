@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.metadatacenter.bridge.CedarDataServices;
+import org.metadatacenter.id.CedarFilesystemResourceId;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.exception.CedarProcessingException;
@@ -246,10 +247,14 @@ class SearchIndexLifecycleTest {
     doAnswer(call -> whole(call.getArgument(0), call.getArgument(1)))
         .when(indexing).createIndexDocument(any(), any(), any(), any(), anyBoolean());
 
-    IndexRebuildRegistry.begin(rebuilding);
-    indexing.updatePermissionProjections(List.of(granted(T1), granted(T2), granted(T3)));
-    assertEquals(Set.of(T1, T2, T3), IndexRebuildRegistry.liveTouched(), "the rebuild must write none of them back");
-    IndexRebuildRegistry.end(rebuilding);
+    CedarDataServices services = dataServices(List.of());
+    try (var data = mockStatic(CedarDataServices.class)) {
+      data.when(CedarDataServices::getInstance).thenReturn(services);
+      IndexRebuildRegistry.begin(rebuilding);
+      indexing.updatePermissionProjections(List.of(granted(T1), granted(T2), granted(T3)));
+      assertEquals(Set.of(T1, T2, T3), IndexRebuildRegistry.liveTouched(), "the rebuild must write none of them back");
+      IndexRebuildRegistry.end(rebuilding);
+    }
 
     for (String index : List.of(live, rebuilding)) {
       Map<String, ObjectNode> documents = openSearch.index(index).documents;
@@ -264,6 +269,41 @@ class SearchIndexLifecycleTest {
     assertEquals("whole", openSearch.index(rebuilding).documents.get(T2).path("summaryText").asText(),
         "an index without the resource gets all of it, not a bare patch");
     assertEquals("whole", openSearch.index(rebuilding).documents.get(T3).path("summaryText").asText());
+  }
+
+  /**
+   * A permission change can race a delete: the projection read the resource from the graph, the delete
+   * removed the node and then the document, and the projection found no document to patch. Writing the
+   * whole document back would leave a deleted resource searchable, counted and paged over, so the
+   * projection reads the graph again after the write and removes what it wrote, in both indices.
+   */
+  @Test
+  void aPermissionChangeRacingADeleteLeavesNoDocumentBehind() throws Exception {
+    String live = alias + "-2026-01-01t000000";
+    String rebuilding = alias + "-2026-02-01t000000";
+    management.createSearchIndex(live);
+    management.addAlias(live, alias);
+    management.createSearchIndex(rebuilding);
+    new ElasticsearchIndexingWorker(live, client).addToIndex(withContent(T1), T1);
+    NodeIndexingService indexing = spy(ElasticsearchServiceFactory.getInstance(config).nodeIndexingService());
+    doAnswer(call -> whole(call.getArgument(0), call.getArgument(1)))
+        .when(indexing).createIndexDocument(any(), any(), any(), any(), anyBoolean());
+
+    CedarDataServices services = dataServices(List.of(), Set.of(T2, T3));
+    try (var data = mockStatic(CedarDataServices.class)) {
+      data.when(CedarDataServices::getInstance).thenReturn(services);
+      IndexRebuildRegistry.begin(rebuilding);
+      indexing.updatePermissionProjections(List.of(granted(T1), granted(T2)));
+      FolderServerTemplate single = new FolderServerTemplate();
+      single.setId(T3);
+      indexing.updatePermissionProjection(single, grants(T3), null, null);
+      IndexRebuildRegistry.end(rebuilding);
+    }
+
+    for (String index : List.of(live, rebuilding)) {
+      assertEquals(Set.of(T1), openSearch.index(index).documents.keySet(),
+          index + ": only the resource the graph still holds may stay indexed");
+    }
   }
 
   /**
@@ -453,7 +493,19 @@ class SearchIndexLifecycleTest {
 
   /** The graph a rebuild reads: these resources on one page, each shared with the test group. */
   private static CedarDataServices dataServices(List<FileSystemResource> graph) {
+    return dataServices(graph, Set.of());
+  }
+
+  /** Every resource exists in the graph except those named as deleted. */
+  private static CedarDataServices dataServices(List<FileSystemResource> graph, Set<String> deleted) {
     FolderServiceSession folders = mock(FolderServiceSession.class);
+    when(folders.findResourceById(any())).thenAnswer(call -> {
+      CedarFilesystemResourceId id = call.getArgument(0);
+      if (deleted.contains(id.getId())) return null;
+      FolderServerTemplate stored = new FolderServerTemplate();
+      stored.setId(id.getId());
+      return stored;
+    });
     List<FolderServerResourceExtract> page = graph.stream().map(FolderServerResourceExtract::fromNode).toList();
     when(folders.findAllNodes(anyInt(), anyInt(), any())).thenReturn(page);
     when(folders.findAllNodesCount()).thenReturn((long) page.size());
