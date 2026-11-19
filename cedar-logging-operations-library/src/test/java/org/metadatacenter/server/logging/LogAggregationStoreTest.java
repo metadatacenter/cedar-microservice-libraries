@@ -192,7 +192,13 @@ class LogAggregationStoreTest {
     range = store.aggregation.requestPruneRange(cutoff);
     assertEquals(110, range[0]);
     assertEquals(112, range[1], "with nothing complete waiting, the walk runs past the last row");
-    assertEquals(1, prune(true, cutoff, 2));
+    // Builds under load twice counted 0 here, because MAX(id) found no row and the range ended at id 1. The rows an
+    // earlier test had deleted were still being purged above id 111; EmbeddedLogStore.clear() says why that matters.
+    // The message records what the pass saw.
+    long pruned = prune(true, cutoff, 2);
+    assertEquals(1, pruned, () -> "the pass walked ids " + walked[0] + " to " + walked[1] + " over rows "
+        + store.column("SELECT CONCAT(id, ' aggregatedAt=', COALESCE(aggregatedAt, 'null'), ' requestTime=', "
+        + "requestTime, ' endTime=', COALESCE(endTime, 'null')) FROM log_request ORDER BY id"));
     assertEquals(List.of(111L), ids(), "the incomplete request is never pruned");
   }
 
@@ -361,9 +367,13 @@ class LogAggregationStoreTest {
     assertEquals(1, store.count("SELECT COUNT(*) FROM agg_cypher_outlier"));
   }
 
+  /** The ids the last {@link #prune} pass walked, so that a failed count can say what the pass saw. */
+  private long[] walked;
+
   /** One prune pass over a table, window by window, the way the worker's prune job walks it. */
   private long prune(boolean request, Instant cutoff, int step) {
     long[] range = request ? store.aggregation.requestPruneRange(cutoff) : store.aggregation.cypherPruneRange(cutoff);
+    walked = range;
     long deleted = 0;
     for (long from = range[0]; from >= 0 && from < range[1]; ) {
       long[] window = request ? store.aggregation.pruneRequestWindow(from, range[1], cutoff, step)

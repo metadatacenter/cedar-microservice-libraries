@@ -91,4 +91,25 @@ class UserRateLimitsTest {
       assertEquals(1, metrics.meter("cedar.rateLimits.writes.unavailable").getCount());
     }
   }
+
+  /**
+   * During an outage the stricter of the total and the operation policy decides. With the total closed
+   * and reads open, a read is refused, which no default configuration can show: there the total is open.
+   */
+  @Test void redisFailureRefusesAReadWhenTheTotalPolicyIsClosed() {
+    var store = new Store(); store.failed = true;
+    var metrics = new MetricRegistry();
+    var config = new ObjectMapper().convertValue(Map.of(
+        "mode", "enforce",
+        "total", Map.of("failureMode", "closed"),
+        "reads", Map.of("failureMode", "open")), RateLimitConfig.class);
+    var limits = new UserRateLimits(config, store, metrics);
+    var read = request(); limits.prepare(read, "GET", false);
+
+    var exception = assertThrows(UserRateLimitException.class, () -> UserRateLimits.check(read, user(CedarUserAuthSource.TOKEN)));
+
+    assertEquals(503, new CedarExceptionMapper().toResponse(exception).getStatus());
+    assertEquals(1, metrics.meter("cedar.rateLimits.reads.failedClosed").getCount());
+    assertEquals(0, metrics.meter("cedar.rateLimits.reads.failedOpen").getCount());
+  }
 }

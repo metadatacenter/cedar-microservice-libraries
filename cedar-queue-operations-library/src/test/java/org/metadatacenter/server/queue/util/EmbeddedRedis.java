@@ -1,8 +1,13 @@
 package org.metadatacenter.server.queue.util;
 
 import redis.embedded.RedisServer;
+import redis.embedded.core.ExecutableProvider;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.stream.Stream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.util.function.IntSupplier;
@@ -20,15 +25,16 @@ import java.util.function.IntSupplier;
 public final class EmbeddedRedis implements AutoCloseable {
 
   private static final int START_ATTEMPTS = 5;
-  private static final long RETRY_PAUSE_MILLIS = 100;
 
   private final RedisServer server;
   private final int port;
+  private final Path directory;
   private boolean stopped;
 
-  private EmbeddedRedis(RedisServer server, int port) {
+  private EmbeddedRedis(RedisServer server, int port, Path directory) {
     this.server = server;
     this.port = port;
+    this.directory = directory;
   }
 
   public static EmbeddedRedis start() {
@@ -48,64 +54,40 @@ public final class EmbeddedRedis implements AutoCloseable {
         + START_ATTEMPTS + " attempts", lastFailure);
   }
 
-  /**
-   * Starts on a caller-chosen port, which is what lets a test stop the server and bring it back at
-   * the same address - the shape of a real outage, and the only way to check that a service
-   * recovers from one rather than merely failing gracefully.
-   */
-  public static EmbeddedRedis startOn(int port) {
+  /** Starts on a caller-chosen port, once. */
+  static EmbeddedRedis startOn(int port) {
+    Path directory = null;
     try {
-      RedisServer server = RedisServer.newRedisServer().bind("127.0.0.1").port(port).build();
+      // The binary is unpacked into, and the server writes its dump to, a directory of its own, which
+      // stop() removes. Left to the library, each start left a redis-<n> directory in the shared
+      // temporary directory.
+      directory = Files.createTempDirectory("embedded-redis-");
+      RedisServer server = RedisServer.newRedisServer()
+          .executableProvider(ExecutableProvider.newJarResourceProvider(directory.toFile()))
+          .bind("127.0.0.1").port(port).build();
       server.start();
-      return new EmbeddedRedis(server, port);
+      return new EmbeddedRedis(server, port, directory);
     } catch (IOException e) {
+      deleteQuietly(directory);
       throw new IllegalStateException("Could not start the embedded Redis on port " + port, e);
     }
   }
 
-  /**
-   * Starts again on a port this helper has just released. Unlike {@link #start()} it cannot move to
-   * another port, because coming back at the same address is the whole point of a restart, so it
-   * waits and retries instead: a server that has only just stopped can hold its listening socket a
-   * moment longer.
-   */
-  public static EmbeddedRedis restartOn(int port) {
-    return restartOn(port, EmbeddedRedis::startOn);
-  }
-
-  static EmbeddedRedis restartOn(int port, Starter starter) {
-    IllegalStateException lastFailure = null;
-    for (int attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
-      try {
-        return starter.startOnce(port);
-      } catch (IllegalStateException e) {
-        lastFailure = e;
-        pauseBeforeRetry();
-      }
+  private static void deleteQuietly(Path directory) {
+    if (directory == null) {
+      return;
     }
-    throw new IllegalStateException("Could not restart the embedded Redis on port " + port
-        + " after " + START_ATTEMPTS + " attempts", lastFailure);
-  }
-
-  /** One attempt at starting on a given port, so a test can drive the retry without a real race. */
-  @FunctionalInterface
-  interface Starter {
-    EmbeddedRedis startOnce(int port);
-  }
-
-  private static void pauseBeforeRetry() {
-    try {
-      Thread.sleep(RETRY_PAUSE_MILLIS);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new IllegalStateException("Interrupted while waiting for the embedded Redis port", e);
+    try (Stream<Path> paths = Files.walk(directory)) {
+      paths.sorted(Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+    } catch (IOException ignored) {
+      // Leaving a directory behind is untidy, not a test failure.
     }
   }
 
   /**
-   * A port free at this instant. Nothing reserves it, so a caller should bind it promptly. The
-   * ordinary {@link #start()} path retries if another embedded dependency wins that race; callers
-   * that only need a deliberately unreachable address can use this value directly.
+   * A port free at this instant. Nothing reserves it, so {@link #start()} binds it at once and retries
+   * on another if a different process wins that race. It is no unreachable address: something else may
+   * listen on it a moment later. A test that needs one uses port 1, which nothing in a test run can bind.
    */
   public static int freePort() {
     try (ServerSocket socket = new ServerSocket(
@@ -114,6 +96,11 @@ public final class EmbeddedRedis implements AutoCloseable {
     } catch (IOException e) {
       throw new IllegalStateException("Could not find a free port for the embedded Redis", e);
     }
+  }
+
+  /** The directory the server runs from, which {@link #stop()} removes. */
+  Path directory() {
+    return directory;
   }
 
   public int port() {
@@ -134,6 +121,8 @@ public final class EmbeddedRedis implements AutoCloseable {
       server.stop();
     } catch (IOException e) {
       throw new IllegalStateException("Could not stop the embedded Redis on port " + port, e);
+    } finally {
+      deleteQuietly(directory);
     }
   }
 

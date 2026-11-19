@@ -17,7 +17,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>Stopping an embedded dependency and then treating its former port as unavailable leaves a
  * race: another process can own that port before the client reaches it. This proxy keeps the exact
  * {@code 127.0.0.1:port} tuple bound for its whole lifetime. Before {@link #failConnections()} it
- * forwards bytes to the dependency; afterwards it resets existing and newly accepted connections.
+ * forwards bytes to the dependency; afterwards it resets existing and newly accepted connections,
+ * until {@link #restoreConnections()} ends the outage.
  */
 public final class TcpFaultProxy implements AutoCloseable {
 
@@ -64,6 +65,14 @@ public final class TcpFaultProxy implements AutoCloseable {
     }
   }
 
+  /**
+   * End an outage {@link #failConnections()} began: connections accepted from now on are forwarded to
+   * the target again. Connections reset during the outage stay closed, as they would after a real one.
+   */
+  public void restoreConnections() {
+    failing.set(false);
+  }
+
   private void accept() {
     while (!listener.isClosed()) {
       try {
@@ -89,13 +98,15 @@ public final class TcpFaultProxy implements AutoCloseable {
     Socket upstream = new Socket();
     try {
       upstream.connect(target, CONNECT_TIMEOUT_MILLIS);
+      // Registered before the check, so an outage that begins meanwhile either finds the pair in the
+      // set it resets or is seen here; checked first, a pair could slip between the two and forward.
+      connections.add(client);
+      connections.add(upstream);
       if (failing.get()) {
         resetAndClose(client);
         resetAndClose(upstream);
         return;
       }
-      connections.add(client);
-      connections.add(upstream);
       workers.submit(() -> copy(client, upstream));
       workers.submit(() -> copy(upstream, client));
     } catch (IOException e) {

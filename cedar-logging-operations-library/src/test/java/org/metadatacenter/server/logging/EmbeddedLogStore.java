@@ -32,10 +32,17 @@ import org.metadatacenter.server.logging.model.AppLogMessage;
 import org.metadatacenter.util.json.JsonMapper;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 /**
  * The application log database in-process: a MariaDB on a free port, the schema the servers' Hibernate bundle
@@ -91,6 +98,24 @@ final class EmbeddedLogStore {
 
   static synchronized EmbeddedLogStore start() {
     if (instance == null) {
+      DB db = startOnAFreePort();
+      instance = new EmbeddedLogStore(db.getConfiguration().getPort());
+    }
+    instance.clear();
+    return instance;
+  }
+
+  private static final int START_ATTEMPTS = 3;
+
+  /**
+   * MariaDB4j finds a free port by binding one and releasing it, and the server binds it later, so another process can
+   * take it in between. A failed start is therefore retried, each time on a port found afresh, as the test support
+   * library's EmbeddedCedarMySql does.
+   */
+  private static DB startOnAFreePort() {
+    IllegalStateException failure = null;
+    for (int attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
+      DB candidate = null;
       try {
         DBConfigurationBuilder configuration = DBConfigurationBuilder.newBuilder();
         configuration.setBaseDir(Files.createTempDirectory("mdb-base-").toFile());
@@ -101,21 +126,40 @@ final class EmbeddedLogStore {
         configuration.setDeletingTemporaryBaseAndDataDirsOnShutdown(true);
         configuration.addArg("--bind-address=127.0.0.1");
         configuration.setPort(0);
-        DB db = PrivateTemporaryDirectoryDB.create(configuration.build());
-        db.start();
-        instance = new EmbeddedLogStore(db.getConfiguration().getPort());
+        candidate = PrivateTemporaryDirectoryDB.create(configuration.build());
+        candidate.start();
+        return candidate;
       } catch (Exception e) {
-        throw new IllegalStateException("Could not start the embedded MariaDB", e);
+        failure = new IllegalStateException("Could not start the embedded MariaDB (attempt " + attempt + " of "
+            + START_ATTEMPTS + ")", e);
+        stopQuietly(candidate);
       }
     }
-    instance.clear();
-    return instance;
+    throw failure;
   }
 
+  private static void stopQuietly(DB candidate) {
+    if (candidate == null) {
+      return;
+    }
+    try {
+      candidate.stop();
+    } catch (Exception ignored) {
+      // A server that never started has nothing to stop.
+    }
+  }
+
+  /**
+   * Empties every table by recreating it. A DELETE would only delete-mark the rows, and InnoDB's purge removes them
+   * later, in the background, while the next test runs. MariaDB 11.4.5 can then answer a backward scan of the primary
+   * key, such as {@code MAX(id)} or {@code ORDER BY id DESC LIMIT 1}, as if the table were empty, when the scan crosses
+   * delete-marked rows that purge is removing at that moment. A test whose rows sat below the 20,000 rows another test
+   * had left saw {@code MAX(id)} return nothing, so the prune range it computed ended at id 1.
+   */
   void clear() {
     inTransaction(session -> {
       for (String table : TABLES) {
-        session.createNativeMutationQuery("DELETE FROM " + table).executeUpdate();
+        session.createNativeMutationQuery("TRUNCATE TABLE " + table).executeUpdate();
       }
       return null;
     });
@@ -194,15 +238,69 @@ final class EmbeddedLogStore {
     }
 
     /**
-     * Creates the database, prepares its directories and installs it, as {@link DB#newEmbeddedDB(DBConfiguration)}
-     * does. The data directory is always new, so the install always runs.
+     * Creates the database and prepares its directories, as {@link DB#newEmbeddedDB(DBConfiguration)}
+     * does, and gives it an installed data directory: a copy of the template when one exists, a new
+     * install otherwise.
      */
     static DB create(DBConfiguration configuration) throws ManagedProcessException {
       PrivateTemporaryDirectoryDB db = new PrivateTemporaryDirectoryDB(configuration);
       db.prepareDirectories();
       db.unpackEmbeddedDb();
-      db.install();
+      db.installOrCopyTemplate();
       return db;
+    }
+
+    /**
+     * Installs the data directory once per temporary directory and binary version, and gives every
+     * later JVM a copy. Running mariadb-install-db took each test JVM that needed MySQL from a few to
+     * forty seconds, and copying the installed directory takes well under one. The first JVM installs
+     * into its own data directory as before and then keeps a copy as the template; a lock file keeps a
+     * second JVM from reading a template that is still being written.
+     */
+    private void installOrCopyTemplate() throws ManagedProcessException {
+      String version = configuration.getBinariesClassPathLocation().replaceAll("[^A-Za-z0-9.-]", "_");
+      Path temporary = Path.of(System.getProperty("java.io.tmpdir"));
+      Path template = temporary.resolve("cedar-mariadb-data-" + version);
+      Path ready = temporary.resolve("cedar-mariadb-data-" + version + ".ready");
+      Path dataDir = configuration.getDataDir().toPath();
+      try (FileChannel lockFile = FileChannel.open(temporary.resolve("cedar-mariadb-data-" + version + ".lock"),
+          StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+           FileLock ignored = lockFile.lock()) {
+        if (Files.exists(ready)) {
+          copyTree(template, dataDir);
+          return;
+        }
+        install();
+        deleteTree(template);
+        copyTree(dataDir, template);
+        Files.createFile(ready);
+      } catch (IOException e) {
+        throw new ManagedProcessException("Could not install or copy the MariaDB data directory", e);
+      }
+    }
+
+    private static void copyTree(Path source, Path target) throws IOException {
+      try (Stream<Path> paths = Files.walk(source)) {
+        for (Path path : (Iterable<Path>) paths::iterator) {
+          Path copy = target.resolve(source.relativize(path).toString());
+          if (Files.isDirectory(path)) {
+            Files.createDirectories(copy);
+          } else {
+            Files.copy(path, copy, StandardCopyOption.REPLACE_EXISTING);
+          }
+        }
+      }
+    }
+
+    private static void deleteTree(Path root) throws IOException {
+      if (!Files.exists(root)) {
+        return;
+      }
+      try (Stream<Path> paths = Files.walk(root)) {
+        for (Path path : (Iterable<Path>) paths.sorted(Comparator.reverseOrder())::iterator) {
+          Files.delete(path);
+        }
+      }
     }
 
     @Override

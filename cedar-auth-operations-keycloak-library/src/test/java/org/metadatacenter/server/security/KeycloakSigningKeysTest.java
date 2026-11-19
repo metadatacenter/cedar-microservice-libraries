@@ -106,10 +106,8 @@ class KeycloakSigningKeysTest {
 
   @Test
   void anUnreachableKeycloakFailsWithItsCause() throws Exception {
-    int closedPort;
-    try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
-      closedPort = socket.getLocalPort();
-    }
+    // Privileged, so nothing a test run starts can listen on it, and a connection is refused at once.
+    int closedPort = 1;
 
     Exception failure = assertThrows(Exception.class,
         () -> KeycloakSigningKeys.verify(deployment("http://127.0.0.1:" + closedPort)));

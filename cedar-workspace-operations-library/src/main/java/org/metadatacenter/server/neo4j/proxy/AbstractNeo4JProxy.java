@@ -191,7 +191,7 @@ public abstract class AbstractNeo4JProxy {
       if (isSiblingNameConstraintViolation(ex)) {
         throw new SiblingNameConflictException(ex);
       }
-      throw new RuntimeException("Error while " + eventDescription + ": " + ex.getMessage());
+      throw new RuntimeException("Error while " + eventDescription + ": " + ex.getMessage(), ex);
     }
   }
 
@@ -201,7 +201,7 @@ public abstract class AbstractNeo4JProxy {
       return session.readTransaction(work::apply);
     } catch (ClientException ex) {
       log.error("Error while " + eventDescription, ex);
-      throw new RuntimeException("Error while " + eventDescription + ": " + ex.getMessage());
+      throw new RuntimeException("Error while " + eventDescription + ": " + ex.getMessage(), ex);
     }
   }
 

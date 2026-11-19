@@ -37,11 +37,28 @@ public interface ResourcePermissionServiceSession {
     return updateResourcePermissions(resourceId, request, RevisionPrecondition.any());
   }
 
-  BackendCallResult<VersionedResourcePermissions> updateResourcePermissions(
-      CedarFilesystemResourceId resourceId, ResourcePermissionsRequest request, RevisionPrecondition precondition);
+  default BackendCallResult<VersionedResourcePermissions> updateResourcePermissions(
+      CedarFilesystemResourceId resourceId, ResourcePermissionsRequest request, RevisionPrecondition precondition) {
+    return updateResourcePermissions(resourceId, request, precondition, GraphWrite.NONE);
+  }
 
+  /**
+   * Replaces the resource's permissions and runs {@code alongside} in the same graph transaction, after
+   * the replacement and only when it succeeds, so that the two commit together or not at all.
+   */
+  BackendCallResult<VersionedResourcePermissions> updateResourcePermissions(
+      CedarFilesystemResourceId resourceId, ResourcePermissionsRequest request, RevisionPrecondition precondition,
+      GraphWrite alongside);
+
+  default BackendCallResult<VersionedResourcePermissions> transferResourceOwnership(
+      CedarFilesystemResourceId resourceId, CedarUserId newOwnerId, RevisionPrecondition precondition) {
+    return transferResourceOwnership(resourceId, newOwnerId, precondition, GraphWrite.NONE);
+  }
+
+  /** Transfers the resource's ownership and runs {@code alongside} in the same graph transaction. */
   BackendCallResult<VersionedResourcePermissions> transferResourceOwnership(
-      CedarFilesystemResourceId resourceId, CedarUserId newOwnerId, RevisionPrecondition precondition);
+      CedarFilesystemResourceId resourceId, CedarUserId newOwnerId, RevisionPrecondition precondition,
+      GraphWrite alongside);
 
   ResourceAuthority getResourceAuthority(CedarFilesystemResourceId resourceId);
 

@@ -7,6 +7,7 @@ import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarUserId;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
+import org.metadatacenter.server.GroupAdministrationRefusedException;
 import org.metadatacenter.server.GroupServiceSession;
 import org.metadatacenter.server.GroupCallerMembership;
 import org.metadatacenter.server.RevisionPrecondition;
@@ -66,9 +67,7 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
 
   @Override
   public FolderServerGroup updateGroupById(CedarGroupId groupId, Map<NodeProperty, String> updateFields) {
-    // Session-layer backstop for the HTTP administrator check (defense in depth): a caller reaching
-    // this method without authority to administer the group makes no change and gets nothing back.
-    if (!userCanAdministerGroup(groupId)) {
+    if (!requireAdministration(groupId)) {
       return null;
     }
     return proxies.group().updateGroupById(groupId, updateFields, cu.getResourceId());
@@ -78,7 +77,7 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
   public VersionedResource<FolderServerGroup> updateGroupById(CedarGroupId groupId,
                                                                Map<NodeProperty, String> updateFields,
                                                                RevisionPrecondition precondition) {
-    if (!userCanAdministerGroup(groupId)) {
+    if (!requireAdministration(groupId)) {
       return null;
     }
     return proxies.group().updateGroupById(groupId, updateFields, cu.getResourceId(), precondition);
@@ -86,7 +85,7 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
 
   @Override
   public boolean deleteGroupById(CedarGroupId groupId) {
-    if (!userCanAdministerGroup(groupId)) {
+    if (!requireAdministration(groupId)) {
       return false;
     }
     return proxies.group().deleteGroupById(groupId);
@@ -94,7 +93,7 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
 
   @Override
   public boolean deleteGroupById(CedarGroupId groupId, RevisionPrecondition precondition) {
-    if (!userCanAdministerGroup(groupId)) {
+    if (!requireAdministration(groupId)) {
       return false;
     }
     return proxies.group().deleteGroupById(groupId, precondition);
@@ -142,6 +141,23 @@ public class Neo4JUserSessionGroupService extends AbstractNeo4JUserSession imple
    */
   public boolean userExists(CedarUserId userId) {
     return proxies.user().findUserById(userId) != null;
+  }
+
+  /**
+   * The session-layer backstop for the HTTP administrator check, so that a caller without authority
+   * over a group changes nothing whichever layer it reaches. Answers true when the caller may
+   * administer the group, and false when the group does not exist, which the write methods report as
+   * nothing found. Raises a {@link GroupAdministrationRefusedException} when the group exists and the
+   * caller may not administer it, so that a refusal reads as one rather than as a missing group.
+   */
+  private boolean requireAdministration(CedarGroupId groupId) {
+    if (userCanAdministerGroup(groupId)) {
+      return true;
+    }
+    if (proxies.group().findGroupById(groupId) == null) {
+      return false;
+    }
+    throw new GroupAdministrationRefusedException(groupId);
   }
 
   /**

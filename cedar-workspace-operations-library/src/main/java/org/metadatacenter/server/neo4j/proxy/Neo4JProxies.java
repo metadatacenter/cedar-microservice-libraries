@@ -1,27 +1,17 @@
 package org.metadatacenter.server.neo4j.proxy;
 
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.config.CedarTestRuntime;
 import org.metadatacenter.server.jsonld.LinkedDataUtil;
 import org.metadatacenter.server.neo4j.Neo4jConfig;
+import org.metadatacenter.server.neo4j.Neo4jDrivers;
 import org.metadatacenter.server.neo4j.PathUtil;
-import org.neo4j.driver.AuthTokens;
-import org.neo4j.driver.Config;
 import org.neo4j.driver.Driver;
-import org.neo4j.driver.GraphDatabase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.concurrent.TimeUnit;
 
 public class Neo4JProxies {
 
   private static final Logger log = LoggerFactory.getLogger(Neo4JProxies.class);
-
-  // The shared outage override deliberately makes pool acquisition and retries fail quickly. A
-  // healthy embedded Bolt server can still need more than one second for its first handshake on a
-  // constrained CI runner, so connection establishment needs independent headroom.
-  static final long MIN_TEST_CONNECTION_TIMEOUT_MILLIS = 5_000;
 
   protected final CedarConfig cedarConfig;
   protected final Neo4jConfig config;
@@ -51,7 +41,7 @@ public class Neo4JProxies {
   public Neo4JProxies(CedarConfig cedarConfig) {
     this.cedarConfig = cedarConfig;
     this.config = Neo4jConfig.fromCedarConfig(cedarConfig);
-    this.driver = buildDriver(this.config);
+    this.driver = Neo4jDrivers.open(this.config);
     this.linkedDataUtil = cedarConfig.getLinkedDataUtil();
     this.pathUtil = new Neo4JPathUtil(cedarConfig);
 
@@ -67,27 +57,6 @@ public class Neo4JProxies {
     this.versionProxy = new Neo4JProxyVersion(this, cedarConfig);
     this.categoryProxy = new Neo4JProxyCategory(this, cedarConfig);
     this.categoryPermissionProxy = new Neo4JProxyCategoryPermission(this, cedarConfig);
-  }
-
-  private static Driver buildDriver(Neo4jConfig config) {
-    Config.ConfigBuilder driverConfig = Config.builder();
-    // Absent leaves the driver on its own ceiling, which is what every deployment ran on before the
-    // setting existed. Present lets an installation running many services against one database hold
-    // the total down, which nothing could do while the size was the driver's to choose.
-    if (config.getMaxConnectionPoolSize() != null) {
-      driverConfig.withMaxConnectionPoolSize(config.getMaxConnectionPoolSize());
-    }
-    CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> driverConfig
-        .withConnectionTimeout(testConnectionTimeoutMillis(timeout), TimeUnit.MILLISECONDS)
-        .withConnectionAcquisitionTimeout(timeout, TimeUnit.MILLISECONDS)
-        .withMaxTransactionRetryTime(timeout, TimeUnit.MILLISECONDS));
-    return GraphDatabase.driver(config.getUri(),
-        AuthTokens.basic(config.getUserName(), config.getUserPassword()),
-        driverConfig.build());
-  }
-
-  static long testConnectionTimeoutMillis(long dependencyTimeoutMillis) {
-    return Math.max(dependencyTimeoutMillis, MIN_TEST_CONNECTION_TIMEOUT_MILLIS);
   }
 
   public void verifyConnectivity() {

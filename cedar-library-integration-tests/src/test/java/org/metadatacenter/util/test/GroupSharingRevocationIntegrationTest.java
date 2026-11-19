@@ -9,9 +9,13 @@ import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.id.CedarFolderId;
 import org.metadatacenter.id.CedarGroupId;
+import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.SystemComponent;
+import org.metadatacenter.model.folderserver.basic.FileSystemResource;
+import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.model.folderserver.basic.FolderServerGroup;
+import org.metadatacenter.model.folderserver.basic.FolderServerTemplate;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.GroupServiceSession;
@@ -27,6 +31,8 @@ import org.metadatacenter.server.security.model.permission.resource.ResourcePerm
 import org.metadatacenter.server.security.model.user.CedarUser;
 
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Whether access granted through a group actually goes away again.
@@ -128,6 +134,32 @@ public class GroupSharingRevocationIntegrationTest {
         "the owner should still have Manager authority after the group was deleted");
   }
 
+  /**
+   * A membership change re-projects the search permissions of every resource the group can reach, and
+   * the graph supplies that list. It must hold the folder shared with the group and everything inside
+   * it, and nothing above or beside it: a traversal that ran the other way would re-project the
+   * folder's ancestors and leave its contents with keys that no longer follow the membership.
+   */
+  @Test
+  public void theResourcesAGroupCanSeeAreItsSharedFolderAndEverythingInside() {
+    FolderServerFolder shared = folder("Visible To Group Folder");
+    FolderServerFolder nested = folderUnder(shared.getResourceId(), "Visible To Group Nested");
+    FolderServerArtifact inside = templateUnder(nested.getResourceId(), "Visible To Group Template");
+    FolderServerFolder beside = folder("Not Shared With Group Folder");
+    templateUnder(beside.getResourceId(), "Not Shared With Group Template");
+    FolderServerGroup group = group("visible-resources-test-group");
+    setMembers(group, true);
+    grantGroup(shared, group, ResourceRole.VIEWER);
+
+    Set<String> visible = CedarDataServices.getInstance().getFolderServiceSession(user1Context)
+        .findAllNodesVisibleByGroupId(group.getResourceId()).stream()
+        .map(FileSystemResource::getId)
+        .collect(Collectors.toSet());
+
+    Assertions.assertEquals(Set.of(shared.getId(), nested.getId(), inside.getId()), visible,
+        "the group reaches the shared folder and its contents, not the home folder above it or the folder beside it");
+  }
+
   // ── fixtures and helpers ───────────────────────────────────────────────────
 
   private static FolderServerFolder folder(String name) {
@@ -138,6 +170,33 @@ public class GroupSharingRevocationIntegrationTest {
     FolderServerFolder created = CedarDataServices.getInstance().getFolderServiceSession(user1Context)
         .createFolderAsChildOfId(newFolder, user1HomeId, newFolderId);
     Assertions.assertNotNull(created, "the fixture folder should be created");
+    return created;
+  }
+
+  private static FolderServerFolder folderUnder(CedarFolderId parentId, String name) {
+    FolderServerFolder newFolder = new FolderServerFolder();
+    newFolder.setName(name);
+    newFolder.setDescription("Created by GroupSharingRevocationIntegrationTest");
+    CedarFolderId newFolderId = cedarConfig.getLinkedDataUtil().buildNewLinkedDataIdObject(CedarFolderId.class);
+    FolderServerFolder created = CedarDataServices.getInstance().getFolderServiceSession(user1Context)
+        .createFolderAsChildOfId(newFolder, parentId, newFolderId);
+    Assertions.assertNotNull(created, "the fixture folder should be created");
+    return created;
+  }
+
+  private static FolderServerArtifact templateUnder(CedarFolderId parentId, String name) {
+    FolderServerTemplate template = new FolderServerTemplate();
+    template.setId(cedarConfig.getLinkedDataUtil().buildNewLinkedDataId(CedarResourceType.TEMPLATE));
+    template.setName(name);
+    template.setDescription("Created by GroupSharingRevocationIntegrationTest");
+    template.setVersion("0.0.1");
+    template.setPublicationStatus("bibo:draft");
+    template.setLatestVersion(true);
+    template.setLatestDraftVersion(true);
+    template.setLatestPublishedVersion(false);
+    FolderServerArtifact created = CedarDataServices.getInstance().getFolderServiceSession(user1Context)
+        .createResourceAsChildOfId(template, parentId);
+    Assertions.assertNotNull(created, "the fixture template should be created");
     return created;
   }
 

@@ -1,11 +1,9 @@
 package org.metadatacenter.server.neo4j;
 
 import org.metadatacenter.config.CedarConfig;
-import org.metadatacenter.config.CedarTestRuntime;
 import org.metadatacenter.model.CedarResourceType;
 import org.neo4j.driver.*;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
@@ -44,11 +42,12 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
 
   private static final int MAX_ATTEMPTS = 60;
   private final Driver driver;
+  private final boolean ownsDriver;
   private final long delayMillis;
   private final long recheckMillis;
 
   public ArtifactCreateCleanupOutbox(CedarConfig config) {
-    this(driver(config), DELAY_MILLIS, RECHECK_MILLIS);
+    this(Neo4jDrivers.open(config), DELAY_MILLIS, RECHECK_MILLIS);
   }
 
   public ArtifactCreateCleanupOutbox(Driver driver, long delayMillis) {
@@ -56,10 +55,24 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
   }
 
   public ArtifactCreateCleanupOutbox(Driver driver, long delayMillis, long recheckMillis) {
+    this(driver, true, delayMillis, recheckMillis);
+  }
+
+  private ArtifactCreateCleanupOutbox(Driver driver, boolean ownsDriver, long delayMillis, long recheckMillis) {
     this.driver = driver;
+    this.ownsDriver = ownsDriver;
     this.delayMillis = delayMillis;
     this.recheckMillis = recheckMillis;
     initializeSchema(driver);
+  }
+
+  /**
+   * An outbox on a driver its caller keeps: closing the outbox leaves the driver open. The outbox
+   * keeps its state in the graph, so a second outbox on the same driver stands in for a restarted
+   * process without paying for a new driver's connections.
+   */
+  public static ArtifactCreateCleanupOutbox onSharedDriver(Driver driver, long delayMillis) {
+    return new ArtifactCreateCleanupOutbox(driver, false, delayMillis, RECHECK_MILLIS);
   }
 
   /**
@@ -74,16 +87,6 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
       session.run("CREATE CONSTRAINT cedar_create_cleanup_job IF NOT EXISTS "
           + "FOR (j:CedarArtifactCreateCleanup) REQUIRE j.jobId IS UNIQUE").consume();
     }
-  }
-
-  private static Driver driver(CedarConfig config) {
-    var neo = Neo4jConfig.fromCedarConfig(config);
-    var settings = Config.builder();
-    CedarTestRuntime.dependencyTimeoutMillis().ifPresent(timeout -> settings
-        .withConnectionTimeout(timeout, TimeUnit.MILLISECONDS)
-        .withConnectionAcquisitionTimeout(timeout, TimeUnit.MILLISECONDS)
-        .withMaxTransactionRetryTime(timeout, TimeUnit.MILLISECONDS));
-    return GraphDatabase.driver(neo.getUri(), AuthTokens.basic(neo.getUserName(), neo.getUserPassword()), settings.build());
   }
 
   /** Fail closed before issuing a content write if its recovery intent cannot be persisted. */
@@ -337,5 +340,9 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
     }
   }
 
-  @Override public void close() { driver.close(); }
+  @Override public void close() {
+    if (ownsDriver) {
+      driver.close();
+    }
+  }
 }

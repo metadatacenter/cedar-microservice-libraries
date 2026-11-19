@@ -2,6 +2,10 @@ package org.metadatacenter.util.http;
 
 import org.apache.hc.client5.http.fluent.Request;
 import org.apache.hc.core5.http.ConnectionRequestTimeoutException;
+import org.apache.hc.core5.http.HttpRequest;
+import org.apache.hc.core5.http.NoHttpResponseException;
+import org.apache.hc.core5.http.message.BasicHttpRequest;
+import org.apache.hc.core5.http.protocol.HttpCoreContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -21,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -103,6 +108,21 @@ class HttpTimeoutsTest {
     long start = System.nanoTime();
     assertThrows(ConnectionRequestTimeoutException.class, () -> override.execute(Request.get(url)));
     assertWaitedNoLongerThanTheLease(start);
+  }
+
+  /**
+   * A lease timeout means the pool is full, so a repeat would queue on the same full pool and double
+   * the wait. The timing tests above allow ten leases and cannot see one repeat, so the rule is held
+   * where it is decided, beside an answerless GET that is repeated.
+   */
+  @Test
+  void aLeaseTimeoutIsNotRepeatedThoughNothingWasAnswered() {
+    HttpRequest get = new BasicHttpRequest("GET", "/dependency");
+
+    assertTrue(HttpTimeouts.ANSWERLESS_ATTEMPT.retryRequest(get, new NoHttpResponseException("no answer"), 1,
+        HttpCoreContext.create()), "a GET that was answered with nothing is repeated once");
+    assertFalse(HttpTimeouts.ANSWERLESS_ATTEMPT.retryRequest(get, new ConnectionRequestTimeoutException("pool full"), 1,
+        HttpCoreContext.create()), "a GET that timed out waiting for a pooled connection is not repeated");
   }
 
   /**

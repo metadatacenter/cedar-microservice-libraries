@@ -43,16 +43,26 @@ class MongoClientFactoryTest {
   }
 
   @Test
-  void testRuntimeCanTightenEveryWaitWithoutChangingPoolCapacity() throws Exception {
+  void testRuntimeTightensTheOutageWaitsWithoutChangingPoolCapacity() throws Exception {
     System.setProperty(CedarTestRuntime.DEPENDENCY_TIMEOUT_MILLIS_PROPERTY, "250");
 
     MongoClientSettings settings = new MongoClientFactory(connection()).buildSettings();
 
     assertEquals(250, settings.getClusterSettings().getServerSelectionTimeout(TimeUnit.MILLISECONDS));
     assertEquals(250, settings.getSocketSettings().getConnectTimeout(TimeUnit.MILLISECONDS));
-    assertEquals(250, settings.getSocketSettings().getReadTimeout(TimeUnit.MILLISECONDS));
     assertEquals(250, settings.getConnectionPoolSettings().getMaxWaitTime(TimeUnit.MILLISECONDS));
     assertEquals(100, settings.getConnectionPoolSettings().getMaxSize());
+  }
+
+  @Test
+  void testRuntimeKeepsAReadFromAHealthyServerAboveItsFloor() throws Exception {
+    System.setProperty(CedarTestRuntime.DEPENDENCY_TIMEOUT_MILLIS_PROPERTY, "1000");
+    assertEquals(MongoClientFactory.MIN_TEST_READ_TIMEOUT_MILLIS,
+        new MongoClientFactory(connection()).buildSettings().getSocketSettings().getReadTimeout(TimeUnit.MILLISECONDS));
+
+    System.setProperty(CedarTestRuntime.DEPENDENCY_TIMEOUT_MILLIS_PROPERTY, "8000");
+    assertEquals(8000,
+        new MongoClientFactory(connection()).buildSettings().getSocketSettings().getReadTimeout(TimeUnit.MILLISECONDS));
   }
 
   private MongoConnection connection() throws Exception {

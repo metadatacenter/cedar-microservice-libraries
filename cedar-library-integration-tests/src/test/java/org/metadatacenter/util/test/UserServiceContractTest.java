@@ -74,6 +74,31 @@ public class UserServiceContractTest {
         Arguments.of(named("the in-memory user service", inMemory)));
   }
 
+  /**
+   * A user changes only when the change is written through the service. The stored service builds a
+   * new user on every read, so an edit a caller makes to the user it was given, or to the user it
+   * registered, is never saved. A double that handed out its own objects would count such an edit as
+   * saved, and a handler that forgot to write would pass.
+   */
+  @ParameterizedTest
+  @MethodSource("implementations")
+  public void anEditThatIsNeverWrittenIsNotSaved(Registrar registrar) {
+    CedarUser user = userWith(key("live", true));
+    String email = user.getEmail();
+    UserService service = registrar.register(user);
+
+    user.setEmail("edited-after-registration@test.com");
+    CedarUser found = service.findUserByApiKey(valueOf(user, "live"));
+    Assertions.assertEquals(email, found.getEmail(), "an edit to the registered object reached the store");
+
+    found.setEmail("edited-but-never-written@test.com");
+    found.setPermissions(List.of());
+    CedarUser reread = service.findUser(user.getResourceId());
+    Assertions.assertNotSame(found, reread);
+    Assertions.assertEquals(email, reread.getEmail(), "an unwritten edit reached the store");
+    Assertions.assertEquals(email, service.findUserByApiKey(valueOf(user, "live")).getEmail());
+  }
+
   @ParameterizedTest
   @MethodSource("implementations")
   public void anEnabledKeyResolvesToItsUser(Registrar registrar) {

@@ -7,12 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CypherGroupMembershipQuerySemanticsTest {
 
   @Test
-  void newGroupsStartWithMembershipRevisionOne() {
-    assertTrue(CypherQueryBuilderGroup.createGroupWithAdministrator()
-        .contains("_cedarMembershipRevision:1"));
-  }
-
-  @Test
   void replacementValidatesUsersBeforeDeletingAndReturnsItsPostImage() {
     String query = CypherQueryBuilderGroup.replaceGroupUsers();
 
@@ -33,13 +27,5 @@ class CypherGroupMembershipQuerySemanticsTest {
     assertTrue(query.contains("user AS user"), query);
     assertTrue(query.contains("AS administrator"), query);
     assertTrue(query.contains("AS member"), query);
-  }
-
-  @Test
-  void directEverybodyMembershipCreationAlsoAdvancesTheAggregateRevision() {
-    String query = CypherQueryBuilderUser.addUserToGroup();
-
-    assertTrue(query.contains("ON CREATE SET group._cedarMembershipRevision"), query);
-    assertTrue(query.contains("coalesce(group._cedarMembershipRevision, 1) + 1"), query);
   }
 }

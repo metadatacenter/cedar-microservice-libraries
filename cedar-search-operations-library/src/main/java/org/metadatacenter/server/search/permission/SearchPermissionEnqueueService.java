@@ -2,6 +2,7 @@ package org.metadatacenter.server.search.permission;
 
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarFilesystemResourceId;
+import org.metadatacenter.server.GraphWrite;
 import org.metadatacenter.server.queue.util.PermissionQueueService;
 import org.metadatacenter.server.search.SearchPermissionQueueEvent;
 import org.metadatacenter.server.search.SearchPermissionQueueEventType;
@@ -147,6 +148,21 @@ public class SearchPermissionEnqueueService implements AutoCloseable {
   public void folderPermissionsChanged(CedarFilesystemResourceId id) {
     // TODO: Check if this was a real change. Check this at the calling side
     enqueue(id.getId(), FOLDER_PERMISSION_CHANGED);
+  }
+
+  /**
+   * The event a permission change of this resource requires, written in the change's own graph
+   * transaction (see {@link GraphWrite}), so the change cannot commit without it. The relay delivers it
+   * like an appended event; it is woken at once, and otherwise finds the event on its next pass.
+   */
+  public GraphWrite permissionsChangedEvent(CedarFilesystemResourceId id, boolean folder) {
+    SearchPermissionQueueEventType type = folder ? FOLDER_PERMISSION_CHANGED : RESOURCE_PERMISSION_CHANGED;
+    return transaction -> {
+      Neo4jSearchPermissionOutbox.appendIn(transaction, new SearchPermissionQueueEvent(id.getId(), type));
+      if (wakeup.availablePermits() == 0) {
+        wakeup.release();
+      }
+    };
   }
 
   public void groupMembersUpdated(String id) {

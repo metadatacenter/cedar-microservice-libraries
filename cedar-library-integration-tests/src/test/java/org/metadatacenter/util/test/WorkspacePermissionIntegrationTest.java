@@ -26,6 +26,7 @@ import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.FolderServiceSession;
+import org.metadatacenter.server.GroupAdministrationRefusedException;
 import org.metadatacenter.server.GroupCallerMembership;
 import org.metadatacenter.server.GroupServiceSession;
 import org.metadatacenter.server.RevisionConflictException;
@@ -192,6 +193,41 @@ public class WorkspacePermissionIntegrationTest {
         Assertions.assertEquals(expected,
             permissions.userHasCapability(folder.getResourceId(), capability),
             role + " has the wrong result for " + capability);
+      }
+    }
+  }
+
+  /**
+   * A role granted to a group gives each member exactly that role. Each arm of the grant replacement
+   * writes its own relationship, so a group Editor grant stored as Manager would hand every member
+   * grant management, moves and OpenView while the user grants above stayed correct.
+   */
+  @Test
+  public void eachGroupRoleGivesItsMembersExactlyItsDefinedCapabilities() {
+    GroupServiceSession user1Groups = CedarDataServices.getInstance().getGroupServiceSession(user1Context);
+    FolderServerGroup group = user1Groups.createGroup("direct-group-role-test-group",
+        "Group for the group role capability test");
+    CedarGroupUsersRequest membership = new CedarGroupUsersRequest();
+    membership.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user1.getId()), true, true));
+    membership.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user2.getId()), false, true));
+    Assertions.assertFalse(user1Groups.updateGroupUsers(group.getResourceId(), membership).isError());
+
+    for (ResourceRole role : ResourceRole.values()) {
+      FolderServerFolder folder = createFolderUnderUser1Home("Group Role " + role.getValue());
+      ResourcePermissionsRequest request = requestOwnedByUser1();
+      request.getGroupPermissions().add(new ResourcePermissionGroupPermissionPair(
+          new ResourcePermissionGroup(group.getId()), role));
+      updatePermissionsAsUser1(folder, request);
+
+      ResourcePermissionServiceSession permissions = permissionsOf(user2Context);
+      Assertions.assertEquals(role, permissions.getResourceAuthority(folder.getResourceId()).highestSatisfiedRole(),
+          "a member of a group granted " + role + " resolves to " + role);
+      for (ResourceCapability capability : ResourceCapability.values()) {
+        boolean expected = capability != ResourceCapability.TRANSFER_OWNERSHIP
+            && role.provides(CedarResourceType.FOLDER, capability);
+        Assertions.assertEquals(expected,
+            permissions.userHasCapability(folder.getResourceId(), capability),
+            "group " + role + " has the wrong result for " + capability);
       }
     }
   }
@@ -563,11 +599,19 @@ public class WorkspacePermissionIntegrationTest {
     Assertions.assertNull(user1Groups.findCallerMembership(CedarGroupId.build(
         cedarConfig.getLinkedDataUtil().buildNewLinkedDataId(CedarResourceType.GROUP))), "a missing group has no membership");
 
-    Assertions.assertNull(user2Groups.updateGroupById(group.getResourceId(), Map.of(NodeProperty.DESCRIPTION, "by a member")));
-    Assertions.assertNull(user2Groups.updateGroupById(group.getResourceId(), Map.of(NodeProperty.DESCRIPTION, "by a member"),
-        RevisionPrecondition.any()));
-    Assertions.assertFalse(user2Groups.deleteGroupById(group.getResourceId()));
-    Assertions.assertFalse(user2Groups.deleteGroupById(group.getResourceId(), RevisionPrecondition.any()));
+    assertAdministrationRefused(group.getResourceId(),
+        () -> user2Groups.updateGroupById(group.getResourceId(), Map.of(NodeProperty.DESCRIPTION, "by a member")));
+    assertAdministrationRefused(group.getResourceId(),
+        () -> user2Groups.updateGroupById(group.getResourceId(), Map.of(NodeProperty.DESCRIPTION, "by a member"),
+            RevisionPrecondition.any()));
+    assertAdministrationRefused(group.getResourceId(), () -> user2Groups.deleteGroupById(group.getResourceId()));
+    assertAdministrationRefused(group.getResourceId(),
+        () -> user2Groups.deleteGroupById(group.getResourceId(), RevisionPrecondition.any()));
+    CedarGroupId missing = CedarGroupId.build(cedarConfig.getLinkedDataUtil().buildNewLinkedDataId(CedarResourceType.GROUP));
+    Assertions.assertNull(user2Groups.updateGroupById(missing, Map.of(NodeProperty.DESCRIPTION, "nowhere")),
+        "a group that does not exist is reported as missing, not as a refusal");
+    Assertions.assertFalse(user2Groups.deleteGroupById(missing, RevisionPrecondition.any()),
+        "a group that does not exist is reported as missing, not as a refusal");
     CedarGroupUsersRequest takeover = new CedarGroupUsersRequest();
     takeover.getUsers().add(new CedarGroupUserRequest(new ResourcePermissionUser(user2.getId()), true, true));
     BackendCallResult<VersionedGroupUsers> refused = user2Groups.updateGroupUsers(group.getResourceId(), takeover);
@@ -582,6 +626,12 @@ public class WorkspacePermissionIntegrationTest {
         Map.of(NodeProperty.DESCRIPTION, "by the built-in administrator")));
     Assertions.assertEquals("by the built-in administrator",
         user1Groups.findGroupById(group.getResourceId()).getDescription());
+  }
+
+  private static void assertAdministrationRefused(CedarGroupId groupId, org.junit.jupiter.api.function.Executable write) {
+    GroupAdministrationRefusedException refusal = Assertions.assertThrows(GroupAdministrationRefusedException.class, write,
+        "a member who does not administer the group must be refused, not told the group is missing");
+    Assertions.assertEquals(groupId.getId(), refusal.getGroupId().getId());
   }
 
   private static FolderServerArtifact createInstanceOf(CedarTemplateId templateId, String name) {

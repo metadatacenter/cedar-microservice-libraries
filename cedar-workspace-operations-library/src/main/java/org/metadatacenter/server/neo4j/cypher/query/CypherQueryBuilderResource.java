@@ -11,6 +11,16 @@ import java.util.List;
 
 public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
 
+  /**
+   * Shared with Me leaves out whatever Everybody may read: a resource with a public grant of its own,
+   * and one that inherits public read from a folder that contains it. The search index's shared-with-me
+   * filter excludes both through its computed public permission, so the listing with no search term and
+   * a searched listing hold the same resources.
+   */
+  private static final String SHARED_WITH_ME_NOT_PUBLIC =
+      " AND NOT EXISTS { MATCH (publicSource:<LABEL.FILESYSTEM_RESOURCE>)-[:<REL.CONTAINS>*0..]->(resource)" +
+          " WHERE publicSource.<PROP.EVERYBODY_PERMISSION> IS NOT NULL }";
+
   public static String getSharedWithMeLookupQuery(ResourceVersionFilter version,
                                                   ResourcePublicationStatusFilter publicationStatus,
                                                   List<String> sortList) {
@@ -28,7 +38,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
             "[:" + getResourceRoleRelationLabels() + "]->" +
             "(resource)" +
             " WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified) +
-            " AND resource.<PROP.EVERYBODY_PERMISSION> IS NULL" +
+            SHARED_WITH_ME_NOT_PUBLIC +
             " AND resource.<PROP.OWNED_BY> <> {<PH.USER_ID>}" +
             " AND resource.<PROP.IS_USER_HOME> IS NULL "
     );
@@ -63,7 +73,7 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
             "[:" + getResourceRoleRelationLabels() + "]->" +
             "(resource)" +
             " WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified) +
-            " AND resource.<PROP.EVERYBODY_PERMISSION> IS NULL" +
+            SHARED_WITH_ME_NOT_PUBLIC +
             " AND resource.<PROP.OWNED_BY> <> {<PH.USER_ID>}" +
             " AND resource.<PROP.IS_USER_HOME> IS NULL "
     );

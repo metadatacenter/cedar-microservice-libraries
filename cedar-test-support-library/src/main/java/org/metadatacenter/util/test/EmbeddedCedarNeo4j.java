@@ -7,14 +7,18 @@ import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
+import org.metadatacenter.server.AdminServiceSession;
+import org.metadatacenter.server.neo4j.GraphSchema;
 import org.metadatacenter.server.logging.AppLogger;
 import org.metadatacenter.server.logging.AppLoggerQueueService;
 import org.metadatacenter.server.security.model.user.CedarUser;
 import org.neo4j.configuration.GraphDatabaseInternalSettings;
+import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.harness.Neo4j;
 import org.neo4j.harness.Neo4jBuilders;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,9 +37,10 @@ import java.util.Map;
  * data services and seeds before any application code runs, on the configuration instance the
  * application will then reuse.
  *
- * Seeding creates the graph skeleton the way provisioning does: the global objects (root
- * folders, Everybody group, root category) through the admin session, then the TestAuthUtil
- * users with Everybody membership and home folders.
+ * Seeding creates the graph the way provisioning does: the uniqueness constraints the admin tool
+ * creates ({@link GraphSchema#UNIQUE_CONSTRAINTS}), the global objects (root folders, Everybody
+ * group, root category) through the admin session, then the TestAuthUtil users with Everybody
+ * membership and home folders.
  *
  * The harness is closed when the JVM exits. It deletes its store directory only on close, so
  * without the close every test JVM left its whole store in the temporary directory.
@@ -88,6 +93,44 @@ public final class EmbeddedCedarNeo4j {
   }
 
   /**
+   * Empties the running graph in place and seeds it again, for a class that needs a fresh graph. It
+   * deletes every node and relationship, drops every constraint and index, clears the seeded flag and
+   * then calls {@link #seed(CedarConfig)}. The server, its Bolt port and every driver connected to it
+   * stay as they are, so the reset costs a fraction of the second or more that
+   * {@link #stopAndReset()} and a new harness take. The version lifecycle lock and the constraints the
+   * admin tool restores after rebuilding a schema are created again. Other constraints an application
+   * created when it started are dropped with the rest, as they are when the harness is restarted.
+   *
+   * @throws IllegalStateException when the harness is not running
+   */
+  public static synchronized void resetAndSeed(CedarConfig cedarConfig) throws Exception {
+    if (embedded == null) {
+      throw new IllegalStateException("The embedded Neo4j is not running, so there is nothing to reset");
+    }
+    GraphDatabaseService database = embedded.defaultDatabaseService();
+    database.executeTransactionally("MATCH (n) DETACH DELETE n");
+    // A constraint owns its backing index, so the constraints go first. The token lookup indexes
+    // belong to every Neo4j database and are left in place.
+    for (String constraint : names(database, "SHOW CONSTRAINTS YIELD name RETURN name")) {
+      database.executeTransactionally("DROP CONSTRAINT `" + constraint + "` IF EXISTS");
+    }
+    for (String index : names(database, "SHOW INDEXES YIELD name, type WHERE type <> 'LOOKUP' RETURN name")) {
+      database.executeTransactionally("DROP INDEX `" + index + "` IF EXISTS");
+    }
+    seeded = false;
+    seed(cedarConfig);
+    // The running proxies created the version lifecycle lock and its constraints once and remember
+    // having done so, so the reset recreates them as the admin tool does after rebuilding the schema.
+    CedarDataServices.getInstance().getAdminServiceSession(
+        CedarRequestContextFactory.fromUser(TestAuthUtil.getAdminUser(cedarConfig))).ensureServerSchema();
+  }
+
+  private static List<String> names(GraphDatabaseService database, String query) {
+    return database.executeTransactionally(query, Map.of(),
+        result -> result.stream().map(row -> (String) row.get("name")).toList());
+  }
+
+  /**
    * Registered once, and deliberately unsynchronized: a shutdown hook that waited for this class's
    * lock could hang the JVM's exit behind a test thread that holds it.
    */
@@ -127,20 +170,59 @@ public final class EmbeddedCedarNeo4j {
   /**
    * Seeds at most once per JVM. Repeating the graph seeding would duplicate the users and the
    * CONTAINS chains they hang from, which corrupts path computation, so a second call in a
-   * shared JVM is a no-op; the guard lives here so every caller is safe without discipline.
+   * shared JVM is a no-op; the guard lives here so every caller is safe without discipline. A seed
+   * that fails part-way empties the graph and leaves the guard open, so the next call starts again.
    */
   public static synchronized void seed(CedarConfig cedarConfig) throws Exception {
     if (seeded) {
       return;
     }
-    seeded = true;
-    CedarUser admin = TestAuthUtil.getAdminUser(cedarConfig);
-    CedarDataServices.getInstance().getNeoUserService().createUser(admin);
-    CedarRequestContext adminContext = CedarRequestContextFactory.fromUser(admin);
-    CedarDataServices.getInstance().getAdminServiceSession(adminContext).ensureGlobalObjectsExists();
+    try {
+      CedarUser admin = TestAuthUtil.getAdminUser(cedarConfig);
+      CedarRequestContext adminContext = CedarRequestContextFactory.fromUser(admin);
+      createProductionConstraints(adminContext);
+      CedarDataServices.getInstance().getNeoUserService().createUser(admin);
+      CedarDataServices.getInstance().getAdminServiceSession(adminContext).ensureGlobalObjectsExists();
 
-    seedUser(TestAuthUtil.getTestUser1(cedarConfig));
-    seedUser(TestAuthUtil.getTestUser2(cedarConfig));
+      seedUser(TestAuthUtil.getTestUser1(cedarConfig));
+      seedUser(TestAuthUtil.getTestUser2(cedarConfig));
+    } catch (Exception | Error e) {
+      // A partial seed must not count as one: every later class would skip seeding and fail on a missing
+      // user or home folder, far from this failure. The graph is emptied so the next call seeds afresh.
+      discardPartialSeed(e);
+      throw e;
+    }
+    seeded = true;
+    // Seeding gave the fixture users new home folders. The stored user service records a home folder
+    // when it is created, so the in-memory one, which keeps copies, takes the fixtures again.
+    TestAuthUtil.resetInMemoryUserService();
+  }
+
+  private static void discardPartialSeed(Throwable failure) {
+    if (embedded == null) {
+      return;
+    }
+    try {
+      embedded.defaultDatabaseService().executeTransactionally("MATCH (n) DETACH DELETE n");
+    } catch (RuntimeException e) {
+      failure.addSuppressed(e);
+    }
+  }
+
+  /**
+   * Creates the uniqueness constraints a provisioned graph carries, so that a suite meets the rules the
+   * deployed graph enforces: a second resource with an identifier already taken, a second group whose
+   * name differs only in case, or a second folder or category of the same name under one parent is
+   * refused here as it is in production.
+   */
+  private static void createProductionConstraints(CedarRequestContext adminContext) {
+    AdminServiceSession admin = CedarDataServices.getInstance().getAdminServiceSession(adminContext);
+    for (GraphSchema.UniqueConstraint constraint : GraphSchema.UNIQUE_CONSTRAINTS) {
+      if (!admin.createUniqueConstraint(constraint.label(), constraint.properties())) {
+        throw new IllegalStateException("Could not create the uniqueness constraint on "
+            + constraint.label().getSimpleLabel() + " " + constraint.properties());
+      }
+    }
   }
 
   private static void seedUser(CedarUser user) throws Exception {

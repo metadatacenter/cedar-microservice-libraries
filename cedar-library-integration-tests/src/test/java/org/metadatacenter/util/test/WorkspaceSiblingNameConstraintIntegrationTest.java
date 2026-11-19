@@ -1,6 +1,5 @@
 package org.metadatacenter.util.test;
 
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -15,15 +14,12 @@ import org.metadatacenter.model.folderserver.basic.FolderServerCategory;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
-import org.metadatacenter.server.AdminServiceSession;
 import org.metadatacenter.server.CategoryServiceSession;
 import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.RevisionPrecondition;
 import org.metadatacenter.server.SiblingNameConflictException;
-import org.metadatacenter.server.neo4j.NodeLabel;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -35,9 +31,8 @@ import java.util.Map;
  * by the constrained property names in Neo4j's error message, so a Neo4j upgrade that changed the
  * message would turn every such 409 into a 500, and this class would fail first.
  *
- * <p>The constraints would outlive this class and refuse other classes' fixtures, so the class runs on
- * a graph of its own. It discards the shared graph before it starts and again when it finishes,
- * seeding a fresh one each time.
+ * <p>The embedded graph carries the constraints from the moment it is seeded, as a provisioned graph
+ * does, so the class runs on the shared graph.
  */
 @Tag("integration")
 public class WorkspaceSiblingNameConstraintIntegrationTest {
@@ -49,29 +44,12 @@ public class WorkspaceSiblingNameConstraintIntegrationTest {
 
   @BeforeAll
   public static void oneTimeSetUp() throws Exception {
-    EmbeddedCedarNeo4j.stopAndReset();
     startSeededGraph();
     cedarConfig = CedarConfig.getInstance(CedarEnvironmentVariableProvider.getFor(SystemComponent.SERVER_RESOURCE));
-
-    // The constraints provisioning creates, after the backfill it runs first
-    AdminServiceSession admin = CedarDataServices.getInstance().getAdminServiceSession(
-        CedarRequestContextFactory.fromUser(TestAuthUtil.getAdminUser(cedarConfig)));
-    Assertions.assertTrue(admin.backfillFolderParentIds());
-    Assertions.assertTrue(admin.createUniqueConstraint(NodeLabel.RESOURCE, NodeProperty.ID));
-    Assertions.assertTrue(admin.createUniqueConstraint(NodeLabel.FOLDER,
-        List.of(NodeProperty.PARENT_FOLDER_ID, NodeProperty.NAME_LOWER)));
-    Assertions.assertTrue(admin.createUniqueConstraint(NodeLabel.CATEGORY,
-        List.of(NodeProperty.PARENT_CATEGORY_ID, NodeProperty.NAME_LOWER)));
 
     user1Context = CedarRequestContextFactory.fromUser(TestAuthUtil.getTestUser1(cedarConfig));
     user1HomeId = foldersOf(user1Context).findHomeFolderOf().getResourceId();
     rootCategoryId = categoriesOf(user1Context).getRootCategory().getResourceId();
-  }
-
-  @AfterAll
-  public static void restoreTheSharedGraph() {
-    EmbeddedCedarNeo4j.stopAndReset();
-    startSeededGraph();
   }
 
   private static void startSeededGraph() {

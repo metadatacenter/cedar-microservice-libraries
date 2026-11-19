@@ -5,7 +5,7 @@
   <parent>
     <groupId>org.metadatacenter</groupId>
     <artifactId>cedar-microservice-libraries</artifactId>
-    <version>2.9.36</version>
+    <version>2.9.37</version>
   </parent>
 
   <groupId>org.metadatacenter</groupId>
@@ -66,6 +66,15 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- A real mongod for the conditional-write tests, whose filters a mocked collection cannot judge.
+         It is started directly rather than through cedar-test-support-library's harness, which would
+         make this module wait for that library in the build. -->
+    <dependency>
+      <groupId>de.flapdoodle.embed</groupId>
+      <artifactId>de.flapdoodle.embed.mongo</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

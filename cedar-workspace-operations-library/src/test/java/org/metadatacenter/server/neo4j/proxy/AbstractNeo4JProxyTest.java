@@ -17,16 +17,6 @@ import static org.mockito.Mockito.when;
 class AbstractNeo4JProxyTest {
 
   @Test
-  void healthyConnectionEstablishmentHasHeadroomBeyondTheFastOutageTimeout() {
-    assertEquals(5_000, Neo4JProxies.testConnectionTimeoutMillis(1_000));
-  }
-
-  @Test
-  void aLargerConfiguredTimeoutIsPreserved() {
-    assertEquals(10_000, Neo4JProxies.testConnectionTimeoutMillis(10_000));
-  }
-
-  @Test
   void aNullRevisionRowMeansTheLockedNodeWasDeleted() {
     Result result = mock(Result.class);
     Record record = mock(Record.class);

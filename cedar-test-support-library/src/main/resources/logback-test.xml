@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The logging configuration of every test JVM that carries this library, which is every server's.
+  Without one, logback sends every DEBUG line to the console: the environment provider alone wrote
+  more than half a million lines in one full build, and the HTTP client's wire log filled most of
+  the CI log, burying the failures it was read for. A module's own src/test/resources/logback-test.xml
+  comes first on its test class path and replaces this one.
+-->
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+</configuration>

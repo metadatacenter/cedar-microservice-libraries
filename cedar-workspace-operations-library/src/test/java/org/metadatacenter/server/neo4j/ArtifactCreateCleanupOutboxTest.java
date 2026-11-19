@@ -20,8 +20,12 @@ class ArtifactCreateCleanupOutboxTest {
   }
   @AfterAll static void stop() { database.close(); }
   @BeforeEach void clear() { query("MATCH (n) DETACH DELETE n", Map.of()); }
+  /**
+   * A new outbox on the class's driver. Each one used to open a driver of its own, which took most of
+   * the class's time; a restart is still a new outbox, since the outbox keeps its state in the graph.
+   */
   ArtifactCreateCleanupOutbox open() {
-    return new ArtifactCreateCleanupOutbox(GraphDatabase.driver(ScratchNeo4j.boltURI(),AuthTokens.none()),0);
+    return ArtifactCreateCleanupOutbox.onSharedDriver(database,0);
   }
   static void query(String query, Map<String,Object> args) {
     try(var session=database.session()) { session.run(query,args).consume(); }

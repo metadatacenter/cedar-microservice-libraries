@@ -242,6 +242,7 @@ public class NodeIndexingService extends AbstractIndexingService {
     ObjectNode patch = prepared.patch();
     if (!indexWorker.updatePermissionProjection(patch, resource.getId())) {
       indexDocument(resource, permissions, categories, requestContext);
+      removeIfDeleted(resource, requestContext);
       indexWorker.refreshIndex();
       return;
     }
@@ -253,6 +254,7 @@ public class NodeIndexingService extends AbstractIndexingService {
         if (!worker.updatePermissionProjection(patch, resource.getId())) {
           worker.addToIndex(JsonMapper.STRICT_MAPPER.valueToTree(
               createIndexDocument(resource, permissions, categories, requestContext, false)), resource.getId());
+          removeIfDeleted(resource, requestContext);
         }
         IndexRebuildRegistry.recordLiveWrite(resource.getId());
       } catch (Exception e) {
@@ -290,6 +292,7 @@ public class NodeIndexingService extends AbstractIndexingService {
     for (var projection : projections) {
       if (missing.contains(projection.resource().getId())) {
         indexDocument(projection.resource(), projection.permissions(), projection.categories(), projection.context());
+        removeIfDeleted(projection.resource(), projection.context());
       }
     }
     mirror().ifPresent(worker -> {
@@ -304,9 +307,12 @@ public class NodeIndexingService extends AbstractIndexingService {
         var absent = worker.updatePermissionProjections(mirrored);
         for (var projection : projections) {
           String id = projection.resource().getId();
-          if (absent.contains(id)) worker.addToIndex(JsonMapper.STRICT_MAPPER.valueToTree(
-              createIndexDocument(projection.resource(), projection.permissions(), projection.categories(),
-                  projection.context(), false)), id);
+          if (absent.contains(id)) {
+            worker.addToIndex(JsonMapper.STRICT_MAPPER.valueToTree(
+                createIndexDocument(projection.resource(), projection.permissions(), projection.categories(),
+                    projection.context(), false)), id);
+            removeIfDeleted(projection.resource(), projection.context());
+          }
           if (mirrored.containsKey(id)) IndexRebuildRegistry.recordLiveWrite(id);
         }
       } catch (Exception e) {
@@ -363,6 +369,30 @@ public class NodeIndexingService extends AbstractIndexingService {
       }
     }
     return sb.toString();
+  }
+
+  /** Make the index's latest writes and removals visible to search. */
+  public void refreshIndex() throws CedarProcessingException {
+    indexWorker.refreshIndex();
+  }
+
+  /**
+   * Remove a document just written for a resource the graph no longer holds.
+   *
+   * A permission projection rebuilds a document in full only when its update found none, and that is
+   * also what a delete leaves when it runs between the projection's graph read and its write. Every
+   * delete removes the graph node before the document, so reading the graph again after the write
+   * settles every interleaving: a resource that is gone loses the document just rebuilt for it.
+   * Writers that re-index outside the permission projection call this after their write as well.
+   */
+  public void removeIfDeleted(FileSystemResource resource, CedarRequestContext requestContext)
+      throws CedarProcessingException {
+    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(requestContext);
+    if (folderSession.findResourceById(resource.getResourceId()) == null) {
+      log.info("The resource was deleted while its document was being written; removing it from the index:"
+          + resource.getId());
+      removeDocumentFromIndex(resource.getResourceId());
+    }
   }
 
   public long removeDocumentFromIndex(CedarFilesystemResourceId resourceId) throws CedarProcessingException {

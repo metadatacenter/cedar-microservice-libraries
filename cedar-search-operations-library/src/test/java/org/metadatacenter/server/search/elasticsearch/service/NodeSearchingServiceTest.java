@@ -270,6 +270,18 @@ class NodeSearchingServiceTest {
     assertSame(CedarResponseStatus.BAD_REQUEST, malformed.getErrorPack().getStatus());
   }
 
+  @Test
+  void aHyphenatedTitleCanBeFoundWithoutKnowingToQuoteIt() throws Exception {
+    startCluster();
+    index("Biodiversity atlas-1611", READER, null);
+    index("Biodiversity atlas-1612", READER, null);
+    index("Atlas unrelated 1611", READER, null);
+    index("Private atlas-1611", "user-2|manager", null);
+
+    assertEquals(Set.of("Biodiversity atlas-1611"), searchNames("atlas-1611"));
+    assertEquals(Set.of("Biodiversity atlas-1611"), searchNames("\"atlas-1611\""));
+  }
+
   /** A continuation whose snapshot the cluster has released, by its keep alive or a restart, says to start again. */
   @Test
   void aContinuationWhoseSnapshotIsGoneIsABadRequestThatSaysToStartAgain() throws Exception {

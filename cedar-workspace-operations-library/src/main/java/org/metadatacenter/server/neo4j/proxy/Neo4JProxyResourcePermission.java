@@ -1,5 +1,7 @@
 package org.metadatacenter.server.neo4j.proxy;
 
+import org.metadatacenter.server.GraphWrite;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import org.metadatacenter.config.CedarConfig;
 import org.metadatacenter.id.CedarFilesystemResourceId;
@@ -48,7 +50,8 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
 
   VersionedResourcePermissions replacePermissions(CedarFilesystemResourceId resourceId,
                                                    CedarNodePermissionsWithExtract requested,
-                                                   RevisionPrecondition precondition) {
+                                                   RevisionPrecondition precondition,
+                                                   GraphWrite alongside) {
     CedarUserId ownerId = requested.getOwner().getResourceId();
     List<String> userIds = new ArrayList<>();
     List<String> viewerUserIds = new ArrayList<>();
@@ -104,14 +107,19 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
               userIds, viewerUserIds, editorUserIds, managerUserIds,
               groupIds, viewerGroupIds, editorGroupIds, managerGroupIds,
               finalEverybodyPermission, currentRevision));
-      return readVersionedPermissions(run(tx, replace));
+      VersionedResourcePermissions replaced = readVersionedPermissions(run(tx, replace));
+      if (replaced != null) {
+        alongside.writeIn(tx);
+      }
+      return replaced;
     }, "replacing versioned resource permissions");
   }
 
   VersionedResourcePermissions transferOwnership(CedarFilesystemResourceId resourceId,
                                                   CedarUserId currentOwnerId,
                                                   CedarUserId newOwnerId,
-                                                  RevisionPrecondition precondition) {
+                                                  RevisionPrecondition precondition,
+                                                  GraphWrite alongside) {
     return executeInWriteTransaction(tx -> {
       CypherQueryWithParameters lock = new CypherQueryWithParameters(
           CypherQueryBuilderFilesystemResourcePermission.lockPermissions(),
@@ -129,7 +137,11 @@ public class Neo4JProxyResourcePermission extends AbstractNeo4JProxy {
       params.put(org.metadatacenter.server.neo4j.parameter.ParameterPlaceholder.CURRENT_REVISION, currentRevision);
       CypherQueryWithParameters transfer = new CypherQueryWithParameters(
           CypherQueryBuilderFilesystemResourcePermission.transferOwnership(), params);
-      return readVersionedPermissions(run(tx, transfer));
+      VersionedResourcePermissions transferred = readVersionedPermissions(run(tx, transfer));
+      if (transferred != null) {
+        alongside.writeIn(tx);
+      }
+      return transferred;
     }, "transferring resource ownership");
   }
 

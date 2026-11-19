@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.metadatacenter</groupId>
+    <artifactId>cedar-microservice-libraries</artifactId>
+    <version>2.9.37</version>
+  </parent>
+
+  <artifactId>cedar-library-integration-tests</artifactId>
+  <packaging>jar</packaging>
+
+  <name>CEDAR Library Integration Tests</name>
+  <description>The integration suites of the shared libraries: the graph operations of the workspace,
+    search and permission libraries against an in-process Neo4j, and the test harness's own stores,
+    proxies and doubles. Nothing depends on this module, so no server's build waits for these suites.
+  </description>
+
+  <properties>
+    <!-- The module holds tests and no code of its own. Every server depends on
+         cedar-test-support-library, and Maven starts a module only when every module it depends on
+         has finished, so suites run there delay every server's build. Here they run beside the
+         servers. Their coverage of the libraries they exercise counts in the repository's merged
+         figures. -->
+    <maven.deploy.skip>true</maven.deploy.skip>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-test-support-library</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-server-utils-dropwizard-library</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.dropwizard</groupId>
+      <artifactId>dropwizard-testing</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!--
+        The tests point the configuration at the embedded Neo4j through a CedarEnvironmentSource
+        override and share one JVM (reuseForks true): CedarConfig.getInstance rebuilds when the
+        override changes, and the automatic JUnit extension clears each class's redirection before
+        the next class starts.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <reuseForks>true</reuseForks>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
