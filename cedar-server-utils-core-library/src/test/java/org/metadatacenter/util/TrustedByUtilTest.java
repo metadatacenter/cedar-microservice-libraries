@@ -72,6 +72,18 @@ class TrustedByUtilTest {
     assertNull(artifact.getTrustedBy());
   }
 
+  @ParameterizedTest
+  @MethodSource("artifactExtractTypes")
+  void artifactWhoseParentFolderIsGoneIsLeftUntrusted(CedarResourceType ignoredType,
+                                                       Supplier<FolderServerArtifactExtract> factory) {
+    FolderServerArtifactExtract artifact = factory.get();
+
+    // A resource another request deleted after the search found it has no parent folder left.
+    assertDoesNotThrow(() -> TrustedByUtil.decorateWithTrustedBy(artifact, (FolderServerFolder) null, TRUST));
+
+    assertNull(artifact.getTrustedBy());
+  }
+
   @Test
   void folderExtractIsNeverCastOrDecoratedAsArtifact() {
     FolderServerFolderExtract folder = folder(TRUSTED_FOLDER);

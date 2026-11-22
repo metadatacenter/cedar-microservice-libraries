@@ -31,9 +31,13 @@ public class TrustedByUtil {
     }
   }
 
+  /**
+   * A resource deleted after a search found it has no parent folder by the time its result is decorated.
+   * It is left untrusted rather than failing the whole listing.
+   */
   public static void decorateWithTrustedBy(FolderServerResourceExtract resourceExtract, FolderServerFolder parentFolder,
                                            Map<String, String> folderIdsToEntitiesMap) {
-    decorateWithTrustedBy(resourceExtract, parentFolder.getId(), folderIdsToEntitiesMap);
+    decorateWithTrustedBy(resourceExtract, parentFolder == null ? null : parentFolder.getId(), folderIdsToEntitiesMap);
   }
 
   private static String generateTrustedBy(String parentFolderId, CedarResourceType resourceType,
