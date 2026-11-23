@@ -10,6 +10,7 @@ import org.metadatacenter.model.folderserver.basic.FolderServerArtifact;
 import org.metadatacenter.rest.context.CedarRequestContext;
 import org.metadatacenter.search.IndexingDocumentDocument;
 import org.metadatacenter.server.CategoryServiceSession;
+import org.metadatacenter.server.FolderServiceSession;
 import org.metadatacenter.server.ResourcePermissionServiceSession;
 import org.metadatacenter.server.search.elasticsearch.service.ElasticsearchManagementService;
 import org.metadatacenter.server.search.elasticsearch.service.NodeIndexingService;
@@ -26,6 +27,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.metadatacenter.constant.ElasticsearchConstants.DOCUMENT_CEDAR_ID;
 
@@ -34,6 +41,14 @@ public class RegenerateSearchIndexTask {
   private static final Logger log = LoggerFactory.getLogger(RegenerateSearchIndexTask.class);
 
   private final static int BATCH_SIZE = 1000;
+
+  /**
+   * How many resources have their documents built at once. The work waits on the graph and the
+   * artifact server rather than on this process, so it scales with concurrency until one of those
+   * saturates. Eight stays well inside the artifact client's 100 connections per route and the
+   * Neo4j driver's pool, and leaves both services room for live traffic during a rebuild.
+   */
+  private final static int WORKERS = 8;
 
   private final CedarConfig cedarConfig;
 
@@ -80,6 +95,7 @@ public class RegenerateSearchIndexTask {
     try {
       ResourcePermissionServiceSession permissionSession = CedarDataServices.getInstance().getResourcePermissionServiceSession(requestContext);
       CategoryServiceSession categorySession = CedarDataServices.getInstance().getCategoryServiceSession(requestContext);
+      FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(requestContext);
       // Get all resources
       log.info("Reading all resources from the existing search index.");
       progress.enterPhase(IndexingPhase.ENUMERATING);
@@ -134,52 +150,56 @@ public class RegenerateSearchIndexTask {
         progress.setTotal(resources.size());
         progress.setTotalByType(countByType(resources));
 
-        // Get resources content and index it
+        // Build each batch's documents on a pool of workers, then write the batch from this thread.
+        // Building a document is a chain of small reads: the permissions, categories and folder path
+        // from the graph, the content from the artifact server. Done one resource at a time, the
+        // rebuild waited on each in turn and managed tens of resources a second, which at production
+        // size is hours. The resources are independent of one another, so the reads can overlap.
+        // Progress and the batch writes stay on this thread, in work-list order.
         int count = 1;
-        int batchCount = 1;
         int skipped = 0;
-        // Refreshed every batch rather than asked per resource: against a shared store that would be
-        // a round trip for every resource in the repository, for an answer that is almost always no.
-        Set<String> liveTouched = IndexRebuildRegistry.liveTouched();
-        List<IndexingDocumentDocument> currentBatch = new ArrayList<>();
-        for (FileSystemResource node : resources) {
-          if (liveTouched.contains(node.getId())) {
-            // A live write has already put a current version of this resource into the new index, or
-            // removed it. This work list was read before that happened, so writing from it now would
-            // replace the newer document with the one this rebuild started with.
-            skipped++;
-            progress.advance(node.getType());
-            count++;
-            continue;
-          }
-          try {
-            CedarNodeMaterializedPermissions perm = permissionSession.getResourceMaterializedPermission(node);
-            CedarNodeMaterializedCategories categories = null;
-            if (node instanceof FolderServerArtifact) {
-              categories = categorySession.getArtifactMaterializedCategories((CedarArtifactId) node.getResourceId());
+        ExecutorService workers = Executors.newFixedThreadPool(WORKERS, workerThreads());
+        try {
+          for (int from = 0; from < resources.size(); from += BATCH_SIZE) {
+            List<FileSystemResource> batch = resources.subList(from, Math.min(from + BATCH_SIZE, resources.size()));
+            // Refreshed every batch rather than asked per resource: against a shared store that would be
+            // a round trip for every resource in the repository, for an answer that is almost always no.
+            Set<String> liveTouched = IndexRebuildRegistry.liveTouched();
+            List<Future<IndexingDocumentDocument>> built = new ArrayList<>(batch.size());
+            for (FileSystemResource node : batch) {
+              // A live write has already put a current version of this resource into the new index, or
+              // removed it. This work list was read before that happened, so writing from it now would
+              // replace the newer document with the one this rebuild started with.
+              if (liveTouched.contains(node.getId())) {
+                built.add(null);
+              } else {
+                NodeIndexingService indexingService = nodeIndexingService;
+                built.add(workers.submit(() -> buildDocument(node, indexingService, permissionSession,
+                    categorySession, folderSession, requestContext)));
+              }
             }
-            currentBatch.add(nodeIndexingService.createIndexDocument(node, perm, categories, requestContext, true));
-          } catch (Exception e) {
-            throw new CedarProcessingException("Error while building index document: " + node.getId(), e);
+            List<IndexingDocumentDocument> documents = new ArrayList<>(batch.size());
+            for (int i = 0; i < batch.size(); i++) {
+              FileSystemResource node = batch.get(i);
+              Future<IndexingDocumentDocument> document = built.get(i);
+              if (document == null) {
+                skipped++;
+              } else {
+                documents.add(await(document, node));
+              }
+              progress.advance(node.getType());
+              if (count % 100 == 0) {
+                log.info(String.format("Progress: %.0f%%", (float) (100 * count) / resources.size()));
+              }
+              count++;
+            }
+            if (!documents.isEmpty()) {
+              log.info(String.format("Batch progress: %d", from / BATCH_SIZE + 1));
+              nodeIndexingService.indexBatch(documents);
+            }
           }
-          progress.advance(node.getType());
-          if (count % 100 == 0) {
-            float percent = (float) (100 * count) / resources.size();
-            log.info(String.format("Progress: %.0f%%", percent));
-          }
-          if (currentBatch.size() >= BATCH_SIZE) {
-            log.info(String.format("Batch progress: %d", batchCount));
-            liveTouched = IndexRebuildRegistry.liveTouched();
-            nodeIndexingService.indexBatch(currentBatch);
-            currentBatch.clear();
-            batchCount++;
-          }
-          count++;
-        }
-
-        log.info(String.format("Batch progress remaining: %d", currentBatch.size()));
-        if (currentBatch.size() > 0) {
-          nodeIndexingService.indexBatch(currentBatch);
+        } finally {
+          workers.shutdownNow();
         }
 
         // Make all bulk-indexed documents searchable, verify that the rebuild is complete, atomically
@@ -211,6 +231,49 @@ public class RegenerateSearchIndexTask {
         nodeIndexingService.instanceContentExtractor.clearNodesCache();
       }
     }
+  }
+
+  private static IndexingDocumentDocument buildDocument(FileSystemResource node, NodeIndexingService indexingService,
+                                                        ResourcePermissionServiceSession permissionSession,
+                                                        CategoryServiceSession categorySession,
+                                                        FolderServiceSession folderSession,
+                                                        CedarRequestContext requestContext)
+      throws CedarProcessingException {
+    CedarNodeMaterializedPermissions perm = permissionSession.getResourceMaterializedPermission(node);
+    CedarNodeMaterializedCategories categories = null;
+    if (node instanceof FolderServerArtifact) {
+      categories = categorySession.getArtifactMaterializedCategories((CedarArtifactId) node.getResourceId());
+    }
+    return indexingService.createIndexDocument(node, perm, categories, requestContext, true, folderSession);
+  }
+
+  /** A worker's document, or the failure that stops the rebuild, naming the resource it was for. */
+  private static IndexingDocumentDocument await(Future<IndexingDocumentDocument> document, FileSystemResource node)
+      throws CedarProcessingException {
+    try {
+      return document.get();
+    } catch (ExecutionException e) {
+      if (e.getCause() instanceof Error error) {
+        throw error;
+      }
+      String message = "Error while building index document: " + node.getId();
+      throw e.getCause() instanceof Exception cause
+          ? new CedarProcessingException(message, cause)
+          : new CedarProcessingException(message, e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new CedarProcessingException("Interrupted while building index document: " + node.getId(), e);
+    }
+  }
+
+  /** Daemon threads, so a rebuild abandoned by a stopping server never holds the process open. */
+  private static ThreadFactory workerThreads() {
+    AtomicInteger number = new AtomicInteger();
+    return runnable -> {
+      Thread thread = new Thread(runnable, "search-rebuild-" + number.incrementAndGet());
+      thread.setDaemon(true);
+      return thread;
+    };
   }
 
   /**

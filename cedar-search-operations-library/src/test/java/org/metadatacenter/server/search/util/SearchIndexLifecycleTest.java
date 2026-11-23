@@ -13,6 +13,7 @@ import org.metadatacenter.config.environment.CedarEnvironmentVariableProvider;
 import org.metadatacenter.exception.CedarProcessingException;
 import org.metadatacenter.id.CedarGroupId;
 import org.metadatacenter.id.CedarTemplateId;
+import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.SystemComponent;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
 import org.metadatacenter.model.folderserver.basic.FolderServerFolder;
@@ -35,6 +36,7 @@ import org.metadatacenter.util.json.JsonMapper;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.RestHighLevelClient;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +55,8 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -417,6 +421,76 @@ class SearchIndexLifecycleTest {
     assertEquals("Second, renamed", documents.get(F2).path("summaryText").asText(),
         "the rebuild's older copy must not replace the save");
     assertEquals(IndexingPhase.DONE, progress.getPhase());
+    assertTrue(IndexRebuildRegistry.inProgressIndex().isEmpty(), "mirroring stops when the rebuild ends");
+  }
+
+  /**
+   * Documents are built on several workers at once and written a batch at a time, so a work list
+   * longer than one batch exercises both: every resource must arrive exactly once, under its own name,
+   * and the progress must count each of them.
+   */
+  @Test
+  void aRebuildAcrossSeveralBatchesIndexesEveryResourceOnce() throws Exception {
+    String old = alias + "-2026-01-01t000000";
+    management.createSearchIndex(old);
+    management.addAlias(old, alias);
+    List<FileSystemResource> graph = new ArrayList<>();
+    for (int i = 0; i < 2_500; i++) {
+      graph.add(folder("https://repo.metadatacenter.orgx/folders/many-" + i, "Folder " + i));
+    }
+    IndexingProgress progress = spy(new IndexingProgress());
+    CedarDataServices services = dataServices(graph);
+
+    try (var data = mockStatic(CedarDataServices.class)) {
+      data.when(CedarDataServices::getInstance).thenReturn(services);
+      new RegenerateSearchIndexTask(config).regenerateSearchIndex(true, null, progress);
+    }
+
+    Map<String, ObjectNode> documents = openSearch.index(openSearch.indexNames().iterator().next()).documents;
+    assertEquals(2_500, documents.size());
+    for (int i = 0; i < 2_500; i++) {
+      assertEquals("Folder " + i,
+          documents.get("https://repo.metadatacenter.orgx/folders/many-" + i).path("summaryText").asText());
+    }
+    // Each phase restarts the count, so the indexing phase is counted as it advances.
+    verify(progress, times(2_500)).advance(CedarResourceType.FOLDER);
+  }
+
+  /** A document a worker cannot build stops the rebuild, names its resource, and promotes nothing. */
+  @Test
+  void aResourceWhoseDocumentCannotBeBuiltFailsTheRebuildAndNamesIt() throws Exception {
+    String old = alias + "-2026-01-01t000000";
+    management.createSearchIndex(old);
+    management.addAlias(old, alias);
+    List<FileSystemResource> graph = new ArrayList<>();
+    for (int i = 0; i < 1_500; i++) {
+      graph.add(folder("https://repo.metadatacenter.orgx/folders/many-" + i, "Folder " + i));
+    }
+    String broken = "https://repo.metadatacenter.orgx/folders/many-1234";
+    CedarDataServices services = dataServices(graph);
+    ResourcePermissionServiceSession permissions = services.getResourcePermissionServiceSession(null);
+    when(permissions.getResourceMaterializedPermission(any(FileSystemResource.class))).thenAnswer(call -> {
+      String id = call.<FileSystemResource>getArgument(0).getId();
+      if (id.equals(broken)) {
+        throw new IllegalStateException("the graph refused");
+      }
+      return grants(id);
+    });
+
+    CedarProcessingException failure;
+    try (var data = mockStatic(CedarDataServices.class)) {
+      data.when(CedarDataServices::getInstance).thenReturn(services);
+      failure = assertThrows(CedarProcessingException.class,
+          () -> new RegenerateSearchIndexTask(config).regenerateSearchIndex(true, null, new IndexingProgress()));
+    }
+
+    StringBuilder chain = new StringBuilder();
+    for (Throwable t = failure; t != null; t = t.getCause()) {
+      chain.append(t.getMessage()).append('\n');
+    }
+    assertTrue(chain.toString().contains(broken), chain.toString());
+    assertTrue(chain.toString().contains("the graph refused"), chain.toString());
+    assertEquals(Set.of(alias), openSearch.index(old).aliases, "the old index keeps the alias");
     assertTrue(IndexRebuildRegistry.inProgressIndex().isEmpty(), "mirroring stops when the rebuild ends");
   }
 

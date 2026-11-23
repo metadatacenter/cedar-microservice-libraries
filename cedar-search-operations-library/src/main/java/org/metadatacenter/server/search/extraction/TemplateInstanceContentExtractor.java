@@ -21,6 +21,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.metadatacenter.model.ModelNodeNames.JSON_LD_ID;
 import static org.metadatacenter.model.ModelNodeNames.JSON_LD_VALUE;
@@ -38,8 +39,10 @@ public class TemplateInstanceContentExtractor {
   private TemplateContentExtractor templateContentExtractor;
   /**
    * Cache of template nodes, which is used to avoid retrieving and parsing the same template multiple times.
+   * A rebuild reads it from several workers at once. Two workers that miss the same template both fetch
+   * it, and the second write replaces an equal value, so a plain concurrent map is enough.
    */
-  private Map<String, Map<List<String>, TemplateNode>> templateNodesCache;
+  private final Map<String, Map<List<String>, TemplateNode>> templateNodesCache;
 
   public TemplateInstanceContentExtractor(CedarConfig cedarConfig) {
     this(new ExtractionUtils(cedarConfig));
@@ -61,7 +64,7 @@ public class TemplateInstanceContentExtractor {
   TemplateInstanceContentExtractor(ExtractionUtils extractionUtils) {
     this.extractionUtils = extractionUtils;
     this.templateContentExtractor = new TemplateContentExtractor();
-    this.templateNodesCache = new HashMap<>();
+    this.templateNodesCache = new ConcurrentHashMap<>();
   }
 
   /**
@@ -155,14 +158,11 @@ public class TemplateInstanceContentExtractor {
       }
       String templateId = templateIdNode.asText();
 
-      Map<List<String>, TemplateNode> nodesMap;
       // If it's an index regeneration task the cache will be needed to avoid retrieving and parsing the same
       // template multiple times (once per template instance). If the cache contains the template nodes, return them
-      if (isIndexRegenerationTask && templateNodesCache.containsKey(templateId)) {
-        nodesMap = templateNodesCache.get(templateId);
-      }
+      Map<List<String>, TemplateNode> nodesMap = isIndexRegenerationTask ? templateNodesCache.get(templateId) : null;
       // Otherwise, retrieve the template and parse it
-      else {
+      if (nodesMap == null) {
         Optional<JsonNode> template =
             extractionUtils.getArtifactById(templateId, CedarResourceType.TEMPLATE, requestContext);
         if (template.isEmpty()) {

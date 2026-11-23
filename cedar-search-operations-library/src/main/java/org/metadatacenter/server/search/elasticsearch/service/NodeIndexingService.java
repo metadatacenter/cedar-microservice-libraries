@@ -133,7 +133,18 @@ public class NodeIndexingService extends AbstractIndexingService {
   public IndexingDocumentDocument createIndexDocument(FileSystemResource node, CedarNodeMaterializedPermissions permissions,
                                                       CedarNodeMaterializedCategories categories, CedarRequestContext requestContext,
                                                       boolean isIndexRegenerationTask) throws CedarProcessingException {
+    return createIndexDocument(node, permissions, categories, requestContext, isIndexRegenerationTask,
+        CedarDataServices.getInstance().getFolderServiceSession(requestContext));
+  }
 
+  /**
+   * The same, with the folder session the path is read through supplied by the caller. A rebuild
+   * builds documents on worker threads and resolves the session once for all of them.
+   */
+  public IndexingDocumentDocument createIndexDocument(FileSystemResource node, CedarNodeMaterializedPermissions permissions,
+                                                      CedarNodeMaterializedCategories categories, CedarRequestContext requestContext,
+                                                      boolean isIndexRegenerationTask, FolderServiceSession folderSession)
+      throws CedarProcessingException {
     IndexingDocumentDocument ir = new IndexingDocumentDocument(node.getId());
     // Set node's path info.
     //
@@ -143,7 +154,6 @@ public class NodeIndexingService extends AbstractIndexingService {
     // queries per element, for the whole repository — and then discarded every one of those answers.
     // They were also the wrong answers to store: they describe what the user running the rebuild may
     // do, in a document every user searches.
-    FolderServiceSession folderSession = CedarDataServices.getInstance().getFolderServiceSession(requestContext);
     node.setPathInfo(PathInfoBuilder.getResourcePath(folderSession, node));
     ir.setInfo(FolderServerNodeInfo.fromNode(node));
     ir.setMaterializedPermissions(permissions);
