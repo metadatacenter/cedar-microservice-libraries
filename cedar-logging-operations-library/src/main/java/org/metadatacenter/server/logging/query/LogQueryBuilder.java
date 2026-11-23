@@ -200,7 +200,7 @@ public final class LogQueryBuilder {
     }
 
     List<Metric> metrics = parseMetrics(spec.metrics(), table);
-    int limit = clampLimit(spec.limit(), MAX_GROUPED_LIMIT);
+    int limit = groupedLimit(spec.limit());
 
     // On the rollup source percentiles come from the merged histogram and are computed in Java, so
     // they are not SQL columns at all; everything else aggregates in SQL as usual.
@@ -734,6 +734,18 @@ public final class LogQueryBuilder {
       return Math.min(DEFAULT_LIMIT, max);
     }
     return Math.min(limit, max);
+  }
+
+  /**
+   * A grouped result is one page of at most {@link #MAX_GROUPED_LIMIT} rows. A larger limit is
+   * refused rather than lowered, as an offset-paged listing refuses one.
+   */
+  private static int groupedLimit(Integer limit) {
+    if (limit != null && limit > MAX_GROUPED_LIMIT) {
+      throw new IllegalArgumentException("A grouped query returns at most " + MAX_GROUPED_LIMIT
+          + " rows; 'limit' was " + limit + ".");
+    }
+    return clampLimit(limit, MAX_GROUPED_LIMIT);
   }
 
   /**

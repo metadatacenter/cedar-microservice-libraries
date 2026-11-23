@@ -427,14 +427,32 @@ class LogQueryBuilderTest {
   }
 
   @Test
-  void limitsAreClampedPerMode() {
+  void aRawLimitIsClampedToTheCursorWalksMaximum() {
     BuiltQuery raw = LogQueryBuilder.build(
         new LogQuerySpec("request", FROM, TO, null, null, null, null, 999_999, null));
     assertEquals(LogQueryBuilder.MAX_RAW_LIMIT, raw.limit());
+  }
 
+  @Test
+  void aGroupedLimitDefaultsTo100() {
     BuiltQuery grouped = LogQueryBuilder.build(
-        new LogQuerySpec("request", FROM, TO, null, List.of("component"), List.of("count"), null, 999_999, null));
-    assertEquals(LogQueryBuilder.MAX_GROUPED_LIMIT, grouped.limit());
+        new LogQuerySpec("request", FROM, TO, null, List.of("component"), List.of("count"), null, null, null));
+    assertEquals(100, grouped.limit());
+  }
+
+  @Test
+  void aGroupedLimitOf500IsAccepted() {
+    BuiltQuery grouped = LogQueryBuilder.build(
+        new LogQuerySpec("request", FROM, TO, null, List.of("component"), List.of("count"), null, 500, null));
+    assertEquals(500, grouped.limit());
+  }
+
+  @Test
+  void aGroupedLimitOver500IsRefused() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> LogQueryBuilder.build(new LogQuerySpec("request", FROM, TO, null, List.of("component"),
+            List.of("count"), null, 501, null)));
+    assertTrue(e.getMessage().contains("at most 500"));
   }
 
   @Test
