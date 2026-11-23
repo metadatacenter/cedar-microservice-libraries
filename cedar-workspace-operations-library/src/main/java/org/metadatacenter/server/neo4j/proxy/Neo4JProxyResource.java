@@ -8,6 +8,7 @@ import org.metadatacenter.model.CedarResource;
 import org.metadatacenter.model.CedarResourceType;
 import org.metadatacenter.model.folderserver.basic.FileSystemResource;
 import org.metadatacenter.model.folderserver.extract.FolderServerResourceExtract;
+import org.metadatacenter.server.neo4j.GraphTransactionTimeouts;
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.cypher.parameter.*;
@@ -268,7 +269,8 @@ public class Neo4JProxyResource extends AbstractNeo4JProxy {
     String cypher = CypherQueryBuilderFilesystemResource.getAllVisibleByGroupQuery();
     CypherParameters params = CypherParamBuilderGroup.matchId(id);
     CypherQuery q = new CypherQueryWithParameters(cypher, params);
-    return executeReadGetList(q, FileSystemResource.class);
+    // Only the worker's permission recalculation runs this, and it took up to 49 seconds in production.
+    return executeReadGetList(q, FileSystemResource.class, GraphTransactionTimeouts.longRunning());
   }
 
   public List<FolderServerResourceExtract> searchIsBasedOn(List<CedarResourceType> resourceTypes, CedarTemplateId isBasedOnId, int limit, int offset,

@@ -25,6 +25,7 @@ import org.metadatacenter.server.logging.model.AppLogType;
 import org.metadatacenter.server.neo4j.CypherQuery;
 import org.metadatacenter.server.neo4j.CypherQueryLiteral;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
+import org.metadatacenter.server.neo4j.GraphTransactionTimeouts;
 import org.metadatacenter.server.neo4j.cypher.NodeProperty;
 import org.metadatacenter.server.neo4j.log.CypherQueryLog;
 import org.metadatacenter.server.neo4j.util.Neo4JUtil;
@@ -89,7 +90,11 @@ public abstract class AbstractNeo4JProxy {
     if (q instanceof CypherQueryWithParameters) {
       parameterNames = ((CypherQueryWithParameters) q).getParameterMap().keySet().stream().sorted().toList();
     }
-    log.error("Error executing Cypher query; parameter names={}", parameterNames, ex);
+    if (GraphTransactionTimeouts.isTimeout(ex.code())) {
+      log.error("Cypher query exceeded its transaction time limit; parameter names={}", parameterNames, ex);
+    } else {
+      log.error("Error executing Cypher query; parameter names={}", parameterNames, ex);
+    }
     if (isSiblingNameConstraintViolation(ex)) {
       throw new SiblingNameConflictException(ex);
     }
@@ -118,14 +123,14 @@ public abstract class AbstractNeo4JProxy {
         result = session.writeTransaction(tx -> {
           tx.run(runnableQuery, parameterMap);
           return true;
-        });
+        }, GraphTransactionTimeouts.request());
       } else if (q instanceof CypherQueryLiteral) {
         final String runnableQuery = q.getRunnableQuery();
         queryLog = prepareQueryLog("write", q);
         result = session.writeTransaction(tx -> {
           tx.run(runnableQuery);
           return true;
-        });
+        }, GraphTransactionTimeouts.request());
       }
     } catch (ClientException ex) {
       log.error("Error while " + eventDescription, ex);
@@ -164,7 +169,7 @@ public abstract class AbstractNeo4JProxy {
           }
         }
         return true;
-      });
+      }, GraphTransactionTimeouts.request());
     } catch (ClientException ex) {
       log.error("Error while " + eventDescription, ex);
       reportQueryError(ex, queries.get(0));
@@ -185,7 +190,7 @@ public abstract class AbstractNeo4JProxy {
    */
   protected <T> T executeInWriteTransaction(Function<Transaction, T> work, String eventDescription) {
     try (Session session = driver.session()) {
-      return session.writeTransaction(work::apply);
+      return session.writeTransaction(work::apply, GraphTransactionTimeouts.request());
     } catch (ClientException ex) {
       log.error("Error while " + eventDescription, ex);
       if (isSiblingNameConstraintViolation(ex)) {
@@ -198,7 +203,7 @@ public abstract class AbstractNeo4JProxy {
   /** Runs caller-supplied work against one consistent read transaction. */
   protected <T> T executeInReadTransaction(Function<Transaction, T> work, String eventDescription) {
     try (Session session = driver.session()) {
-      return session.readTransaction(work::apply);
+      return session.readTransaction(work::apply, GraphTransactionTimeouts.request());
     } catch (ClientException ex) {
       log.error("Error while " + eventDescription, ex);
       throw new RuntimeException("Error while " + eventDescription + ": " + ex.getMessage(), ex);
@@ -322,14 +327,14 @@ public abstract class AbstractNeo4JProxy {
         record = session.writeTransaction(tx -> {
           Result result = tx.run(runnableQuery, parameterMap);
           return result.hasNext() ? result.next() : null;
-        });
+        }, GraphTransactionTimeouts.request());
       } else if (q instanceof CypherQueryLiteral) {
         final String runnableQuery = q.getRunnableQuery();
         queryLog = prepareQueryLog("writeGetOne", q);
         record = session.writeTransaction(tx -> {
           Result result = tx.run(runnableQuery);
           return result.hasNext() ? result.next() : null;
-        });
+        }, GraphTransactionTimeouts.request());
       }
     } catch (ClientException ex) {
       reportQueryError(ex, q);
@@ -363,14 +368,14 @@ public abstract class AbstractNeo4JProxy {
       record = session.readTransaction(tx -> {
         Result result = tx.run(runnableQuery, parameterMap);
         return result.hasNext() ? result.next() : null;
-      });
+      }, GraphTransactionTimeouts.request());
     } else if (q instanceof CypherQueryLiteral) {
       final String runnableQuery = q.getRunnableQuery();
       queryLog = prepareQueryLog("getRecord", q);
       record = session.readTransaction(tx -> {
         Result result = tx.run(runnableQuery);
         return result.hasNext() ? result.next() : null;
-      });
+      }, GraphTransactionTimeouts.request());
     }
     if (queryLog != null) {
       commitQueryLog(queryLog);
@@ -437,7 +442,8 @@ public abstract class AbstractNeo4JProxy {
     return null;
   }
 
-  private List<org.neo4j.driver.Record> executeQueryGetRecordList(Session session, CypherQuery q) {
+  private List<org.neo4j.driver.Record> executeQueryGetRecordList(Session session, CypherQuery q,
+                                                                TransactionConfig txConfig) {
     List<org.neo4j.driver.Record> records = null;
     CypherQueryLog queryLog = null;
     if (q instanceof CypherQueryWithParameters qp) {
@@ -451,7 +457,7 @@ public abstract class AbstractNeo4JProxy {
           nodes.add(result.next());
         }
         return nodes;
-      });
+      }, txConfig);
     } else if (q instanceof CypherQueryLiteral) {
       final String runnableQuery = q.getRunnableQuery();
       queryLog = prepareQueryLog("getRecordList", q);
@@ -462,7 +468,7 @@ public abstract class AbstractNeo4JProxy {
           nodes.add(result.next());
         }
         return nodes;
-      });
+      }, txConfig);
     }
     if (queryLog != null) {
       commitQueryLog(queryLog);
@@ -472,9 +478,18 @@ public abstract class AbstractNeo4JProxy {
 
 
   protected <T extends CedarResource> List<T> executeReadGetList(CypherQuery q, Class<T> type) {
+    return executeReadGetList(q, type, GraphTransactionTimeouts.request());
+  }
+
+  /**
+   * Reads a list of resources under the given transaction settings. A background query that may
+   * legitimately outlive a request's limit passes {@link GraphTransactionTimeouts#longRunning()}.
+   */
+  protected <T extends CedarResource> List<T> executeReadGetList(CypherQuery q, Class<T> type,
+                                                                 TransactionConfig txConfig) {
     List<T> folderServerNodeList = new ArrayList<>();
     try (Session session = driver.session()) {
-      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q);
+      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q, txConfig);
       if (records != null) {
         for (org.neo4j.driver.Record r : records) {
           if (r.size() == 1) {
@@ -528,7 +543,7 @@ public abstract class AbstractNeo4JProxy {
   protected <T extends CedarResourceId> List<T> executeReadGetIdList(CypherQuery q, Class<T> type) {
     List<T> folderServerIdList = new ArrayList<>();
     try (Session session = driver.session()) {
-      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q);
+      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q, GraphTransactionTimeouts.request());
       if (records != null) {
         for (org.neo4j.driver.Record r : records) {
           if (r.size() == 1) {
@@ -553,7 +568,7 @@ public abstract class AbstractNeo4JProxy {
   protected List<String> executeReadGetStringList(CypherQuery q) {
     List<String> values = new ArrayList<>();
     try (Session session = driver.session()) {
-      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q);
+      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q, GraphTransactionTimeouts.request());
       if (records != null) {
         for (org.neo4j.driver.Record r : records) {
           if (r.size() == 1 && r.get(0).type().equals(driver.defaultTypeSystem().STRING())) {
@@ -570,7 +585,7 @@ public abstract class AbstractNeo4JProxy {
   protected <T extends ResultTuple> List<T> executeReadGetToupleList(CypherQuery q, Class<T> type) {
     List<T> tupleList = new ArrayList<>();
     try (Session session = driver.session()) {
-      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q);
+      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q, GraphTransactionTimeouts.request());
       if (records != null) {
         for (org.neo4j.driver.Record r : records) {
           Map m = r.asMap();
@@ -590,7 +605,7 @@ public abstract class AbstractNeo4JProxy {
   protected List<FolderServerArc> executeReadGetArcList(CypherQuery q) {
     List<FolderServerArc> folderServerArcList = new ArrayList<>();
     try (Session session = driver.session()) {
-      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q);
+      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q, GraphTransactionTimeouts.request());
       if (records != null) {
         for (org.neo4j.driver.Record r : records) {
           Map<String, Object> recordMap = r.asMap();
@@ -621,7 +636,7 @@ public abstract class AbstractNeo4JProxy {
 
     List<Map<String, Object>> folderServerNodeList = new ArrayList<>();
     try (Session session = driver.session()) {
-      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q);
+      List<org.neo4j.driver.Record> records = executeQueryGetRecordList(session, q, GraphTransactionTimeouts.request());
       if (records != null) {
         for (org.neo4j.driver.Record r : records) {
           if (r.size() == 1) {
