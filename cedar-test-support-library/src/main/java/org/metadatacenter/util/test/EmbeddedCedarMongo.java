@@ -108,7 +108,7 @@ public final class EmbeddedCedarMongo {
     RuntimeException failure = null;
     for (int attempt = 1; attempt <= START_ATTEMPTS; attempt++) {
       try {
-        return Mongod.instance().start(Version.Main.V5_0);
+        return Mongod.instance().start(Version.Main.V8_0);
       } catch (RuntimeException e) {
         failure = e;
       }

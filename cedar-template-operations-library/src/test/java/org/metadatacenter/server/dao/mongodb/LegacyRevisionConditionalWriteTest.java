@@ -47,7 +47,7 @@ class LegacyRevisionConditionalWriteTest {
 
   @BeforeAll
   static void startMongo() {
-    mongod = Mongod.instance().start(Version.Main.V5_0);
+    mongod = Mongod.instance().start(Version.Main.V8_0);
     ServerAddress address = mongod.current().getServerAddress();
     client = MongoClients.create("mongodb://" + address.getHost() + ":" + address.getPort());
   }
