@@ -48,6 +48,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -65,8 +67,26 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
   private final String indexName;
   private final int deepPageSize;
   private final TimeValue pointInTimeKeepAlive;
+  private final OpenWalkLedger openWalks;
+
+  /**
+   * How many walks this process keeps a point in time open for. OpenSearch's own limit,
+   * {@code search.max_open_pit_context}, is 300 by default and covers every context in the cluster,
+   * including the one each offset deep search holds for the length of its request. Two hundred
+   * leaves those room.
+   */
+  static final int OPEN_WALK_CAPACITY = 200;
+
+  /** One ledger for the process, since every worker opens contexts against the same cluster. */
+  private static volatile OpenWalkLedger sharedOpenWalks;
 
   public ElasticsearchPermissionEnabledContentSearchingWorker(OpensearchConfig config, RestHighLevelClient client) {
+    this(config, client, sharedOpenWalks(config));
+  }
+
+  ElasticsearchPermissionEnabledContentSearchingWorker(OpensearchConfig config, RestHighLevelClient client,
+                                                       OpenWalkLedger openWalks) {
+    this.openWalks = openWalks;
     this.client = client;
     this.indexName = config.getIndexes().getSearchIndex().getName();
     // The deep walk skips a whole result window per round trip. Each skipped page re-runs the query
@@ -74,6 +94,21 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     // serve is also the cheapest way to cross a large offset.
     this.deepPageSize = Math.max(1, config.getMaxResultWindow());
     this.pointInTimeKeepAlive = TimeValue.timeValueMillis(config.getSearchContextKeepAlive());
+  }
+
+  private static OpenWalkLedger sharedOpenWalks(OpensearchConfig config) {
+    OpenWalkLedger ledger = sharedOpenWalks;
+    if (ledger == null) {
+      synchronized (ElasticsearchPermissionEnabledContentSearchingWorker.class) {
+        ledger = sharedOpenWalks;
+        if (ledger == null) {
+          ledger = new OpenWalkLedger(OPEN_WALK_CAPACITY, Duration.ofMillis(config.getSearchContextKeepAlive()),
+              Instant::now);
+          sharedOpenWalks = ledger;
+        }
+      }
+    }
+    return ledger;
   }
 
   public SearchResponseResult search(CedarRequestContext rctx, String query, List<String> resourceTypes, ResourceVersionFilter version,
@@ -182,6 +217,15 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     } catch (IOException e) {
       throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
     }
+    // Recorded before the page is read, so a walk in the middle of a page is the newest in the ledger
+    // and never the one closed to make room.
+    OpenWalkLedger.ToClose toClose = openWalks.use(walkPointInTimeId);
+    toClose.expired().forEach(this::closePointInTime);
+    for (String abandoned : toClose.abandoned()) {
+      log.info("Closing the point in time of the search walk that has gone longest without a page, to stay"
+          + " within " + OPEN_WALK_CAPACITY + " open walks. Its next page will ask the client to start again.");
+      closePointInTime(abandoned);
+    }
     try {
       SearchSourceBuilder searchSourceBuilder = getDeepSearchSourceBuilder(rctx, query, resourceTypes, version,
           publicationStatus, categoryId, sortList, walkPointInTimeId, modified, sharing);
@@ -202,22 +246,23 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
 
       boolean lastPage = page.length < limit;
       if (lastPage) {
-        closePointInTime(walkPointInTimeId);
+        closeWalk(walkPointInTimeId);
         return new DeepSearchPage(result, null, null);
       }
       return new DeepSearchPage(result, walkPointInTimeId, page[page.length - 1].getSortValues());
     } catch (IOException e) {
-      closePointInTime(walkPointInTimeId);
+      closeWalk(walkPointInTimeId);
       throw new CedarDependencyUnavailableException("OpenSearch is unavailable", e);
     } catch (OpenSearchStatusException e) {
       if (e.status() == RestStatus.NOT_FOUND) {
+        openWalks.release(walkPointInTimeId);
         // The snapshot the walk was reading has been released, by its keep alive or by a restart.
         // There is nothing to resume: the caller has to start the walk again.
         throw new CedarProcessingException("The continuation has expired. Start the walk again!")
             .errorReasonKey(CedarErrorReasonKey.CONTINUATION_EXPIRED)
             .badRequest();
       }
-      closePointInTime(walkPointInTimeId);
+      closeWalk(walkPointInTimeId);
       if (!walkStarts && e.status() == RestStatus.BAD_REQUEST) {
         // A continuation is not signed, so it can name a snapshot or a position the cluster cannot read.
         // That refusal is the caller's to act on, as an expired one is.
@@ -248,12 +293,22 @@ public class ElasticsearchPermissionEnabledContentSearchingWorker {
     return client.createPit(request, RequestOptions.DEFAULT).getId();
   }
 
+  private void closeWalk(String pointInTimeId) {
+    openWalks.release(pointInTimeId);
+    closePointInTime(pointInTimeId);
+  }
+
   private void closePointInTime(String pointInTimeId) {
     if (pointInTimeId == null) {
       return;
     }
     try {
       client.deletePit(new DeletePitRequest(pointInTimeId), RequestOptions.DEFAULT);
+    } catch (OpenSearchStatusException e) {
+      // A context OpenSearch has already released is the outcome a close asks for.
+      if (e.status() != RestStatus.NOT_FOUND) {
+        log.warn("Unable to delete the OpenSearch point in time context", e);
+      }
     } catch (IOException | OpenSearchException e) {
       // The context expires on its own, and a failure here must not replace the outcome of the search.
       log.warn("Unable to delete the OpenSearch point in time context", e);

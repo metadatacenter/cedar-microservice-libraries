@@ -38,6 +38,8 @@ import org.opensearch.search.SearchHits;
 import org.opensearch.search.builder.SearchSourceBuilder;
 
 import java.util.ArrayDeque;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
@@ -430,6 +432,32 @@ class ElasticsearchPermissionEnabledContentSearchingWorkerTest {
     assertEquals(CedarResponseStatus.BAD_REQUEST, error.getErrorPack().getStatus());
     assertEquals(CedarErrorReasonKey.CONTINUATION_EXPIRED, error.getErrorPack().getErrorReasonKey());
     assertTrue(error.getMessage().contains("expired"), error.getMessage());
+  }
+
+  @Test
+  void aWalkPastTheOpenWalkCapacityClosesTheWalkThatWentLongestWithoutAPage() throws Exception {
+    OpensearchConfig config = new ObjectMapper().readValue(
+        "{\"indexes\":{\"searchIndex\":{\"name\":\"cedar-search\"}},\"maxResultWindow\":3,\"searchContextKeepAlive\":60000}",
+        OpensearchConfig.class);
+    when(client.createPit(any(CreatePitRequest.class), any(RequestOptions.class)))
+        .thenReturn(new CreatePitResponse("pit-1", 0L, 1, 1, 0, 0, ShardSearchFailure.EMPTY_ARRAY))
+        .thenReturn(new CreatePitResponse("pit-2", 0L, 1, 1, 0, 0, ShardSearchFailure.EMPTY_ARRAY));
+    ElasticsearchPermissionEnabledContentSearchingWorker bounded = new ElasticsearchPermissionEnabledContentSearchingWorker(
+        config, client, new OpenWalkLedger(1, Duration.ofSeconds(60), Instant::now));
+    deepPages(response(40, hit(0), hit(1)), response(40, hit(0), hit(1)));
+
+    // Each walk reads a full page and stops, as a client that reads one page of a long result set does.
+    DeepSearchPage first = bounded.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, null, 2, null, null, ModifiedDateRange.ALL, SearchSharingFilter.ALL);
+    verifyPointInTimeKept();
+    DeepSearchPage second = bounded.searchDeepPage(requestContext, "kidney", null, ResourceVersionFilter.ALL,
+        ResourcePublicationStatusFilter.ALL, null, null, 2, null, null, ModifiedDateRange.ALL, SearchSharingFilter.ALL);
+
+    assertEquals("pit-1", first.pointInTimeId());
+    assertEquals("pit-2", second.pointInTimeId());
+    ArgumentCaptor<DeletePitRequest> deleteRequest = ArgumentCaptor.forClass(DeletePitRequest.class);
+    verify(client).deletePit(deleteRequest.capture(), any(RequestOptions.class));
+    assertEquals(List.of("pit-1"), deleteRequest.getValue().getPitIds(), "the first walk's context makes room");
   }
 
   private void verifyPointInTimeKept() throws Exception {
