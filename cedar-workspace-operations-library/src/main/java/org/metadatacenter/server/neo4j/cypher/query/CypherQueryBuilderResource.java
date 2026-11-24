@@ -100,14 +100,23 @@ public class CypherQueryBuilderResource extends AbstractCypherQueryBuilder {
                                          boolean addPermissionConditions, ModifiedDateRange modified) {
     StringBuilder sb = new StringBuilder();
     if (addPermissionConditions) {
+      // Walk down from the caller once, so the cost follows what the caller can reach. Testing every
+      // resource in the store against a path from the caller made the cost follow the size of the store:
+      // in production this listing ran for up to 81 minutes.
       sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
+      sb.append(" CALL { WITH user");
+      sb.append(" MATCH ").append(getUserToResourceRelationWithContains(RelationLabel.OWNS, "resource:<LABEL.RESOURCE>"));
+      sb.append(" RETURN resource");
+      sb.append(" UNION WITH user");
+      sb.append(" MATCH ").append(getUserToResourceRelationThroughGroupWithContains(getResourceRoleRelationLabels(),
+          "resource:<LABEL.RESOURCE>"));
+      sb.append(" RETURN resource }");
+      sb.append(" WITH resource");
+    } else {
+      sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
     }
-    sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
     sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList" + ModifiedDateConditions.and("resource", modified));
     sb.append(" AND resource.<PROP.IS_USER_HOME> IS NULL ");
-    if (addPermissionConditions) {
-      sb.append(getResourcePermissionConditions(" AND ", "resource"));
-    }
     if (version != null && version != ResourceVersionFilter.ALL) {
       sb.append(getVersionConditions(version, " AND ", "resource"));
     }

@@ -8,6 +8,8 @@ import org.metadatacenter.model.request.ModifiedDateRange;
 import org.metadatacenter.server.neo4j.CypherQueryWithParameters;
 import org.metadatacenter.server.neo4j.ScratchNeo4j;
 import org.metadatacenter.server.neo4j.parameter.CypherParameters;
+import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFilter;
+import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
@@ -195,6 +197,77 @@ class CypherPermissionQueryEquivalenceTest {
             unrestricted, "resource"));
     assertEquals(firstLongOrMinusOne(oldSpecialFoldersCountUnrestricted(), Map.of()),
         firstLongOrMinusOne(CypherQueryBuilderResource.getSpecialFoldersCountQuery(false), Map.of()));
+  }
+
+  /**
+   * The listing behind a search with no term walks down from the caller rather than testing every
+   * resource in the store against a path from the caller. Both forms list the same resources in the
+   * same order, for every caller, under every version and publication filter, on every page.
+   */
+  @Test
+  void viewAllLookupListsWhatTheStoreWideFormListed() {
+    try (var session = driver.session()) {
+      session.run("""
+          MATCH (shared {_id: 'folder-shared'}), (nested {_id: 'folder-nested'}),
+                (privateRoot {_id: 'folder-private'}), (root {_id: 'folder-root'})
+          WITH [shared, nested, privateRoot, root] AS parents
+          UNWIND range(0, 11) AS i
+          WITH parents[i % 4] AS parent, i
+          CREATE (t:Resource:FileSystemResource:Artifact:Element {
+            _id: 'view-all-' + toString(i), schema_name: 'View all ' + toString(i),
+            schema_name_lower: 'view all ' + toString(i), resourceType: 'element',
+            lastUpdatedOnTS: (i % 5) * 100, bibo_status: CASE WHEN i % 2 = 0 THEN 'bibo:draft' ELSE 'bibo:published' END,
+            isLatestVersion: i % 3 <> 0, isLatestDraftVersion: i % 2 = 0, isLatestPublishedVersion: i % 2 = 1})
+          CREATE (parent)-[:CONTAINS]->(t)
+          """).consume();
+      session.run("""
+          MATCH (overlap {_id: 'user-overlap'}), (t {_id: 'view-all-3'})
+          CREATE (overlap)-[:OWNS]->(t)
+          """).consume();
+    }
+    List<String> users = List.of("user-owner", "user-viewer", "user-editor", "user-manager", "user-overlap",
+        "user-outsider", "user-other-owner", "user-canonical-viewer-member", "user-canonical-manager");
+    for (ResourceVersionFilter version : ResourceVersionFilter.values()) {
+      for (ResourcePublicationStatusFilter status : ResourcePublicationStatusFilter.values()) {
+        for (String sort : List.of("-lastUpdatedOnTS", "name")) {
+          String current = CypherQueryBuilderResource.getAllLookupQuery(version, status, List.of(sort), true);
+          String storeWide = storeWideViewAllLookup(version, status, List.of(sort));
+          for (String userId : users) {
+            for (int offset : List.of(0, 2, 5)) {
+              Map<String, Object> parameters = Map.of("userId", userId, "resourceTypeList", List.of("element", "folder"),
+                  "publicationStatus", status == ResourcePublicationStatusFilter.DRAFT ? "bibo:draft" : "bibo:published",
+                  "offset", offset, "limit", 4);
+              assertEquals(nodeIds(storeWide, parameters, "resource"), nodeIds(current, parameters, "resource"),
+                  userId + " " + version + " " + status + " " + sort + " offset " + offset);
+            }
+          }
+        }
+      }
+    }
+    assertFalse(nodeIds(CypherQueryBuilderResource.getAllLookupQuery(ResourceVersionFilter.ALL,
+            ResourcePublicationStatusFilter.ALL, List.of("name"), true),
+        Map.of("userId", "user-owner", "resourceTypeList", List.of("element"), "offset", 0, "limit", 100), "resource")
+        .isEmpty(), "the fixture lists nothing for the owner");
+  }
+
+  /** The listing as it was built before it walked down from the caller. */
+  private static String storeWideViewAllLookup(ResourceVersionFilter version, ResourcePublicationStatusFilter status,
+                                               List<String> sortList) {
+    StringBuilder sb = new StringBuilder();
+    sb.append(" MATCH (user:<LABEL.USER> {<PROP.ID>:{<PH.USER_ID>}})");
+    sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
+    sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
+    sb.append(" AND resource.<PROP.IS_USER_HOME> IS NULL ");
+    sb.append(AbstractCypherQueryBuilder.getResourcePermissionConditions(" AND ", "resource"));
+    if (version != ResourceVersionFilter.ALL) {
+      sb.append(AbstractCypherQueryBuilder.getVersionConditions(version, " AND ", "resource"));
+    }
+    if (status != ResourcePublicationStatusFilter.ALL) {
+      sb.append(AbstractCypherQueryBuilder.getPublicationStatusConditions(" AND ", "resource"));
+    }
+    sb.append(" RETURN resource ORDER BY ").append(AbstractCypherQueryBuilder.getOrderByExpression("resource", sortList));
+    sb.append(", resource.<PROP.ID> SKIP $offset LIMIT $limit");
+    return sb.toString();
   }
 
   @Test
