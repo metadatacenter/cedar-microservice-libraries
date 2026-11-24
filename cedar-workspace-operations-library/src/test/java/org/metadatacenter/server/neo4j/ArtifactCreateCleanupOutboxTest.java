@@ -139,7 +139,11 @@ class ArtifactCreateCleanupOutboxTest {
     }
   }
 
-  @Test void registrationWaitingBehindCleanupCannotCreateAGraphOrphan() throws Exception {
+  /**
+   * A registration that arrives while the DELETE is out is refused at once by the committed fence,
+   * rather than waiting for the call to return.
+   */
+  @Test void registrationDuringCleanupIsRefusedWithoutCreatingAGraphOrphan() throws Exception {
     try(var box=open()) {
       String job=created(box);
       var deleting=new CountDownLatch(1); var release=new CountDownLatch(1);
@@ -153,11 +157,61 @@ class ArtifactCreateCleanupOutboxTest {
         }));
         assertTrue(deleting.await(10,TimeUnit.SECONDS));
         var registration=pool.submit(() -> register(job,true));
-        assertThrows(TimeoutException.class,() -> registration.get(200,TimeUnit.MILLISECONDS));
-        release.countDown(); cleanup.get(10,TimeUnit.SECONDS);
-        var error=assertThrows(ExecutionException.class,() -> registration.get(10,TimeUnit.SECONDS));
+        var error=assertThrows(ExecutionException.class,() -> registration.get(5,TimeUnit.SECONDS));
         assertInstanceOf(IllegalStateException.class,error.getCause());
+        release.countDown(); cleanup.get(10,TimeUnit.SECONDS);
+        try(var session=database.session()) {
+          assertEquals(0,session.run("MATCH (a:Artifact {_id:'artifact'}) RETURN count(a) AS n").single().get("n").asLong());
+        }
+        assertTrue(state(job).isEmpty());
       } finally { release.countDown();pool.shutdownNow(); }
+    }
+  }
+
+  /** Every other change to the graph takes the lifecycle lock, and goes ahead while a DELETE is out. */
+  @Test void theLifecycleLockIsFreeWhileADeleteIsOut() throws Exception {
+    try(var box=open()) {
+      String job=created(box);
+      var deleting=new CountDownLatch(1); var release=new CountDownLatch(1);
+      var pool=Executors.newFixedThreadPool(2);
+      try {
+        var cleanup=pool.submit(() -> box.attempt(job,ignored -> {
+          deleting.countDown();
+          try { assertTrue(release.await(10,TimeUnit.SECONDS)); }
+          catch(InterruptedException e) { throw new AssertionError(e); }
+          return 204;
+        }));
+        assertTrue(deleting.await(10,TimeUnit.SECONDS));
+        var save=pool.submit(() -> {
+          try(var session=database.session();var tx=session.beginTransaction()) {
+            VersionChainTransaction.lock(tx);
+            tx.commit();
+          }
+        });
+        save.get(5,TimeUnit.SECONDS);
+        release.countDown(); cleanup.get(10,TimeUnit.SECONDS);
+        assertTrue(state(job).isEmpty());
+      } finally { release.countDown();pool.shutdownNow(); }
+    }
+  }
+
+  /**
+   * A create's revision can arrive after the fence ran, which then marked nothing. Its DELETE is not
+   * sent until a fence has committed, since without one a registration could land while it is out.
+   */
+  @Test void aRevisionThatArrivesAfterTheFenceIsNotDeletedUntilFenced() {
+    try(var box=open()) {
+      String job=box.prepare(CedarResourceType.TEMPLATE,"create");
+      box.fence(job);
+      box.created(job,"artifact","\"7\"");
+      box.deleteIfFenced(job,neverDelete("an unfenced job was deleted"));
+      var deferred=state(job);
+      assertNotEquals(true,deferred.get("cleanupStarted"));
+      assertNotEquals(true,deferred.get("parked"));
+      AtomicInteger sent=new AtomicInteger();
+      box.attempt(job,ignored -> { sent.incrementAndGet(); return 204; });
+      assertEquals(1,sent.get());
+      assertTrue(state(job).isEmpty());
     }
   }
 

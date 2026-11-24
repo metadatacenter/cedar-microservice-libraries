@@ -159,8 +159,9 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
   }
 
   /**
-   * The lock spans the conditional DELETE and its acknowledgement, fencing late registration. A job
-   * that holds an identity but no revision is parked here, since nothing can read the identity.
+   * Fences the job against late registration, then sends its conditional DELETE and records the
+   * answer. A job that holds an identity but no revision is parked, since nothing can read the
+   * identity.
    */
   public void attempt(String jobId, ToIntFunction<Job> delete) {
     attempt(jobId, null, delete);
@@ -173,19 +174,39 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
    */
   public void attempt(String jobId, Function<Job, Stored> read, ToIntFunction<Job> delete) {
     if (read != null && !recheck(jobId, read)) return;
-    // Commit the fence BEFORE external I/O. If DELETE succeeds but this process dies before
-    // acknowledging it, a late request still cannot register the now-deleted document.
+    fence(jobId);
+    deleteIfFenced(jobId, delete);
+  }
+
+  /**
+   * Marks the job as started, under the lifecycle lock, and commits before anything is sent. Every
+   * registration takes the same lock and refuses a started job, so once this commits no registration
+   * can land: one that committed earlier left its artifact, which {@link #deleteIfFenced} finds. If the
+   * DELETE then succeeds and this process dies before acknowledging it, a late request still cannot
+   * register the deleted document.
+   */
+  void fence(String jobId) {
     try (var session = driver.session(); var tx = session.beginTransaction(GraphTransactionTimeouts.request())) {
       VersionChainTransaction.lock(tx);
       tx.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) WHERE j.resourceId IS NOT NULL "
           + "AND j.etag IS NOT NULL AND j.parked=false SET j.cleanupStarted=true", Map.of("job",jobId)).consume();
       tx.commit();
     }
-    // This transaction holds the lifecycle lock while it asks the artifact server to delete the document.
+  }
+
+  /**
+   * Sends the job's conditional DELETE if its fence has committed, and records the answer.
+   *
+   * <p>The committed fence is what keeps registration out, so this transaction does not take the
+   * lifecycle lock: while the call is out, every other change to the graph goes ahead. It locks only the
+   * job's own node, which keeps a second relay off the same job. A job whose fence has not committed is
+   * not sent. That happens when the create's revision arrived after {@link #fence} ran, and the job is
+   * deferred so that the next attempt fences it first.</p>
+   */
+  void deleteIfFenced(String jobId, ToIntFunction<Job> delete) {
     try (var session = driver.session(); var tx = session.beginTransaction(GraphTransactionTimeouts.aroundACall())) {
-      VersionChainTransaction.lock(tx);
-      var found = tx.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) RETURN properties(j) AS job",
-          Map.of("job",jobId));
+      var found = tx.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) "
+          + "SET j.attemptLock=coalesce(j.attemptLock,0)+1 RETURN properties(j) AS job", Map.of("job",jobId));
       if (!found.hasNext()) return; // Includes graph-commit success with a lost acknowledgement.
       var values = found.single().get("job").asMap();
       if (Boolean.TRUE.equals(values.get("parked"))) return;
@@ -195,8 +216,10 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
         park(tx, jobId, "Create outcome or exact revision is unknown; inspect before cleanup");
       } else if (tx.run("MATCH (a:Artifact {_id:$id}) RETURN a", Map.of("id",id)).hasNext()) {
         park(tx, jobId, "Artifact is registered; inspect instead of deleting content");
+      } else if (!Boolean.TRUE.equals(values.get("cleanupStarted"))) {
+        tx.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) SET j.nextAttemptAt=timestamp()",
+            Map.of("job",jobId)).consume();
       } else {
-        tx.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) SET j.cleanupStarted=true",Map.of("job",jobId)).consume();
         int status;
         try {
           status = delete.applyAsInt(new Job(jobId, id, CedarResourceType.forValue((String)values.get("resourceType")), etag));
@@ -281,8 +304,10 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
           // Another create recorded this revision as its own, and registers or removes it itself.
           retireOrRecheck(tx, jobId, id, windowOver);
         } else {
-          tx.run("MATCH (j:CedarArtifactCreateCleanup {resourceId:$id}) SET j.cleanupStarted=true",
-              Map.of("id", id)).consume();
+          // A job already started may be locked by a DELETE in flight. It needs no write, and writing
+          // it would hold the lifecycle lock until that call returned.
+          tx.run("MATCH (j:CedarArtifactCreateCleanup {resourceId:$id}) WHERE coalesce(j.cleanupStarted,false)=false "
+              + "SET j.cleanupStarted=true", Map.of("id", id)).consume();
           tx.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) SET j.etag=$etag, j.attempts=0 "
               + "REMOVE j.lastStatus", Map.of("job", jobId, "etag", revision.etag())).consume();
           log.warn("Create cleanup {} found an unregistered document at {}, revision {}; removing it",
