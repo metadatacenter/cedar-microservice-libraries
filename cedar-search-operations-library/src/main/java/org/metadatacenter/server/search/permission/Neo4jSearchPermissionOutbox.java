@@ -1,6 +1,7 @@
 package org.metadatacenter.server.search.permission;
 
 import org.metadatacenter.config.CedarConfig;
+import org.metadatacenter.server.neo4j.GraphTransactionTimeouts;
 import org.metadatacenter.server.neo4j.Neo4jDrivers;
 import org.metadatacenter.server.search.SearchPermissionQueueEvent;
 import org.metadatacenter.server.search.SearchPermissionQueueEventType;
@@ -60,12 +61,12 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
         + "FOR (lock:" + RELAY_LOCK_LABEL + ") REQUIRE lock.name IS UNIQUE";
     String lockQuery = "MERGE (:" + RELAY_LOCK_LABEL + " {name: $name})";
     try (Session session = driver.session()) {
-      session.run(constraintQuery).consume();
+      session.run(constraintQuery, GraphTransactionTimeouts.longRunning()).consume();
       session.run("CREATE INDEX cedar_search_permission_outbox_id IF NOT EXISTS "
-          + "FOR (e:" + LABEL + ") ON (e.outboxId)").consume();
+          + "FOR (e:" + LABEL + ") ON (e.outboxId)", GraphTransactionTimeouts.longRunning()).consume();
       session.run("CREATE INDEX cedar_search_permission_outbox_created_id IF NOT EXISTS "
-          + "FOR (e:" + LABEL + ") ON (e.createdAtTS, e.outboxId)").consume();
-      session.run(lockQuery, Map.of("name", RELAY_LOCK_NAME)).consume();
+          + "FOR (e:" + LABEL + ") ON (e.createdAtTS, e.outboxId)", GraphTransactionTimeouts.longRunning()).consume();
+      session.run(lockQuery, Map.of("name", RELAY_LOCK_NAME), GraphTransactionTimeouts.longRunning()).consume();
       relayLockReady = true;
     }
   }
@@ -81,7 +82,7 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
   @Override
   public String append(SearchPermissionQueueEvent event) {
     try (Session session = driver.session()) {
-      return session.writeTransaction(tx -> appendIn(tx, event));
+      return session.writeTransaction(tx -> appendIn(tx, event), GraphTransactionTimeouts.request());
     }
   }
 
@@ -120,7 +121,7 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
           entryFromRecord(record).ifPresent(entries::add);
         }
         return entries;
-      });
+      }, GraphTransactionTimeouts.request());
     }
   }
 
@@ -154,7 +155,7 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
               descriptions.size(), descriptions);
         }
         return null;
-      });
+      }, GraphTransactionTimeouts.request());
     }
   }
 
@@ -195,7 +196,7 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
         acquireRelayLock(tx);
         tx.run(query, Map.of("outboxIds", outboxIds)).consume();
         return null;
-      });
+      }, GraphTransactionTimeouts.request());
     }
   }
 
@@ -203,7 +204,7 @@ final class Neo4jSearchPermissionOutbox implements SearchPermissionOutbox {
   public long count() {
     String query = "MATCH (e:" + LABEL + ") RETURN count(e) AS pending";
     try (Session session = driver.session()) {
-      return session.readTransaction(tx -> tx.run(query).single().get("pending").asLong());
+      return session.readTransaction(tx -> tx.run(query).single().get("pending").asLong(), GraphTransactionTimeouts.request());
     }
   }
 

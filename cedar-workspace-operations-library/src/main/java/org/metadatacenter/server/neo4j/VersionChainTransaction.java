@@ -10,11 +10,12 @@ import java.util.*;
 public final class VersionChainTransaction {
   private VersionChainTransaction() {}
 
+  /** Creates the lifecycle lock and its constraints at start-up, which runs no request and may build an index. */
   public static void initialize(Driver driver) {
     try (var session = driver.session()) {
-      session.run("CREATE CONSTRAINT cedar_version_lock IF NOT EXISTS FOR (n:CedarVersionLock) REQUIRE n.id IS UNIQUE").consume();
-      session.run("CREATE CONSTRAINT cedar_version_projection IF NOT EXISTS FOR (n:CedarVersionProjection) REQUIRE n.resourceId IS UNIQUE").consume();
-      session.run("MERGE (:CedarVersionLock {id:'lifecycle'})").consume();
+      session.run("CREATE CONSTRAINT cedar_version_lock IF NOT EXISTS FOR (n:CedarVersionLock) REQUIRE n.id IS UNIQUE", GraphTransactionTimeouts.longRunning()).consume();
+      session.run("CREATE CONSTRAINT cedar_version_projection IF NOT EXISTS FOR (n:CedarVersionProjection) REQUIRE n.resourceId IS UNIQUE", GraphTransactionTimeouts.longRunning()).consume();
+      session.run("MERGE (:CedarVersionLock {id:'lifecycle'})", GraphTransactionTimeouts.longRunning()).consume();
     }
   }
 

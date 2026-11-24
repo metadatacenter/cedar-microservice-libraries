@@ -85,7 +85,7 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
     VersionChainTransaction.initialize(driver);
     try (var session = driver.session()) {
       session.run("CREATE CONSTRAINT cedar_create_cleanup_job IF NOT EXISTS "
-          + "FOR (j:CedarArtifactCreateCleanup) REQUIRE j.jobId IS UNIQUE").consume();
+          + "FOR (j:CedarArtifactCreateCleanup) REQUIRE j.jobId IS UNIQUE", GraphTransactionTimeouts.longRunning()).consume();
     }
   }
 
@@ -95,7 +95,7 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
     try (var session = driver.session()) {
       session.run("CREATE (j:CedarArtifactCreateCleanup {jobId:$job, resourceType:$type, operation:$operation, "
           + "createdAt:timestamp(), nextAttemptAt:timestamp()+$delay, attempts:0, parked:false})",
-          Map.of("job", jobId, "type", type.getValue(), "operation", operation, "delay", delayMillis)).consume();
+          Map.of("job", jobId, "type", type.getValue(), "operation", operation, "delay", delayMillis), GraphTransactionTimeouts.request()).consume();
     }
     return jobId;
   }
@@ -114,14 +114,14 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
           + "resourceId:$id, createdAt:timestamp(), nextAttemptAt:timestamp()+$delay, "
           + "recheckUntil:timestamp()+$recheck, attempts:0, parked:false})",
           Map.of("job", jobId, "type", type.getValue(), "operation", operation, "id", resourceId,
-              "delay", delayMillis, "recheck", recheckMillis)).consume();
+              "delay", delayMillis, "recheck", recheckMillis), GraphTransactionTimeouts.request()).consume();
     }
     return jobId;
   }
 
   /** No destructive retry is possible until the exact created revision is known. */
   public void created(String jobId, String id, String etag) {
-    try (var session = driver.session(); var tx = session.beginTransaction()) {
+    try (var session = driver.session(); var tx = session.beginTransaction(GraphTransactionTimeouts.request())) {
       VersionChainTransaction.lock(tx);
       var args = new HashMap<String,Object>();
       args.put("job", jobId); args.put("id", id); args.put("etag", etag); args.put("delay", delayMillis);
@@ -153,7 +153,7 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
   public List<String> pending(int limit) {
     try (var session = driver.session()) {
       return session.run("MATCH (j:CedarArtifactCreateCleanup) WHERE j.parked=false AND j.nextAttemptAt<=timestamp() "
-          + "RETURN j.jobId AS id ORDER BY j.nextAttemptAt, j.createdAt LIMIT $limit", Map.of("limit",limit))
+          + "RETURN j.jobId AS id ORDER BY j.nextAttemptAt, j.createdAt LIMIT $limit", Map.of("limit",limit), GraphTransactionTimeouts.request())
           .list(r -> r.get("id").asString());
     }
   }
@@ -175,13 +175,14 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
     if (read != null && !recheck(jobId, read)) return;
     // Commit the fence BEFORE external I/O. If DELETE succeeds but this process dies before
     // acknowledging it, a late request still cannot register the now-deleted document.
-    try (var session = driver.session(); var tx = session.beginTransaction()) {
+    try (var session = driver.session(); var tx = session.beginTransaction(GraphTransactionTimeouts.request())) {
       VersionChainTransaction.lock(tx);
       tx.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) WHERE j.resourceId IS NOT NULL "
           + "AND j.etag IS NOT NULL AND j.parked=false SET j.cleanupStarted=true", Map.of("job",jobId)).consume();
       tx.commit();
     }
-    try (var session = driver.session(); var tx = session.beginTransaction()) {
+    // This transaction holds the lifecycle lock while it asks the artifact server to delete the document.
+    try (var session = driver.session(); var tx = session.beginTransaction(GraphTransactionTimeouts.aroundACall())) {
       VersionChainTransaction.lock(tx);
       var found = tx.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) RETURN properties(j) AS job",
           Map.of("job",jobId));
@@ -234,7 +235,7 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
     long readAt;
     try (var session = driver.session()) {
       var found = session.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) "
-          + "RETURN properties(j) AS job, timestamp() AS now", Map.of("job", jobId));
+          + "RETURN properties(j) AS job, timestamp() AS now", Map.of("job", jobId), GraphTransactionTimeouts.request());
       if (!found.hasNext()) return false;
       var record = found.single();
       values = record.get("job").asMap();
@@ -250,7 +251,7 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
       stored = Objects.requireNonNullElse(read.apply(new Job(jobId, id,
           CedarResourceType.forValue((String)values.get("resourceType")), null)), new Stored.Unknown(503));
     } catch (RuntimeException failure) { stored = new Stored.Unknown(503); }
-    try (var session = driver.session(); var tx = session.beginTransaction()) {
+    try (var session = driver.session(); var tx = session.beginTransaction(GraphTransactionTimeouts.request())) {
       VersionChainTransaction.lock(tx);
       var found = tx.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) RETURN properties(j) AS job",
           Map.of("job", jobId));
@@ -332,7 +333,7 @@ public final class ArtifactCreateCleanupOutbox implements AutoCloseable {
   }
 
   private void forget(String jobId) {
-    try (var session = driver.session(); var tx = session.beginTransaction()) {
+    try (var session = driver.session(); var tx = session.beginTransaction(GraphTransactionTimeouts.request())) {
       VersionChainTransaction.lock(tx);
       tx.run("MATCH (j:CedarArtifactCreateCleanup {jobId:$job}) WHERE j.resourceId IS NULL "
           + "OR (j.etag IS NULL AND j.recheckUntil IS NOT NULL) DELETE j", Map.of("job",jobId)).consume();

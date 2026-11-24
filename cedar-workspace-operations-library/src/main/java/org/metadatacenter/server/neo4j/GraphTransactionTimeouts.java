@@ -31,10 +31,21 @@ public final class GraphTransactionTimeouts {
   /** The limit on a graph transaction that a background task runs and that may take longer. */
   public static final Duration LONG_RUNNING = Duration.ofMinutes(10);
 
+  /**
+   * The limit on a graph transaction that holds a lock while it calls another service. It exceeds the
+   * longest response a call to another CEDAR service waits for, 20 seconds by default, with room for
+   * connecting and for the transaction's own work. A shorter limit would end the transaction while the
+   * call is still out, and the call's outcome would go unrecorded.
+   */
+  public static final Duration AROUND_A_CALL = Duration.ofSeconds(60);
+
   private static final TransactionConfig REQUEST_CONFIG = TransactionConfig.builder().withTimeout(REQUEST).build();
 
   private static final TransactionConfig LONG_RUNNING_CONFIG =
       TransactionConfig.builder().withTimeout(LONG_RUNNING).build();
+
+  private static final TransactionConfig AROUND_A_CALL_CONFIG =
+      TransactionConfig.builder().withTimeout(AROUND_A_CALL).build();
 
   /**
    * The Neo4j error codes of a transaction that outlived its limit. A Neo4j 5.26 server reports the
@@ -54,6 +65,11 @@ public final class GraphTransactionTimeouts {
   /** The transaction settings for a background query that may run longer than a request's limit. */
   public static TransactionConfig longRunning() {
     return LONG_RUNNING_CONFIG;
+  }
+
+  /** The transaction settings for a transaction that holds a lock while it calls another service. */
+  public static TransactionConfig aroundACall() {
+    return AROUND_A_CALL_CONFIG;
   }
 
   /** Whether the given Neo4j error code reports a transaction ended by its time limit. */
