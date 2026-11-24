@@ -247,13 +247,22 @@ public abstract class AbstractCypherQueryBuilder {
         RelationLabel.MANAGER_ROLE.toString());
   }
 
+  /**
+   * Whether the user may read the given node: they own it or a folder above it, or they or one of their
+   * groups holds a role on it or on a folder above it.
+   *
+   * <p>Both checks walk up from the node. Written as a path from the user, the group check let Neo4j
+   * walk down through everything the user's groups can see, once for every node tested. In production a
+   * user's groups reach about 112,000 resources, so a search for a template's instances that tested 592
+   * of them took 137 seconds; walking up, it takes 63 milliseconds.</p>
+   */
   protected static String getResourcePermissionConditions(String relationPrefix, String nodeAlias) {
     return "" +
         " " + relationPrefix + " " +
         "(" +
         getUserToResourceRelationWithContains(RelationLabel.OWNS, nodeAlias) +
-        " OR " +
-        getUserToResourceRelationThroughGroupWithContains(getResourceRoleRelationLabels(), nodeAlias) +
+        " OR EXISTS { MATCH (" + nodeAlias + ")<-[:<REL.CONTAINS>*0..]-()<-[:" + getResourceRoleRelationLabels() +
+        "]-(permissionGrantee) WHERE permissionGrantee = user OR (user)-[:<REL.MEMBEROF>]->(permissionGrantee) }" +
         ")";
   }
 

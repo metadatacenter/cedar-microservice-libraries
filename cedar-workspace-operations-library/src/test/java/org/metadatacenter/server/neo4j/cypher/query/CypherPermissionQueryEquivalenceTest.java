@@ -250,6 +250,59 @@ class CypherPermissionQueryEquivalenceTest {
         .isEmpty(), "the fixture lists nothing for the owner");
   }
 
+  /**
+   * The permission check walks up from each resource to its owner and to whoever holds a role on it or
+   * on a folder above it. It passes the same resources the path from the user passed, for every user,
+   * and a search for a template's instances and its count list the same instances.
+   */
+  @Test
+  void upwardPermissionCheckPassesWhatThePathFromTheUserPassed() {
+    try (var session = driver.session()) {
+      session.run("""
+          MATCH (shared {_id: 'folder-shared'}), (nested {_id: 'folder-nested'}),
+                (privateRoot {_id: 'folder-private'}), (root {_id: 'folder-root'})
+          WITH [shared, nested, privateRoot, root] AS parents
+          UNWIND range(0, 7) AS i
+          WITH parents[i % 4] AS parent, i
+          CREATE (n:Resource:FileSystemResource:Artifact:Instance {
+            _id: 'based-on-' + toString(i), schema_name_lower: 'based on ' + toString(i),
+            resourceType: 'instance', schema_isBasedOn: 'template-based-on', lastUpdatedOnTS: i})
+          CREATE (parent)-[:CONTAINS]->(n)
+          """).consume();
+    }
+    String upward = "MATCH (user:User {_id: $userId}) MATCH (resource:Resource) WHERE resource._id IS NOT NULL"
+        + AbstractCypherQueryBuilder.getResourcePermissionConditions(" AND ", "resource")
+        + " RETURN resource ORDER BY resource._id";
+    String fromUser = "MATCH (user:User {_id: $userId}) MATCH (resource:Resource) WHERE resource._id IS NOT NULL AND "
+        + pathFromUserPermission("resource") + " RETURN resource ORDER BY resource._id";
+    List<String> users = strings("MATCH (u:User) RETURN u._id ORDER BY u._id", Map.of());
+    String oldBasedOn = CypherQueryBuilderResource.getSearchIsBasedOnLookupQuery(List.of("name"), true)
+        .replace(AbstractCypherQueryBuilder.getResourcePermissionConditions(" AND ", "resource"),
+            " AND " + pathFromUserPermission("resource"));
+    boolean someoneReadsAnInstance = false;
+    for (String userId : users) {
+      List<String> passed = nodeIds(upward, Map.of("userId", userId), "resource");
+      assertEquals(nodeIds(fromUser, Map.of("userId", userId), "resource"), passed, userId);
+      Map<String, Object> basedOn = Map.of("userId", userId, "resourceTypeList", List.of("instance"),
+          "isBasedOn", "template-based-on", "offset", 0, "limit", 100);
+      List<String> instances = nodeIds(CypherQueryBuilderResource.getSearchIsBasedOnLookupQuery(List.of("name"), true),
+          basedOn, "resource");
+      assertEquals(nodeIds(oldBasedOn, basedOn, "resource"), instances, userId + " instances");
+      assertEquals(instances.size(), firstLongOrMinusOne(CypherQueryBuilderResource.getSearchIsBasedOnCountQuery(true),
+          basedOn), userId + " instance count");
+      someoneReadsAnInstance |= !instances.isEmpty();
+    }
+    assertTrue(users.size() > 10, users.toString());
+    assertTrue(someoneReadsAnInstance, "no user reads an instance of the fixture's template");
+  }
+
+  /** The permission check as it was written before it walked up from the resource. */
+  private static String pathFromUserPermission(String nodeAlias) {
+    return "((user)-[:OWNS]->()-[:CONTAINS*0..]->(" + nodeAlias + ")"
+        + " OR (user)-[:MEMBEROF*0..1]->()-[:CANREAD|VIEWER_ROLE|EDITOR_ROLE|CANWRITE|MANAGER_ROLE]->()"
+        + "-[:CONTAINS*0..]->(" + nodeAlias + "))";
+  }
+
   /** The listing as it was built before it walked down from the caller. */
   private static String storeWideViewAllLookup(ResourceVersionFilter version, ResourcePublicationStatusFilter status,
                                                List<String> sortList) {
@@ -258,7 +311,7 @@ class CypherPermissionQueryEquivalenceTest {
     sb.append(" MATCH (resource:<LABEL.RESOURCE>)");
     sb.append(" WHERE resource.<PROP.RESOURCE_TYPE> in $resourceTypeList");
     sb.append(" AND resource.<PROP.IS_USER_HOME> IS NULL ");
-    sb.append(AbstractCypherQueryBuilder.getResourcePermissionConditions(" AND ", "resource"));
+    sb.append(" AND ").append(pathFromUserPermission("resource"));
     if (version != ResourceVersionFilter.ALL) {
       sb.append(AbstractCypherQueryBuilder.getVersionConditions(version, " AND ", "resource"));
     }
