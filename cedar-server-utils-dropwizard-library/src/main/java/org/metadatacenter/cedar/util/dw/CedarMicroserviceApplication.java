@@ -22,6 +22,7 @@ import org.metadatacenter.constant.CedarHeaderParameters;
 import org.metadatacenter.constant.CustomHttpConstants;
 import org.metadatacenter.model.ServerName;
 import org.metadatacenter.model.SystemComponent;
+import org.metadatacenter.rest.JaxRsRuntime;
 import org.metadatacenter.rest.context.CedarRequestContextFactory;
 import org.metadatacenter.server.logging.AppLogger;
 import org.metadatacenter.server.logging.AppLoggerQueueService;
@@ -73,6 +74,9 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   private KeycloakDeployment keycloakDeployment;
 
   static {
+    // Before Dropwizard builds anything. Without it, four servers answered with RESTEasy's delegate.
+    JaxRsRuntime.useJerseyRuntimeDelegate();
+
     HTTP_HEADERS = new ArrayList<>();
     HTTP_HEADERS.add("X-Requested-With");
     HTTP_HEADERS.add("Content-Type");
