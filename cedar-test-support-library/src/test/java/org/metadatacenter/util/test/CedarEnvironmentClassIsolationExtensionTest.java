@@ -17,14 +17,14 @@ import java.util.Map;
 import java.util.ServiceLoader;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.platform.engine.discovery.DiscoverySelectors.selectClass;
 import static org.junit.platform.launcher.core.LauncherDiscoveryRequestBuilder.request;
 
 /**
  * The class-isolation extension is what keeps one test class's environment override from becoming the
- * next class's configuration. Calling it directly would prove only that it clears the override, not
+ * next class's configuration. Calling it directly would prove only that it restores the baseline, not
  * that JUnit ever calls it, so these tests run two classes through the JUnit Platform the way Surefire
  * does, and read the extension's registration as Jupiter's autodetection reads it.
  */
@@ -32,14 +32,15 @@ class CedarEnvironmentClassIsolationExtensionTest {
 
   @Test
   void anOverrideOneClassInstallsDoesNotReachTheNextClass() {
-    SeesTheEnvironment.sawOverride = null;
+    SeesTheEnvironment.sawBaseline = null;
+    SeesTheEnvironment.sawBoltPort = null;
 
     TestExecutionSummary summary = run(InstallsAnOverride.class, SeesTheEnvironment.class);
 
     assertEquals(2, summary.getTestsSucceededCount(), () -> "both probe classes should run: " + summary.getFailures());
-    assertEquals(Boolean.FALSE, SeesTheEnvironment.sawOverride,
-        "the previous class's override reached the next class");
-    assertFalse(CedarEnvironmentSource.hasOverride(), "the last class's override is cleared as well");
+    assertNotEquals("54321", SeesTheEnvironment.sawBoltPort, "the previous class's override reached the next class");
+    assertEquals(Boolean.TRUE, SeesTheEnvironment.sawBaseline, "the next class starts from the test baseline");
+    assertTrue(CedarTestBaseline.isInstalled(), "the last class's override is replaced by the baseline as well");
   }
 
   @Test
@@ -86,14 +87,16 @@ class CedarEnvironmentClassIsolationExtensionTest {
     }
   }
 
-  /** Records whether it starts with an override installed. */
+  /** Records the environment it starts with. */
   @Order(2)
   static class SeesTheEnvironment {
-    static volatile Boolean sawOverride;
+    static volatile Boolean sawBaseline;
+    static volatile String sawBoltPort;
 
     @Test
     void observes() {
-      sawOverride = CedarEnvironmentSource.hasOverride();
+      sawBaseline = CedarTestBaseline.isInstalled();
+      sawBoltPort = CedarEnvironmentSource.get("CEDAR_NEO4J_BOLT_PORT");
     }
   }
 }

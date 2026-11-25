@@ -103,6 +103,17 @@ public class UserSummaryCache {
     build(loader, ticker, unresolvableRetentionSeconds);
   }
 
+  /**
+   * Discards both caches, so the next {@link #init} builds them around the loader that calls the
+   * user server. {@link #init} keeps caches that already exist, and a test that replaced them with
+   * {@link #buildForTesting} would otherwise leave its loader in place for every later test in the
+   * same JVM.
+   */
+  static void discardForTesting() {
+    userSummaryCache = null;
+    unresolvableIds = null;
+  }
+
   private static void build(SummaryLoader loader, Ticker ticker, long unresolvableRetentionSeconds) {
     userSummaryCache =
         CacheBuilder.newBuilder()

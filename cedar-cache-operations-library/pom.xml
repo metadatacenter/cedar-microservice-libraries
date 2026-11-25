@@ -77,6 +77,12 @@
       <scope>test</scope>
     </dependency>
 
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-test-support-library</artifactId>
+      <scope>test</scope>
+    </dependency>
+
   </dependencies>
 
 </project>

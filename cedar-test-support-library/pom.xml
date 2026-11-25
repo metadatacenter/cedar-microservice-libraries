@@ -179,23 +179,4 @@
 
   </dependencies>
 
-  <build>
-    <plugins>
-      <!--
-        The tests point the configuration at the embedded Neo4j through a CedarEnvironmentSource
-        override, so no add-opens flags or reflective environment rewriting are involved, and the
-        test classes can share a JVM (reuseForks true): CedarConfig.getInstance rebuilds when the
-        override changes, and the automatic JUnit extension clears each class's redirection before
-        the next class starts.
-      -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <configuration>
-          <reuseForks>true</reuseForks>
-        </configuration>
-      </plugin>
-    </plugins>
-  </build>
-
 </project>
