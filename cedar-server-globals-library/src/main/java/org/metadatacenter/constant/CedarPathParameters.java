@@ -26,6 +26,5 @@ public final class CedarPathParameters {
   public static final String PP_VS = "vs";
   public static final String PP_VS_COLLECTION = "vs_collection";
   public static final String PP_COLUMN = "column";
-  public static final String PP_GLOBAL_REQUEST_ID = "globalRequestId";
 
 }
