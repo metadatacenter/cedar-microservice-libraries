@@ -38,6 +38,22 @@
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-server-rest-library</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-workspace-operations-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-server-utils-core-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-user-operations-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.apache.commons</groupId>
@@ -53,6 +69,10 @@
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-logging-operations-library</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-core-library</artifactId>
+    </dependency>
 
     <!-- CedarUserUtil, so the fixture users take their roles from the same blueprint accessor a
          server calls when it provisions a real one. -->
@@ -60,10 +80,22 @@
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-auth-operations-library</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-server-globals-library</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.mongodb</groupId>
       <artifactId>mongodb-driver-sync</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.mongodb</groupId>
+      <artifactId>mongodb-driver-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.mongodb</groupId>
+      <artifactId>bson</artifactId>
     </dependency>
 
     <dependency>
@@ -80,6 +112,18 @@
           <artifactId>slf4j-nop</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-graphdb-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-configuration</artifactId>
     </dependency>
 
     <!--

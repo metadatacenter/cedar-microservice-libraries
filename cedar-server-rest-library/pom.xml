@@ -28,10 +28,26 @@
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-user-operations-library</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-server-utils-core-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-core-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-server-globals-library</artifactId>
     </dependency>
 
     <dependency>
@@ -48,12 +64,20 @@
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-workspace-operations-library</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-permissions-operations-library</artifactId>
+    </dependency>
 
     <!-- ArtifactYamlTranscoder reads and renders artifacts to convert between their stored
          JSON form and the YAML representation the REST layer negotiates. -->
     <dependency>
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-artifact-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-model-library</artifactId>
     </dependency>
 
     <dependency>

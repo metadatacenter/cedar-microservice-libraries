@@ -26,10 +26,18 @@
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-server-utils-core-library</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-queue-operations-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-core-library</artifactId>
     </dependency>
 
     <dependency>
@@ -45,6 +53,10 @@
     <dependency>
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-model-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
     </dependency>
 
     <dependency>
@@ -110,6 +122,30 @@
       <groupId>org.opensearch</groupId>
       <artifactId>opensearch</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.opensearch</groupId>
+      <artifactId>opensearch-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.lucene</groupId>
+      <artifactId>lucene-queryparser</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.opensearch</groupId>
+      <artifactId>opensearch-x-content</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.lucene</groupId>
+      <artifactId>lucene-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.lucene</groupId>
+      <artifactId>lucene-join</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.opensearch</groupId>
+      <artifactId>opensearch-core</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>net.sourceforge.owlapi</groupId>
@@ -152,6 +188,16 @@
           <artifactId>slf4j-nop</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-graphdb-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-configuration</artifactId>
+      <scope>test</scope>
     </dependency>
 
   </dependencies>

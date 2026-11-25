@@ -26,6 +26,10 @@
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-server-utils-core-library</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-server-globals-library</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
@@ -51,10 +55,22 @@
       <groupId>org.mongodb</groupId>
       <artifactId>mongodb-driver-sync</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.mongodb</groupId>
+      <artifactId>mongodb-driver-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.mongodb</groupId>
+      <artifactId>bson</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-server-utils-dropwizard-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.dropwizard.metrics</groupId>
+      <artifactId>metrics-healthchecks</artifactId>
     </dependency>
 
     <dependency>

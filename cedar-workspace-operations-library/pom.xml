@@ -27,6 +27,14 @@
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-server-utils-core-library</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-model-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-server-globals-library</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -37,6 +45,10 @@
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
@@ -46,6 +58,10 @@
     <dependency>
       <groupId>org.metadatacenter</groupId>
       <artifactId>cedar-permissions-operations-library</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.metadatacenter</groupId>
+      <artifactId>cedar-core-library</artifactId>
     </dependency>
 
     <dependency>
@@ -85,6 +101,16 @@
           <artifactId>slf4j-nop</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-graphdb-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-configuration</artifactId>
+      <scope>test</scope>
     </dependency>
 
     <dependency>
