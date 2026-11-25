@@ -427,10 +427,27 @@ class LogQueryBuilderTest {
   }
 
   @Test
-  void aRawLimitIsClampedToTheCursorWalksMaximum() {
+  void aRawLimitAtTheCursorWalksMaximumIsAccepted() {
     BuiltQuery raw = LogQueryBuilder.build(
-        new LogQuerySpec("request", FROM, TO, null, null, null, null, 999_999, null));
+        new LogQuerySpec("request", FROM, TO, null, null, null, null, LogQueryBuilder.MAX_RAW_LIMIT, null));
     assertEquals(LogQueryBuilder.MAX_RAW_LIMIT, raw.limit());
+  }
+
+  @Test
+  void aRawLimitAboveTheCursorWalksMaximumIsRefusedRatherThanLowered() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> LogQueryBuilder.build(
+            new LogQuerySpec("request", FROM, TO, null, null, null, null, LogQueryBuilder.MAX_RAW_LIMIT + 1, null)));
+    assertTrue(e.getMessage().contains("'limit' was 2001"), e.getMessage());
+  }
+
+  @Test
+  void aLimitBelowOneIsRefusedForRawAndGroupedQueries() {
+    assertThrows(IllegalArgumentException.class,
+        () -> LogQueryBuilder.build(new LogQuerySpec("request", FROM, TO, null, null, null, null, 0, null)));
+    assertThrows(IllegalArgumentException.class,
+        () -> LogQueryBuilder.build(new LogQuerySpec("request", FROM, TO, null, List.of("component"),
+            List.of("count"), null, -1, null)));
   }
 
   @Test
@@ -452,7 +469,7 @@ class LogQueryBuilderTest {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> LogQueryBuilder.build(new LogQuerySpec("request", FROM, TO, null, List.of("component"),
             List.of("count"), null, 501, null)));
-    assertTrue(e.getMessage().contains("at most 500"));
+    assertTrue(e.getMessage().contains("1 to 500"), e.getMessage());
   }
 
   @Test

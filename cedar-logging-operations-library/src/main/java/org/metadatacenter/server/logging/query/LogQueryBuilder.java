@@ -144,7 +144,7 @@ public final class LogQueryBuilder {
       throw new IllegalArgumentException(
           "Having needs metrics; it filters aggregated groups, not raw rows.");
     }
-    int limit = clampLimit(spec.limit(), MAX_RAW_LIMIT);
+    int limit = boundedLimit(spec.limit(), MAX_RAW_LIMIT, "A raw query");
 
     // Custom sort and keyset paging are mutually exclusive: the cursor only means something under the
     // (time, id) ordering it was produced by.
@@ -729,23 +729,24 @@ public final class LogQueryBuilder {
     return f.vals();
   }
 
-  private static int clampLimit(Integer limit, int max) {
-    if (limit == null || limit <= 0) {
+  /**
+   * A limit outside 1 to {@code max} is refused rather than adjusted, as an offset-paged listing
+   * refuses one, so a caller never mistakes a shortened answer for the one it asked for. An absent
+   * limit takes {@link #DEFAULT_LIMIT}.
+   */
+  private static int boundedLimit(Integer limit, int max, String what) {
+    if (limit == null) {
       return Math.min(DEFAULT_LIMIT, max);
     }
-    return Math.min(limit, max);
+    if (limit < 1 || limit > max) {
+      throw new IllegalArgumentException(what + " returns 1 to " + max + " rows; 'limit' was " + limit + ".");
+    }
+    return limit;
   }
 
-  /**
-   * A grouped result is one page of at most {@link #MAX_GROUPED_LIMIT} rows. A larger limit is
-   * refused rather than lowered, as an offset-paged listing refuses one.
-   */
+  /** A grouped result is one page of at most {@link #MAX_GROUPED_LIMIT} rows. */
   private static int groupedLimit(Integer limit) {
-    if (limit != null && limit > MAX_GROUPED_LIMIT) {
-      throw new IllegalArgumentException("A grouped query returns at most " + MAX_GROUPED_LIMIT
-          + " rows; 'limit' was " + limit + ".");
-    }
-    return clampLimit(limit, MAX_GROUPED_LIMIT);
+    return boundedLimit(limit, MAX_GROUPED_LIMIT, "A grouped query");
   }
 
   /**
