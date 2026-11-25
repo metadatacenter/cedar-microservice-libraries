@@ -19,4 +19,13 @@ public final class CedarPathParameters {
   public static final String PP_FOLDER_ID = "folder_id";
   public static final String PP_CATEGORY_ID = "category_id";
 
+  public static final String PP_JOB_ID = "jobId";
+  public static final String PP_KEY_ID = "keyId";
+  public static final String PP_AUTHORITY = "authority";
+  public static final String PP_ONTOLOGY = "ontology";
+  public static final String PP_VS = "vs";
+  public static final String PP_VS_COLLECTION = "vs_collection";
+  public static final String PP_COLUMN = "column";
+  public static final String PP_GLOBAL_REQUEST_ID = "globalRequestId";
+
 }

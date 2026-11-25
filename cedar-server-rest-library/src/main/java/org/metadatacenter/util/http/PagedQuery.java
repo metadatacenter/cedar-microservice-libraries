@@ -4,10 +4,20 @@ import org.metadatacenter.config.PaginationConfig;
 import org.metadatacenter.exception.CedarException;
 import org.metadatacenter.rest.exception.CedarAssertionException;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+
+import static org.metadatacenter.constant.CedarQueryParameters.QP_PAGE;
+import static org.metadatacenter.constant.CedarQueryParameters.QP_PAGE_SIZE;
+import static org.metadatacenter.constant.CedarQueryParameters.QP_PAGE_SIZE_CAMEL;
 
 public class PagedQuery {
 
+  /** The query parameters of the withdrawn page-number paging. A request carrying one is refused. */
+  public static final List<String> PAGE_NUMBER_PARAMETERS = List.of(QP_PAGE, QP_PAGE_SIZE_CAMEL, QP_PAGE_SIZE);
+
+  private Map<String, List<String>> queryParameters;
   private Optional<Integer> limitInput;
   private Optional<Integer> offsetInput;
 
@@ -49,6 +59,16 @@ public class PagedQuery {
     return this;
   }
 
+  /**
+   * The query parameters of the request, so that {@link #validate()} refuses one carrying a withdrawn
+   * page-number parameter. Without them, an undeclared {@code page} would be ignored and the request
+   * answered from offset 0, as though it had asked for the first page.
+   */
+  public PagedQuery queryParameters(Map<String, List<String>> queryParameters) {
+    this.queryParameters = queryParameters;
+    return this;
+  }
+
   /** Refuses an offset beyond this one, for a listing whose deep pages are too costly to serve. */
   public PagedQuery maxOffset(int maxOffset) {
     this.maxOffset = maxOffset;
@@ -56,6 +76,7 @@ public class PagedQuery {
   }
 
   public void validate() throws CedarException {
+    validatePageNumbers();
     validateLimit();
     validateOffset();
   }
@@ -70,6 +91,12 @@ public class PagedQuery {
 
   protected PaginationConfig getPaginationConfig() {
     return config;
+  }
+
+  protected void validatePageNumbers() throws CedarException {
+    if (queryParameters != null) {
+      refusePageNumbers(queryParameters, pageNumbersWithdrawn(defaultPageSize, maxPageSize));
+    }
   }
 
   protected void validateLimit() throws CedarException {
@@ -105,5 +132,29 @@ public class PagedQuery {
     }
   }
 
+  /** The message a page-number request is refused with, naming the paging that replaced it. */
+  public static String pageNumbersWithdrawn(int defaultPageSize, int maxPageSize) {
+    return "Paging by page number is no longer supported. Send limit (1 to " + maxPageSize + ", default "
+        + defaultPageSize + ") and offset (default 0) instead.";
+  }
+
+  /** The first withdrawn page-number parameter a request carries, if it carries one. */
+  public static Optional<String> pageNumberParameter(Map<String, List<String>> queryParameters) {
+    return PAGE_NUMBER_PARAMETERS.stream().filter(queryParameters::containsKey).findFirst();
+  }
+
+  /**
+   * Refuses a request carrying a withdrawn page-number parameter with a 400 that names the parameter
+   * and the value sent.
+   */
+  public static void refusePageNumbers(Map<String, List<String>> queryParameters, String message)
+      throws CedarException {
+    Optional<String> name = pageNumberParameter(queryParameters);
+    if (name.isPresent()) {
+      List<String> values = queryParameters.get(name.get());
+      String value = values == null || values.isEmpty() ? null : values.get(0);
+      throw new CedarAssertionException(message).parameter(name.get(), value).badRequest();
+    }
+  }
 
 }

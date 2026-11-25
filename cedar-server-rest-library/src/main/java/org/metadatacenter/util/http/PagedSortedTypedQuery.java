@@ -73,6 +73,7 @@ public class PagedSortedTypedQuery extends PagedSortedQuery {
 
   @Override
   public void validate() throws CedarException {
+    validatePageNumbers();
     validateLimit();
     validateOffset();
     validateSorting();

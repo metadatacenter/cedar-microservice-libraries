@@ -15,6 +15,7 @@ import org.metadatacenter.server.security.model.user.ResourcePublicationStatusFi
 import org.metadatacenter.server.security.model.user.ResourceVersionFilter;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -518,6 +519,47 @@ class PagedQueryValidationTest {
     query.validate();
 
     assertEquals(1_000_000, query.getOffset());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"page", "pageSize", "page_size"})
+  void refusesAWithdrawnPageNumberParameterNamingIt(String parameter) {
+    PagedQuery query = new PagedQuery(40, 200).queryParameters(Map.of(parameter, List.of("2"), "limit", List.of("10")));
+
+    CedarAssertionException error = assertThrows(CedarAssertionException.class, query::validate);
+
+    assertBadRequest(error);
+    assertEquals("2", error.getErrorPack().getParameters().get(parameter));
+    assertEquals("Paging by page number is no longer supported. Send limit (1 to 200, default 40) and offset "
+        + "(default 0) instead.", error.getMessage());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"page", "pageSize", "page_size"})
+  void everyPagedQueryKindRefusesAPageNumberParameter(String parameter) {
+    Map<String, List<String>> sent = Map.of(parameter, List.of("1"));
+    PagedSortedTypedSearchQuery search = searchQuery();
+    search.queryParameters(sent);
+    PagedSortedTypedQuery typed = typedQuery();
+    typed.queryParameters(sent);
+    PagedSortedQuery sorted = new PagedSortedQuery(config);
+    sorted.queryParameters(sent);
+
+    for (PagedQuery query : List.of(search, typed, sorted)) {
+      CedarAssertionException error = assertThrows(CedarAssertionException.class, query::validate);
+      assertBadRequest(error);
+      assertEquals("1", error.getErrorPack().getParameters().get(parameter));
+    }
+  }
+
+  @Test
+  void acceptsARequestWhoseQueryCarriesNoPageNumber() throws Exception {
+    PagedQuery query = new PagedQuery(config).limit(Optional.of(10))
+        .queryParameters(Map.of("limit", List.of("10"), "pages", List.of("2")));
+
+    query.validate();
+
+    assertEquals(10, query.getLimit());
   }
 
   private static void assertBadRequest(CedarAssertionException error) {
