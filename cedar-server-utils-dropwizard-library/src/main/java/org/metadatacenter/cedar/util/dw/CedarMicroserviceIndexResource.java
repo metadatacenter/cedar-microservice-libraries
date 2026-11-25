@@ -42,6 +42,7 @@ public class CedarMicroserviceIndexResource extends CedarMicroserviceResource {
     info.put("name", server.getDisplayName());
   }
 
+  @AnonymousAccess
   @GET
   @Timed
   @Operation(summary = "Describe this CEDAR service")
