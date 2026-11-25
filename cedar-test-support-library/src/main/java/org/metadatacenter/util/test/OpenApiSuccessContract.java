@@ -44,7 +44,7 @@ public final class OpenApiSuccessContract {
    *
    * @param exemptions two forms, each of which must still be true of the document or the assertion
    *                   fails on the stale entry rather than letting it linger.
-   *                   A method and path, such as {@code "POST /command/reset-search-index-job"},
+   *                   A method and path, such as {@code "POST /jobs/{id}/reset"},
    *                   exempts a write whose handler reads no request body.
    *                   A method, path and status, such as {@code "DELETE /templates/{id} 202"},
    *                   exempts a success response that carries no body, which OpenAPI states by
