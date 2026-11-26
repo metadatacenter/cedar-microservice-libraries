@@ -7,6 +7,8 @@ public final class CedarPathParameters {
 
   // The identifier of the resource a path ends at.
   public static final String PP_ID = "id";
+  public static final String PP_KIND = "kind";
+  public static final String PP_ACRONYM = "acronym";
   public static final String PP_SERVER = "server";
   public static final String PP_INPUT = "input";
 
