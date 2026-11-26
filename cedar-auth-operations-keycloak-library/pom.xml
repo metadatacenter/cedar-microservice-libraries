@@ -63,40 +63,17 @@
     </dependency>
 
     <dependency>
-      <groupId>org.keycloak</groupId>
-      <artifactId>keycloak-adapter-core</artifactId>
-      <!--
-        The adapter reaches the Keycloak server SPI through keycloak-crypto-default, whose only use
-        of it is BCOCSPProvider, the X.509 revocation check a token verification never loads. No
-        CEDAR service runs inside Keycloak, so every service would otherwise ship about 800 classes
-        of an unsupported Keycloak server that none of them uses. The event listener, which Keycloak
-        does load, declares the SPI itself as provided.
-      -->
-      <exclusions>
-        <exclusion>
-          <groupId>org.keycloak</groupId>
-          <artifactId>keycloak-server-spi</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.keycloak</groupId>
-          <artifactId>keycloak-server-spi-private</artifactId>
-        </exclusion>
-      </exclusions>
+      <groupId>org.apache.httpcomponents.client5</groupId>
+      <artifactId>httpclient5</artifactId>
     </dependency>
-
     <dependency>
-      <groupId>org.apache.httpcomponents</groupId>
-      <artifactId>httpclient</artifactId>
-      <!--
-        The adapter sends every request to Keycloak through this client but declares it provided, so
-        it arrived only by way of resteasy-client. KeycloakSigningKeys builds its requests for the
-        same client, so the library names it rather than relying on that path.
-      -->
+      <groupId>org.apache.httpcomponents.core5</groupId>
+      <artifactId>httpcore5</artifactId>
     </dependency>
 
     <dependency>
       <groupId>org.keycloak</groupId>
-      <artifactId>keycloak-admin-client-jakarta</artifactId>
+      <artifactId>keycloak-admin-client</artifactId>
       <!--
         The admin client drags in RESTEasy's multipart and JAXB providers. CEDAR speaks only JSON
         to Keycloak (via resteasy-jackson2-provider), so these are unused - and the JAXB provider's
@@ -104,6 +81,12 @@
         jakarta JAXB api is on the classpath. Excluding it removes the providers and the noise.
       -->
       <exclusions>
+        <!-- The admin API uses JSON; this auto-discovered writer must not join CEDAR's
+             independently negotiated artifact YAML responses. -->
+        <exclusion>
+          <groupId>com.fasterxml.jackson.jakarta.rs</groupId>
+          <artifactId>jackson-jakarta-rs-yaml-provider</artifactId>
+        </exclusion>
         <exclusion>
           <groupId>org.jboss.resteasy</groupId>
           <artifactId>resteasy-multipart-provider</artifactId>

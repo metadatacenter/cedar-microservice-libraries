@@ -7,8 +7,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.keycloak.adapters.KeycloakDeployment;
-import org.keycloak.adapters.rotation.HardcodedPublicKeyLocator;
+
+import org.keycloak.jose.jwk.JWKBuilder;
+import org.keycloak.crypto.KeyUse;
+import org.keycloak.util.JsonSerialization;
 import org.keycloak.jose.jws.JWSBuilder;
 import org.keycloak.representations.AccessToken;
 import org.metadatacenter.config.KeycloakConfig;
@@ -58,7 +60,7 @@ class AuthorizationKeycloakAndApiKeyResolverTest {
 
   private final ObjectMapper objectMapper = new ObjectMapper();
   private KeyPair realmKey;
-  private KeycloakDeployment deployment;
+  private KeycloakTokenVerifier deployment;
   private LinkedDataUtil linkedDataUtil;
   private AuthorizationKeycloakAndApiKeyResolver resolver;
   private CedarUser knownUser;
@@ -85,12 +87,17 @@ class AuthorizationKeycloakAndApiKeyResolverTest {
         out.write(body);
       }
     });
+    keycloak.createContext("/realms/CEDAR/protocol/openid-connect/certs", exchange -> {
+      byte[] body = JsonSerialization.writeValueAsBytes(Map.of("keys", List.of(
+          JWKBuilder.create().kid("realm-key").algorithm("RS256").rsa(realmKey.getPublic(), KeyUse.SIG))));
+      exchange.sendResponseHeaders(200, body.length);
+      try (OutputStream out = exchange.getResponseBody()) { out.write(body); }
+    });
     keycloak.start();
     deployment = new KeycloakDeploymentProvider().buildDeployment(objectMapper.readValue("""
         {"realm": "CEDAR", "authServerUrl": "%s", "sslRequired": "external",
          "resource": "cedar-angular-app", "publicClient": true}
         """.formatted(base), KeycloakConfig.class));
-    deployment.setPublicKeyLocator(new HardcodedPublicKeyLocator(realmKey.getPublic()));
     linkedDataUtil = new LinkedDataUtil(objectMapper.readValue("""
         {"base": "https://repo.metadatacenter.orgx/", "usersBase": "%s"}
         """.formatted(USERS_BASE), LinkedDataConfig.class));
@@ -102,7 +109,8 @@ class AuthorizationKeycloakAndApiKeyResolverTest {
   }
 
   @AfterEach
-  void stopKeycloak() {
+  void stopKeycloak() throws Exception {
+    deployment.close();
     keycloak.stop(0);
   }
 

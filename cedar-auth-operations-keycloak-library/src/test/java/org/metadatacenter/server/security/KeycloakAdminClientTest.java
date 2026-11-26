@@ -141,7 +141,7 @@ class KeycloakAdminClientTest {
   }
 
   /** A server context whose certificate, for 127.0.0.1, signs itself. */
-  private static SSLContext selfSigned(Path dir) throws Exception {
+  static SSLContext selfSigned(Path dir) throws Exception {
     Path keystore = dir.resolve("keycloak.p12");
     Process keytool = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "keytool").toString(),
         "-genkeypair", "-alias", "keycloak", "-keyalg", "RSA", "-keysize", "2048", "-validity", "1",

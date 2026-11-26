@@ -1,66 +1,45 @@
 package org.metadatacenter.server.security;
 
-import org.keycloak.adapters.KeycloakDeployment;
-import org.keycloak.adapters.KeycloakDeploymentBuilder;
-import org.keycloak.representations.adapters.config.AdapterConfig;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
+import org.apache.hc.client5.http.ssl.HostnameVerificationPolicy;
+import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
+import org.apache.hc.core5.util.Timeout;
 import org.metadatacenter.config.KeycloakConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/** Builds the realm verifier without Keycloak's retired Java adapter. */
 public class KeycloakDeploymentProvider {
-
   private static final Logger log = LoggerFactory.getLogger(KeycloakDeploymentProvider.class);
-
-  /**
-   * How long the adapter's client may take to open a connection to Keycloak. Keycloak sits on the same host or
-   * network as every server, so two seconds is long for one that is answering at all.
-   */
   static final long CONNECTION_TIMEOUT_MILLIS = 2_000;
-
-  /**
-   * How long the adapter's client may wait for Keycloak's response once connected. The discovery document and the
-   * key set are small, so five seconds leaves room for a Keycloak that is busy rather than gone.
-   */
   static final long SOCKET_TIMEOUT_MILLIS = 5_000;
 
-  public KeycloakDeploymentProvider() {
+  public KeycloakTokenVerifier buildDeployment(KeycloakConfig config) {
+    return buildDeployment(config, System::nanoTime);
   }
 
-  /**
-   * Builds a deployment that can verify a bearer token's signature. The earlier version constructed a
-   * {@link KeycloakDeployment} by hand and set only the realm, resource and auth-server base — it never
-   * installed a public-key locator, so nothing downstream could check a signature, and the token path
-   * trusted whatever payload a caller sent. {@link KeycloakDeploymentBuilder#build(AdapterConfig)}
-   * derives the realm and JWKS URLs, installs a rotating {@code JWKPublicKeyLocator}, and builds the
-   * HTTP client that fetches the realm's signing keys — which is what makes real verification possible.
-   */
-  public KeycloakDeployment buildDeployment(KeycloakConfig keycloakConfig) {
-    return KeycloakDeploymentBuilder.build(buildAdapterConfig(keycloakConfig));
-  }
-
-  AdapterConfig buildAdapterConfig(KeycloakConfig keycloakConfig) {
-    AdapterConfig adapterConfig = new AdapterConfig();
-    adapterConfig.setRealm(keycloakConfig.getRealm());
-    adapterConfig.setAuthServerUrl(keycloakConfig.getAuthServerUrl());
-    adapterConfig.setSslRequired(keycloakConfig.getSslRequired());
-    adapterConfig.setResource(keycloakConfig.getResource());
-    adapterConfig.setPublicClient(keycloakConfig.isPublicClient());
-    // These servers only ever verify incoming tokens; they never drive a login, so bearer-only is the
-    // correct mode and it avoids needing a client secret for a public client.
-    adapterConfig.setBearerOnly(true);
-    // The adapter's client waits indefinitely unless told otherwise, and every bearer request that needs the realm's
-    // keys waits with it. A host that could not reach Keycloak held each such request for about 30 seconds before
-    // answering 500, and every signed-in page looked hung rather than broken. Bounded, the lookup fails while the
-    // caller is still waiting.
-    adapterConfig.setConnectionTimeout(CONNECTION_TIMEOUT_MILLIS);
-    adapterConfig.setSocketTimeout(SOCKET_TIMEOUT_MILLIS);
-    boolean allowInsecureTls = keycloakConfig.isAllowInsecureTls();
-    adapterConfig.setDisableTrustManager(allowInsecureTls);
-    adapterConfig.setAllowAnyHostname(allowInsecureTls);
-    if (allowInsecureTls) {
+  KeycloakTokenVerifier buildDeployment(KeycloakConfig config, java.util.function.LongSupplier clock) {
+    var tls = ClientTlsStrategyBuilder.create().useSystemProperties();
+    if (config.isAllowInsecureTls()) {
       log.warn("Keycloak certificate and hostname verification are disabled by explicit development opt-in");
+      tls.setSslContext(KeycloakUtils.buildInsecureSslContext(true))
+          .setHostVerificationPolicy(HostnameVerificationPolicy.CLIENT)
+          .setHostnameVerifier(NoopHostnameVerifier.INSTANCE);
     }
-    return adapterConfig;
+    var connections = PoolingHttpClientConnectionManagerBuilder.create().useSystemProperties()
+        .setTlsSocketStrategy(tls.buildClassic()).setMaxConnTotal(4).setMaxConnPerRoute(4)
+        .setDefaultConnectionConfig(ConnectionConfig.custom()
+            .setConnectTimeout(Timeout.ofMilliseconds(CONNECTION_TIMEOUT_MILLIS))
+            .setSocketTimeout(Timeout.ofMilliseconds(SOCKET_TIMEOUT_MILLIS)).build()).build();
+    var client = HttpClients.custom().useSystemProperties().setConnectionManager(connections)
+        .setDefaultRequestConfig(RequestConfig.custom()
+            .setConnectionRequestTimeout(Timeout.ofMilliseconds(CONNECTION_TIMEOUT_MILLIS))
+            .setResponseTimeout(Timeout.ofMilliseconds(SOCKET_TIMEOUT_MILLIS)).build())
+        .disableAutomaticRetries().disableRedirectHandling().disableCookieManagement().build();
+    return new KeycloakTokenVerifier(config.getAuthServerUrl(), config.getRealm(), client, clock);
   }
-
 }

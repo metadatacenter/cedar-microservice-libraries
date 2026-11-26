@@ -1,6 +1,6 @@
 package org.metadatacenter.server.security;
 
-import org.keycloak.adapters.KeycloakDeployment;
+import org.metadatacenter.server.security.KeycloakTokenVerifier;
 import org.metadatacenter.exception.security.*;
 import org.metadatacenter.server.jsonld.LinkedDataUtil;
 import org.metadatacenter.server.security.model.AuthRequest;
@@ -14,9 +14,9 @@ public class AuthorizationKeycloakAndApiKeyResolver implements IAuthorizationRes
 
   // Holds the realm's signing keys and issuer, so a bearer token can be verified rather than merely
   // decoded. Supplied once at startup by CedarMicroserviceApplication.
-  private final KeycloakDeployment keycloakDeployment;
+  private final KeycloakTokenVerifier keycloakDeployment;
 
-  public AuthorizationKeycloakAndApiKeyResolver(KeycloakDeployment keycloakDeployment) {
+  public AuthorizationKeycloakAndApiKeyResolver(KeycloakTokenVerifier keycloakDeployment) {
     this.keycloakDeployment = keycloakDeployment;
   }
 

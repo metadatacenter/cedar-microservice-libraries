@@ -4,8 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import jakarta.ws.rs.client.Client;
 import org.jboss.resteasy.client.jaxrs.internal.ResteasyClientBuilderImpl;
 import org.jboss.resteasy.plugins.providers.jackson.ResteasyJackson2Provider;
-import org.keycloak.adapters.KeycloakDeployment;
-import org.keycloak.adapters.rotation.AdapterTokenVerifier;
+import org.metadatacenter.server.security.KeycloakTokenVerifier;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.KeycloakBuilder;
 import org.keycloak.common.VerificationException;
@@ -62,12 +61,12 @@ public class KeycloakUtils {
    * issuer, a malformed token — is an invalid credential and is reported as
    * {@link InvalidOfflineAccessTokenException}. Both map to 401.
    */
-  private static AccessToken verifyToken(String token, KeycloakDeployment deployment) throws CedarAccessException {
+  private static AccessToken verifyToken(String token, KeycloakTokenVerifier deployment) throws CedarAccessException {
     if (token == null) {
       throw new AccessTokenMissingException();
     }
     try {
-      return AdapterTokenVerifier.verifyToken(token, deployment);
+      return deployment.verify(token);
     } catch (TokenNotActiveException e) {
       JsonWebToken jwt = e.getToken();
       int expiration = (jwt != null && jwt.getExp() != null) ? jwt.getExp().intValue() : 0;
@@ -78,7 +77,7 @@ public class KeycloakUtils {
   }
 
   public static CedarUser getUserFromAuthRequest(LinkedDataUtil linkedDataUtil, AuthRequest authRequest,
-                                                 IUserService userService, KeycloakDeployment deployment)
+                                                 IUserService userService, KeycloakTokenVerifier deployment)
       throws CedarAccessException {
     String token = authRequest.getAuthString();
     AccessToken accessToken = verifyToken(token, deployment);
@@ -103,11 +102,8 @@ public class KeycloakUtils {
     kcInfo.setKeycloakClientId(cedarConfig.getKeycloakConfig().getClientId());
     kcInfo.setAllowInsecureTls(cedarConfig.getKeycloakConfig().isAllowInsecureTls());
 
-    KeycloakDeploymentProvider keycloakDeploymentProvider = new KeycloakDeploymentProvider();
-    KeycloakDeployment keycloakDeployment = keycloakDeploymentProvider.buildDeployment(cedarConfig.getKeycloakConfig());
-
-    kcInfo.setKeycloakRealmName(keycloakDeployment.getRealm());
-    kcInfo.setKeycloakBaseURI(keycloakDeployment.getAuthServerBaseUrl());
+    kcInfo.setKeycloakRealmName(cedarConfig.getKeycloakConfig().getRealm());
+    kcInfo.setKeycloakBaseURI(cedarConfig.getKeycloakConfig().getAuthServerUrl());
 
     return kcInfo;
   }

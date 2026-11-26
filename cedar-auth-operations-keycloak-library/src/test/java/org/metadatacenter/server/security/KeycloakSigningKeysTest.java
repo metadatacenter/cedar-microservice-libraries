@@ -6,7 +6,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.keycloak.adapters.KeycloakDeployment;
+import jakarta.ws.rs.ServiceUnavailableException;
 import org.keycloak.crypto.KeyUse;
 import org.keycloak.jose.jwk.JSONWebKeySet;
 import org.keycloak.jose.jwk.JWK;
@@ -45,6 +45,7 @@ class KeycloakSigningKeysTest {
   private String base;
   private String discoveryBody;
   private String keySetBody;
+  private final List<KeycloakTokenVerifier> clients = new java.util.ArrayList<>();
 
   @BeforeEach
   void startKeycloak() throws Exception {
@@ -75,7 +76,8 @@ class KeycloakSigningKeysTest {
   }
 
   @AfterEach
-  void stopKeycloak() {
+  void stopKeycloak() throws Exception {
+    for (var client : clients) client.close();
     keycloak.stop(0);
   }
 
@@ -88,8 +90,8 @@ class KeycloakSigningKeysTest {
   void aKeySetWithNoSigningKeyFails() throws Exception {
     keySetBody = keySet(JWKBuilder.create().kid("encryption").algorithm("RSA-OAEP").rsa(rsaPublicKey(), KeyUse.ENC));
 
-    IllegalStateException failure =
-        assertThrows(IllegalStateException.class, () -> KeycloakSigningKeys.verify(deployment(base)));
+    ServiceUnavailableException failure =
+        assertThrows(ServiceUnavailableException.class, () -> KeycloakSigningKeys.verify(deployment(base)));
     assertTrue(failure.getMessage().contains("/protocol/openid-connect/certs"), failure.getMessage());
   }
 
@@ -99,9 +101,9 @@ class KeycloakSigningKeysTest {
         {"issuer": "%s/realms/CEDAR"}
         """.formatted(base);
 
-    IllegalStateException failure =
-        assertThrows(IllegalStateException.class, () -> KeycloakSigningKeys.verify(deployment(base)));
-    assertTrue(failure.getMessage().contains("names no key set"), failure.getMessage());
+    ServiceUnavailableException failure =
+        assertThrows(ServiceUnavailableException.class, () -> KeycloakSigningKeys.verify(deployment(base)));
+    assertTrue(failure.getCause().getMessage().contains("names no key set"), failure.getMessage());
   }
 
   @Test
@@ -148,11 +150,13 @@ class KeycloakSigningKeysTest {
     }
   }
 
-  private KeycloakDeployment deployment(String authServerUrl) throws Exception {
-    return new KeycloakDeploymentProvider().buildDeployment(objectMapper.readValue("""
+  private KeycloakTokenVerifier deployment(String authServerUrl) throws Exception {
+    var client = new KeycloakDeploymentProvider().buildDeployment(objectMapper.readValue("""
         {"realm": "CEDAR", "authServerUrl": "%s", "sslRequired": "external",
          "resource": "cedar-angular-app", "publicClient": true}
         """.formatted(authServerUrl), KeycloakConfig.class));
+    clients.add(client);
+    return client;
   }
 
   private static String keySet(JWK key) throws Exception {

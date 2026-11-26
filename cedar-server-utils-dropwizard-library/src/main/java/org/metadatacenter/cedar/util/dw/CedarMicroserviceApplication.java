@@ -29,7 +29,7 @@ import org.metadatacenter.server.logging.AppLoggerQueueService;
 import org.metadatacenter.server.logging.filter.ResponseLoggerFilter;
 import org.metadatacenter.server.logging.filter.RequestIdGeneratorFilter;
 import org.metadatacenter.server.security.Authorization;
-import org.keycloak.adapters.KeycloakDeployment;
+import org.metadatacenter.server.security.KeycloakTokenVerifier;
 import org.metadatacenter.server.security.AuthorizationKeycloakAndApiKeyResolver;
 import org.metadatacenter.server.security.IAuthorizationResolver;
 import org.metadatacenter.server.security.KeycloakDeploymentProvider;
@@ -71,7 +71,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   protected static CedarConfig cedarConfig;
   protected static UserService userService;
   protected static AppLoggerQueueService appLoggerQueueService;
-  private KeycloakDeployment keycloakDeployment;
+  private KeycloakTokenVerifier keycloakDeployment;
 
   static {
     // Before Dropwizard builds anything. Without it, four servers answered with RESTEasy's delegate.
@@ -172,6 +172,9 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
     //Initialize Keycloak
     KeycloakDeploymentProvider keycloakDeploymentProvider = new KeycloakDeploymentProvider();
     keycloakDeployment = keycloakDeploymentProvider.buildDeployment(cedarConfig.getKeycloakConfig());
+    environment.lifecycle().manage(new io.dropwizard.lifecycle.Managed() {
+      @Override public void stop() throws Exception { keycloakDeployment.close(); }
+    });
     // Init Authorization Resolver. The deployment carries the realm's signing keys, so the resolver can
     // verify a bearer token's signature instead of trusting its payload.
     IAuthorizationResolver authResolver = new AuthorizationKeycloakAndApiKeyResolver(keycloakDeployment);
@@ -355,7 +358,7 @@ public abstract class CedarMicroserviceApplication<T extends CedarMicroserviceCo
   private void registerSharedHealthChecks(Environment environment) {
     environment.healthChecks().register("neo4j", CedarDependencyHealthCheck.gating(
         "Neo4j", CedarDataServices.getInstance().getProxies()::verifyConnectivity));
-    KeycloakDeployment deployment = keycloakDeployment;
+    KeycloakTokenVerifier deployment = keycloakDeployment;
     environment.healthChecks().register("keycloak-signing-keys", CedarDependencyHealthCheck.gating(
         "The realm's key set", () -> KeycloakSigningKeys.verify(deployment)));
     environment.healthChecks().register("app-log-queue", CedarDependencyHealthCheck.reporting(
