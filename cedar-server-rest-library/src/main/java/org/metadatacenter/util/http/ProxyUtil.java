@@ -114,6 +114,22 @@ public class ProxyUtil {
     }
   }
 
+  public static ClassicHttpResponse proxyPatch(String url, CedarRequestContext context, String content) throws CedarProcessingException {
+    return proxyPatch(url, context, content, HttpTimeouts.INTERACTIVE);
+  }
+
+  public static ClassicHttpResponse proxyPatch(String url, CedarRequestContext context, String content,
+                                              HttpTimeouts timeouts) throws CedarProcessingException {
+    Request proxyRequest = Request.patch(url)
+        .bodyString(content, ContentType.APPLICATION_JSON);
+    copyHeaders(proxyRequest, context);
+    try {
+      return timeouts.withoutRedirects().execute(proxyRequest);
+    } catch (IOException e) {
+      throw dependencyUnavailable(e);
+    }
+  }
+
   public static ClassicHttpResponse proxyPost(String url, Map<String, String> additionalHeaders, String content) throws CedarProcessingException {
     Request proxyRequest = Request.post(url)
         .bodyString(content, ContentType.APPLICATION_FORM_URLENCODED);

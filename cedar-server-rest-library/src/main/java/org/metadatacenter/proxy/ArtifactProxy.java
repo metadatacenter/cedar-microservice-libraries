@@ -17,9 +17,15 @@ public class ArtifactProxy {
 
   public static Response executeResourceGetByProxyFromArtifactServer(CedarConfig cedarConfig, HttpServletResponse response, CedarResourceType resourceType, String id,
                                                                  Optional<String> format, CedarRequestContext context) throws CedarProcessingException {
+    return executeResourceGetByProxyFromArtifactServer(cedarConfig, response, resourceType, id, format, Optional.empty(), context);
+  }
+
+  public static Response executeResourceGetByProxyFromArtifactServer(CedarConfig cedarConfig, HttpServletResponse response,
+      CedarResourceType resourceType, String id, Optional<String> format, Optional<Boolean> compact,
+      CedarRequestContext context) throws CedarProcessingException {
     try {
       String url = cedarConfig.getMicroserviceUrlUtil().getArtifact().getArtifactTypeWithId(resourceType, id, format);
-      // parameter
+      if (compact.isPresent()) url += (url.contains("?") ? "&" : "?") + "compact=" + compact.get();
       ClassicHttpResponse proxyResponse = new ArtifactServiceClient(cedarConfig).get(url, context);
       if (response != null) {
         ProxyUtil.proxyResponseHeaders(proxyResponse, response);
